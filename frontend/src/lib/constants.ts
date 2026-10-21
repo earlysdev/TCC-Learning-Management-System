@@ -163,12 +163,10 @@ export const ROLE_CONFIGS: Record<UserRole, RoleConfig> = {
     navItems: [
       { label: 'Overview', path: '/dean/dashboard', icon: LayoutDashboard },
       { label: 'User Management', path: '/dean/users', icon: Users },
-      { label: 'Student Records', path: '/dean/records', icon: FileText },
       { label: 'Quiz Oversight', path: '/dean/quizzes', icon: ShieldCheck },
       { label: 'Security & Proctoring', path: '/dean/security', icon: ShieldCheck },
       { label: 'Analytics', path: '/dean/analytics', icon: BarChart },
       { label: 'Activity Logs', path: '/dean/logs', icon: Activity },
-      { label: 'System Health', path: '/dean/health', icon: Activity },
       { label: 'Settings', path: '/dean/settings', icon: Settings },
     ]
   },

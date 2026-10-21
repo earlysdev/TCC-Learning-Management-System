@@ -230,10 +230,10 @@ export default function SecretaryDashboard() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
-          <Button variant="accent" onClick={() => setActiveSection('create_account')}>
+          <Button variant="accent" onClick={() => handleSectionChange('create_account')}>
             <UserPlus size={16} /> Register Account
           </Button>
-          <Button variant="outline" onClick={() => setActiveSection('student_records')}>
+          <Button variant="outline" onClick={() => handleSectionChange('student_records')}>
             <BookOpen size={16} /> Student Records
           </Button>
         </div>
@@ -859,39 +859,6 @@ export default function SecretaryDashboard() {
   return (
     <DashboardLayout role="secretary">
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%', minWidth: 0 }}>
-        {/* Navigation Tabs Bar */}
-        <div style={{ display: 'flex', gap: '0.5rem', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.5rem', overflowX: 'auto' }}>
-          {[
-            { id: 'overview', label: 'Overview' },
-            { id: 'create_account', label: 'Create Account' },
-            { id: 'blocks', label: 'Blocks' },
-            { id: 'student_records', label: 'Student Records' },
-            { id: 'performance', label: 'Performance' },
-            { id: 'reports', label: 'Reports' },
-            { id: 'activity_logs', label: 'Activity Logs' },
-            { id: 'settings', label: 'Settings' }
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => handleSectionChange(tab.id)}
-              style={{
-                padding: '0.5rem 1rem',
-                borderRadius: 'var(--radius-md)',
-                background: activeSection === tab.id ? 'var(--primary-600)' : 'transparent',
-                color: activeSection === tab.id ? 'white' : 'var(--neutral-300)',
-                border: 'none',
-                fontWeight: 600,
-                fontSize: '0.9rem',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                whiteSpace: 'nowrap'
-              }}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
         {activeSection === 'overview' && renderOverview()}
         {activeSection === 'create_account' && renderCreateAccount()}
         {activeSection === 'blocks' && renderBlocks()}

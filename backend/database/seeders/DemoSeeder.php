@@ -185,7 +185,7 @@ class DemoSeeder extends Seeder
             );
         }
 
+        SystemSetting::where('key', 'maintenance_mode')->delete();
         SystemSetting::set('school_year', '2025-2026', 'string', 'Current school year');
-        SystemSetting::set('maintenance_mode', false, 'boolean', 'Is system under maintenance');
     }
 }

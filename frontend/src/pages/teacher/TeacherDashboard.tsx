@@ -328,10 +328,10 @@ export default function TeacherDashboard() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
-          <Button variant="accent" onClick={() => setActiveSection('quizzes')}>
+          <Button variant="accent" onClick={() => handleSectionChange('quizzes')}>
             <Sparkles size={16} /> Create AI Quiz
           </Button>
-          <Button variant="outline" onClick={() => setActiveSection('students')}>
+          <Button variant="outline" onClick={() => handleSectionChange('students')}>
             <Users size={16} /> Students Roster
           </Button>
         </div>
@@ -916,37 +916,6 @@ export default function TeacherDashboard() {
   return (
     <DashboardLayout role="teacher">
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%', minWidth: 0 }}>
-        {/* Navigation Tabs Bar */}
-        <div style={{ display: 'flex', gap: '0.5rem', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.5rem', overflowX: 'auto' }}>
-          {[
-            { id: 'overview', label: 'Overview' },
-            { id: 'quizzes', label: 'Quizzes' },
-            { id: 'students', label: 'Students' },
-            { id: 'analytics', label: 'Analytics' },
-            { id: 'insights', label: 'AI Insights' },
-            { id: 'settings', label: 'Settings' }
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => handleSectionChange(tab.id)}
-              style={{
-                padding: '0.5rem 1rem',
-                borderRadius: 'var(--radius-md)',
-                background: activeSection === tab.id ? 'var(--primary-600)' : 'transparent',
-                color: activeSection === tab.id ? 'white' : 'var(--neutral-300)',
-                border: 'none',
-                fontWeight: 600,
-                fontSize: '0.9rem',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                whiteSpace: 'nowrap'
-              }}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
         {activeSection === 'overview' && renderOverview()}
         {activeSection === 'quizzes' && renderQuizzes()}
         {activeSection === 'students' && renderStudents()}

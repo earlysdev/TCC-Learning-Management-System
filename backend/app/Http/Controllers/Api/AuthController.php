@@ -74,14 +74,6 @@ class AuthController extends Controller
             ]);
         }
 
-        $maintenanceMode = \App\Models\SystemSetting::get('maintenance_mode', false);
-        $normalizedRole = ($user->role === 'principal') ? 'dean' : ($user->role ?? 'student');
-        if ($maintenanceMode && $normalizedRole !== 'dean') {
-            throw ValidationException::withMessages([
-                'identifier' => ['The portal is currently in Maintenance Mode. Only the College Dean may sign in at this time.'],
-            ]);
-        }
-
         \App\Models\ActivityLog::create([
             'user_id' => $user->id,
             'action' => 'login',

@@ -2,11 +2,11 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import { lmsFetch, getLmsUser } from '../../lmsApi';
-import type { User, Quiz, SecurityLog, ActivityLog, SystemSetting, PaginatedResponse } from '../../lib/types';
+import type { User, Quiz, SecurityLog, ActivityLog, PaginatedResponse } from '../../lib/types';
 import { 
   Users, ShieldCheck, AlertTriangle, TrendingUp, 
   CheckCircle2, AlertCircle, 
-  Check, Lock, Activity
+  Check, Activity
 } from 'lucide-react';
 import GlassCard from '../../components/ui/GlassCard';
 import StatCard from '../../components/ui/StatCard';
@@ -35,8 +35,6 @@ const pathToSection: Record<string, string> = {
   analytics: 'analytics',
   logs: 'activity_logs',
   activity_logs: 'activity_logs',
-  health: 'system_health',
-  system_health: 'system_health',
   settings: 'settings',
 };
 
@@ -47,7 +45,6 @@ const sectionToPath: Record<string, string> = {
   security: '/dean/security',
   analytics: '/dean/analytics',
   activity_logs: '/dean/logs',
-  system_health: '/dean/health',
   settings: '/dean/settings',
 };
 
@@ -67,7 +64,6 @@ export default function PrincipalDashboard() {
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [securityLogs, setSecurityLogs] = useState<SecurityLog[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
-  const [systemSettings, setSystemSettings] = useState<SystemSetting[]>([]);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -114,11 +110,6 @@ export default function PrincipalDashboard() {
         setActivityLogs(actLogs);
       } else if (actLogs && Array.isArray(actLogs.data)) {
         setActivityLogs(actLogs.data);
-      }
-
-      const settings = await lmsFetch<SystemSetting[]>('/system-settings').catch(() => []);
-      if (Array.isArray(settings)) {
-        setSystemSettings(settings);
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load dean dashboard data');
@@ -178,23 +169,6 @@ export default function PrincipalDashboard() {
     }
   };
 
-  const handleUpdateSetting = async (key: string, value: string) => {
-    setBusy(true);
-    setError(null);
-    try {
-      await lmsFetch(`/system-settings/${key}`, {
-        method: 'PUT',
-        body: JSON.stringify({ value }),
-      });
-      setNotice(`Setting "${key}" updated successfully.`);
-      setSystemSettings(prev => prev.map(s => s.key === key ? { ...s, value } : s));
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to update system setting');
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const filteredUsers = usersList.filter(u => {
     const q = userSearch.toLowerCase();
     const matchesSearch = !userSearch || 
@@ -205,9 +179,6 @@ export default function PrincipalDashboard() {
     const matchesRole = !roleFilter || u.role === roleFilter;
     return matchesSearch && matchesRole;
   });
-
-  const maintenanceSetting = systemSettings.find(s => s.key === 'maintenance_mode');
-  const isMaintenanceOn = maintenanceSetting?.value === 'true' || maintenanceSetting?.value === '1';
 
   const renderOverview = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -224,10 +195,10 @@ export default function PrincipalDashboard() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
-          <Button variant="outline" onClick={() => setActiveSection('security')}>
+          <Button variant="outline" onClick={() => handleSectionChange('security')}>
             <ShieldCheck size={16} /> Security Audit
           </Button>
-          <Button variant="accent" onClick={() => setActiveSection('analytics')}>
+          <Button variant="accent" onClick={() => handleSectionChange('analytics')}>
             <TrendingUp size={16} /> School Analytics
           </Button>
         </div>
@@ -256,24 +227,6 @@ export default function PrincipalDashboard() {
           detail={securityLogs.filter(l => !l.is_resolved).length > 0 ? 'Requires review' : 'All clear'} 
         />
       </div>
-
-      {/* System Status Banner */}
-      <GlassCard style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', borderLeft: '4px solid var(--primary-400)' }}>
-        <div>
-          <div style={{ fontSize: '0.8rem', color: 'var(--primary-300)', fontWeight: 600, textTransform: 'uppercase' }}>INSTITUTIONAL PORTAL HEALTH</div>
-          <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: 'white', marginTop: '0.2rem' }}>
-            System Status: {isMaintenanceOn ? 'Maintenance Mode Active' : 'Normal Operations (Live)'}
-          </h3>
-          <p style={{ color: 'var(--neutral-300)', fontSize: '0.85rem' }}>
-            LMS Web Portal • SQLite Database • Laravel Sanctum • AI Recommendations Engine
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: '0.75rem' }}>
-          <Button variant="outline" size="sm" onClick={() => setActiveSection('system_health')}>
-            System Health & Controls
-          </Button>
-        </div>
-      </GlassCard>
     </div>
   );
 
@@ -593,61 +546,6 @@ export default function PrincipalDashboard() {
     </div>
   );
 
-  const renderSystemHealth = () => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', maxWidth: '750px' }}>
-      <div>
-        <span style={{ fontSize: '0.8rem', color: 'var(--primary-300)', letterSpacing: '1px', textTransform: 'uppercase', fontWeight: 600 }}>
-          SYSTEM ADMINISTRATION
-        </span>
-        <h1 style={{ fontSize: '2rem', fontWeight: 800, color: 'white', marginTop: '0.25rem' }}>
-          System Health & Controls
-        </h1>
-        <p style={{ color: 'var(--neutral-300)' }}>
-          Manage global configurations, maintenance mode, and system parameters.
-        </p>
-      </div>
-
-      <GlassCard>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-          <div>
-            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: 'white' }}>Maintenance Mode</h3>
-            <p style={{ color: 'var(--neutral-300)', fontSize: '0.85rem' }}>
-              When enabled, only administrators can access the system.
-            </p>
-          </div>
-          <Button 
-            variant={isMaintenanceOn ? 'error' : 'outline'}
-            disabled={busy}
-            onClick={() => handleUpdateSetting('maintenance_mode', isMaintenanceOn ? 'false' : 'true')}
-          >
-            <Lock size={16} /> {isMaintenanceOn ? 'Disable Maintenance' : 'Enable Maintenance'}
-          </Button>
-        </div>
-
-        <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: '1.25rem' }}>
-          <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'white', marginBottom: '0.75rem' }}>
-            System Settings
-          </h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {systemSettings.map(setting => (
-              <div key={setting.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem', background: 'rgba(255,255,255,0.04)', borderRadius: 'var(--radius-md)' }}>
-                <div>
-                  <div style={{ fontWeight: 600, color: 'white', fontSize: '0.95rem' }}>{setting.key}</div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--neutral-400)' }}>{setting.description || 'Global setting'}</div>
-                </div>
-                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                  <code style={{ background: 'rgba(0,0,0,0.3)', padding: '0.2rem 0.5rem', borderRadius: '4px', color: 'var(--primary-300)' }}>
-                    {setting.value}
-                  </code>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </GlassCard>
-    </div>
-  );
-
   const renderSettings = () => (
     <div style={{ maxWidth: '650px', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       <div>
@@ -711,46 +609,12 @@ export default function PrincipalDashboard() {
   return (
     <DashboardLayout role="dean">
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%', minWidth: 0 }}>
-        {/* Navigation Tabs Bar */}
-        <div style={{ display: 'flex', gap: '0.5rem', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.5rem', overflowX: 'auto' }}>
-          {[
-            { id: 'overview', label: 'Overview' },
-            { id: 'user_management', label: 'User Management' },
-            { id: 'quiz_oversight', label: 'Quiz Oversight' },
-            { id: 'security', label: 'Security' },
-            { id: 'analytics', label: 'Analytics' },
-            { id: 'activity_logs', label: 'Activity Logs' },
-            { id: 'system_health', label: 'System Health' },
-            { id: 'settings', label: 'Settings' }
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => handleSectionChange(tab.id)}
-              style={{
-                padding: '0.5rem 1rem',
-                borderRadius: 'var(--radius-md)',
-                background: activeSection === tab.id ? 'var(--primary-600)' : 'transparent',
-                color: activeSection === tab.id ? 'white' : 'var(--neutral-300)',
-                border: 'none',
-                fontWeight: 600,
-                fontSize: '0.9rem',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                whiteSpace: 'nowrap'
-              }}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
         {activeSection === 'overview' && renderOverview()}
         {activeSection === 'user_management' && renderUserManagement()}
         {activeSection === 'quiz_oversight' && renderQuizOversight()}
         {activeSection === 'security' && renderSecurity()}
         {activeSection === 'analytics' && renderAnalytics()}
         {activeSection === 'activity_logs' && renderActivityLogs()}
-        {activeSection === 'system_health' && renderSystemHealth()}
         {activeSection === 'settings' && renderSettings()}
       </div>
     </DashboardLayout>
