@@ -34,6 +34,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Teacher Quiz Routes
     Route::get('/teacher/dashboard', [QuizController::class, 'teacherDashboard']);
     Route::get('/teacher/students', [UserController::class, 'teacherStudents']);
+    Route::post('/teacher/quizzes', [QuizController::class, 'store']);
     Route::post('/teacher/quizzes/generate', [QuizController::class, 'generate'])->middleware('throttle:5,1');
     Route::put('/teacher/quizzes/{quiz}', [QuizController::class, 'update']);
     Route::patch('/teacher/quizzes/{quiz}', [QuizController::class, 'update']);

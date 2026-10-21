@@ -101,10 +101,10 @@ export default function TeacherDashboard() {
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // AI Quiz Builder form
+  // Manual Quiz Builder form
+  const [quizTitle, setQuizTitle] = useState('');
   const [subject, setSubject] = useState(BSIT_SUBJECT_OPTIONS[2]?.value || 'IT 101 - Introduction To Computing');
   const [topic, setTopic] = useState('');
-  const [difficulty, setDifficulty] = useState('medium');
   const [count, setCount] = useState(5);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [selectedTargetSection, setSelectedTargetSection] = useState('');
@@ -177,35 +177,33 @@ export default function TeacherDashboard() {
     }
   }, [subpage]);
 
-  const handleGenerateQuiz = async (e: React.FormEvent) => {
+  const handleCreateManualQuiz = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
     setError(null);
     setNotice(null);
     try {
-      const finalSubject = (subject && subject.trim()) || (subjects[0]?.name) || 'Science';
-      const data = await lmsFetch<{ quiz: Quiz; generation_source: string }>('/teacher/quizzes/generate', {
+      const finalSubject = (subject && subject.trim()) || (subjects[0]?.name) || 'IT 101 - Introduction To Computing';
+      const data = await lmsFetch<{ quiz: Quiz }>('/teacher/quizzes', {
         method: 'POST',
         body: JSON.stringify({
+          title: quizTitle.trim() || `${topic.trim()} Assessment`,
           subject: finalSubject,
           topic: topic.trim(),
           count,
-          difficulty,
           target_type: selectedTargetSection ? 'section' : 'all',
           target_sections: selectedTargetSection ? [selectedTargetSection] : null,
         }),
       });
-      setNotice(
-        data.generation_source === 'gemini'
-          ? `AI draft created: "${data.quiz.title}". Review and edit it before choosing its audience.`
-          : `Practice quiz draft created: "${data.quiz.title}". Review and edit it before choosing its audience.`
-      );
+      setNotice(`Quiz draft "${data.quiz.title}" created. Add your questions and answer choices in the editor.`);
+      setQuizTitle('');
+      setTopic('');
       setQuizzes((current) => [data.quiz, ...current.filter((quiz) => quiz.id !== data.quiz.id)]);
       setEditingQuiz(data.quiz);
       void loadDashboard();
       setActiveSection('quizzes');
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to generate quiz');
+      setError(err instanceof Error ? err.message : 'Failed to create quiz');
     } finally {
       setBusy(false);
     }
@@ -324,12 +322,12 @@ export default function TeacherDashboard() {
             Welcome, {user?.name || 'Teacher'}!
           </h1>
           <p style={{ color: 'var(--neutral-300)', marginTop: '0.25rem' }}>
-            Create AI assessments, oversee class submissions, and analyze learner mastery.
+            Author custom assessments, oversee class submissions, and analyze learner mastery.
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
           <Button variant="accent" onClick={() => handleSectionChange('quizzes')}>
-            <Sparkles size={16} /> Create AI Quiz
+            <Pencil size={16} /> Create Quiz
           </Button>
           <Button variant="outline" onClick={() => handleSectionChange('students')}>
             <Users size={16} /> Students Roster
@@ -360,14 +358,14 @@ export default function TeacherDashboard() {
       <GlassCard>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
           <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'white' }}>Recent Class Quizzes</h2>
-          <Button variant="outline" size="sm" onClick={() => setActiveSection('quizzes')}>
+          <Button variant="outline" size="sm" onClick={() => handleSectionChange('quizzes')}>
             Manage All <ArrowRight size={14} />
           </Button>
         </div>
 
         {quizzes.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--neutral-300)' }}>
-            No quizzes generated yet. Use the AI builder to create your first quiz!
+            No quizzes created yet. Click <strong>Create Quiz</strong> to author your first assessment!
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -455,10 +453,10 @@ export default function TeacherDashboard() {
           CURRICULUM & ASSESSMENTS
         </span>
         <h1 style={{ fontSize: '2rem', fontWeight: 800, color: 'white', marginTop: '0.25rem' }}>
-          Quizzes & AI Generator
+          Quizzes & Assessment Builder
         </h1>
         <p style={{ color: 'var(--neutral-300)' }}>
-          Generate standard-aligned questions with AI, inspect questions & answer keys, and publish.
+          Author custom assessments for BSIT courses, configure questions & answer keys, set point weights, and publish to blocks.
         </p>
       </div>
 
@@ -474,21 +472,28 @@ export default function TeacherDashboard() {
         </div>
       )}
 
-      {/* AI Quiz Builder Form */}
-      <GlassCard style={{ borderLeft: '4px solid var(--accent-purple-light)', position: 'relative', zIndex: 30 }}>
+      {/* Manual Quiz Builder Form */}
+      <GlassCard style={{ borderLeft: '4px solid var(--primary-400)', position: 'relative', zIndex: 30 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
-          <div style={{ background: 'var(--accent-purple)', padding: '0.5rem', borderRadius: 'var(--radius-md)', color: 'white' }}>
-            <Sparkles size={22} />
+          <div style={{ background: 'var(--primary-600)', padding: '0.5rem', borderRadius: 'var(--radius-md)', color: 'white' }}>
+            <Pencil size={22} />
           </div>
           <div>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'white' }}>AI Quiz Generator</h2>
-            <p style={{ fontSize: '0.85rem', color: 'var(--neutral-300)' }}>Generate high-quality multiple choice quizzes automatically using Gemini AI.</p>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'white' }}>Create New Quiz</h2>
+            <p style={{ fontSize: '0.85rem', color: 'var(--neutral-300)' }}>Select a BSIT course, enter a topic, and open the Question Builder to author your questions and answer keys manually.</p>
           </div>
         </div>
 
-        <form onSubmit={handleGenerateQuiz} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          {/* Row 1: Primary Scope (Subject and Topic) */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem' }}>
+        <form onSubmit={handleCreateManualQuiz} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          {/* Row 1: Quiz Title, BSIT Subject, and Topic */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem' }}>
+            <Input
+              label="Quiz Title (Optional)"
+              value={quizTitle}
+              onChange={(e) => setQuizTitle(e.target.value)}
+              placeholder="e.g. Midterm Quiz 1 — Arrays & Loops"
+            />
+
             <Select
               label="Course Code & Subject Description"
               value={subject}
@@ -511,25 +516,15 @@ export default function TeacherDashboard() {
             />
           </div>
 
-          {/* Row 2: Assessment Parameters & Targeting */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.25rem' }}>
+          {/* Row 2: Initial Questions & Block Targeting */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
             <Select 
-              label="Difficulty Level"
-              value={difficulty} 
-              onChange={setDifficulty}
-              options={[
-                { value: 'easy', label: 'Easy (Foundational)' },
-                { value: 'medium', label: 'Medium (Standard)' },
-                { value: 'challenging', label: 'Challenging (Advanced)' },
-              ]}
-            />
-
-            <Select 
-              label="Questions Count"
+              label="Initial Question Slots"
               value={String(count)} 
               onChange={(val) => setCount(Number(val))}
               options={[
-                { value: '3', label: '3 Questions (Quick Check)' },
+                { value: '1', label: '1 Question (Add more in editor)' },
+                { value: '3', label: '3 Questions' },
                 { value: '5', label: '5 Questions (Standard)' },
                 { value: '10', label: '10 Questions (Unit Quiz)' },
               ]}
@@ -549,7 +544,7 @@ export default function TeacherDashboard() {
             />
           </div>
 
-          {/* Row 3: Action Bar & Generation Indicator */}
+          {/* Row 3: Action Bar */}
           <div style={{
             display: 'flex',
             justifyContent: 'space-between',
@@ -560,8 +555,8 @@ export default function TeacherDashboard() {
             borderTop: '1px solid rgba(255, 255, 255, 0.08)'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--neutral-400)', fontSize: '0.85rem' }}>
-              <Sparkles size={16} style={{ color: 'var(--accent-purple-light)', flexShrink: 0 }} />
-              <span>AI automatically drafts 4-option multiple-choice items with complete answer keys & skill rationales.</span>
+              <BookOpen size={16} style={{ color: 'var(--primary-300)', flexShrink: 0 }} />
+              <span>Opens the interactive Question Editor where you can type questions, set points per item, and mark correct answers.</span>
             </div>
 
             <Button
@@ -570,7 +565,7 @@ export default function TeacherDashboard() {
               disabled={busy || !subject}
               style={{ padding: '0.75rem 1.75rem', whiteSpace: 'nowrap' }}
             >
-              <Sparkles size={16} /> {busy ? 'Generating Quiz Draft...' : 'Generate Quiz Draft'}
+              <Pencil size={16} /> {busy ? 'Creating Quiz...' : 'Create Quiz & Add Questions'}
             </Button>
           </div>
         </form>

@@ -43,6 +43,58 @@ class QuizController extends Controller
     }
 
 
+    public function store(Request $request): JsonResponse
+    {
+        $this->requireRole($request, 'teacher');
+        $input = $request->validate([
+            'title' => ['nullable', 'string', 'max:200'],
+            'subject' => ['required', 'string', 'max:100'],
+            'topic' => ['required', 'string', 'max:120'],
+            'count' => ['nullable', 'integer', 'between:1,50'],
+            'instructions' => ['nullable', 'string'],
+            'time_limit_minutes' => ['nullable', 'integer', 'between:1,300'],
+            'target_type' => ['sometimes', 'in:all,section,individual'],
+            'target_sections' => ['sometimes', 'nullable', 'array'],
+            'questions' => ['sometimes', 'array', 'min:1'],
+        ]);
+
+        $questionCount = (int) ($input['count'] ?? 3);
+        $questions = $input['questions'] ?? array_map(fn (int $i) => [
+            'prompt' => '',
+            'skill' => $input['topic'],
+            'points' => 1,
+            'options' => ['', '', '', ''],
+            'correct_index' => 0,
+        ], range(1, max(1, $questionCount)));
+
+        $title = !empty(trim($input['title'] ?? ''))
+            ? trim($input['title'])
+            : ($input['topic'] . ' Assessment');
+
+        $quiz = Quiz::create([
+            'teacher_id' => $request->user()->id,
+            'title' => $title,
+            'subject' => $input['subject'],
+            'topic' => $input['topic'],
+            'instructions' => $input['instructions'] ?? 'Choose the best answer for each question. Alt-tabbing, taking screenshots, or opening developer tools is strictly prohibited and monitored.',
+            'questions' => $questions,
+            'generated_by_ai' => false,
+            'target_type' => $input['target_type'] ?? 'all',
+            'target_sections' => $input['target_sections'] ?? null,
+            'time_limit_minutes' => $input['time_limit_minutes'] ?? 15,
+        ]);
+
+        \App\Models\ActivityLog::create([
+            'user_id' => $request->user()->id,
+            'action' => 'create_quiz',
+            'description' => "Created manual quiz \"{$quiz->title}\" ({$quiz->subject})",
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
+
+        return response()->json(['quiz' => $this->teacherQuizPayload($quiz)], 201);
+    }
+
     public function generate(Request $request): JsonResponse
     {
         $this->requireRole($request, 'teacher');

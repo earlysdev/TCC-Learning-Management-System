@@ -41,9 +41,9 @@ class DemoSeeder extends Seeder
         $password = 'TccPortal!2026';
         $accounts = [
             [
-                'name' => 'TCC Student',
-                'first_name' => 'TCC',
-                'last_name' => 'Student',
+                'name' => 'Atan Villanueva',
+                'first_name' => 'Atan',
+                'last_name' => 'Villanueva',
                 'email' => 'student@tcc.edu.ph',
                 'lrn' => '20273710',
                 'role' => 'student',
@@ -52,9 +52,9 @@ class DemoSeeder extends Seeder
                 'school_year' => '2025-2026',
             ],
             [
-                'name' => 'TCC Faculty',
-                'first_name' => 'TCC',
-                'last_name' => 'Faculty',
+                'name' => 'Kay Waga',
+                'first_name' => 'Kay',
+                'last_name' => 'Waga',
                 'email' => 'teacher@tcc.edu.ph',
                 'lrn' => null,
                 'role' => 'teacher',
@@ -63,9 +63,9 @@ class DemoSeeder extends Seeder
                 'school_year' => null,
             ],
             [
-                'name' => 'TCC Secretary',
-                'first_name' => 'TCC',
-                'last_name' => 'Secretary',
+                'name' => 'Nikko Perez',
+                'first_name' => 'Nikko',
+                'last_name' => 'Perez',
                 'email' => 'secretary@tcc.edu.ph',
                 'lrn' => null,
                 'role' => 'secretary',
@@ -74,9 +74,9 @@ class DemoSeeder extends Seeder
                 'school_year' => null,
             ],
             [
-                'name' => 'College Dean',
-                'first_name' => 'College',
-                'last_name' => 'Dean',
+                'name' => 'Gabriel Casiño',
+                'first_name' => 'Gabriel',
+                'last_name' => 'Casiño',
                 'email' => 'dean@tcc.edu.ph',
                 'lrn' => null,
                 'role' => 'dean',
