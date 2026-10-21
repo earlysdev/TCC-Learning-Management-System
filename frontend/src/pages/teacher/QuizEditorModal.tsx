@@ -4,6 +4,7 @@ import {
   Award, CheckCircle2 
 } from 'lucide-react';
 import type { Question, Quiz, Subject } from '../../lib/types';
+import { BSIT_SUBJECT_OPTIONS } from '../../lib/constants';
 import Modal from '../../components/ui/Modal';
 import Button from '../../components/ui/Button';
 import Select from '../../components/ui/Select';
@@ -228,21 +229,15 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
             <input className="form-input" value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} />
           </label>
           <Select
-            label="Curriculum Subject"
+            label="Course Code & Subject Description"
             value={draft.subject}
             onChange={(val) => setDraft({ ...draft, subject: val })}
             options={subjects && subjects.length > 0
-              ? subjects.map((s) => ({ value: s.name, label: `${s.name}${s.code ? ` (${s.code})` : ''}` }))
-              : [
-                { value: 'Science', label: 'Science (SCI)' },
-                { value: 'Mathematics', label: 'Mathematics (MATH)' },
-                { value: 'English', label: 'English (ENG)' },
-                { value: 'Filipino', label: 'Filipino (FIL)' },
-                { value: 'Araling Panlipunan', label: 'Araling Panlipunan (AP)' },
-                { value: 'MAPEH', label: 'MAPEH (MAPEH)' },
-                { value: 'TLE / TVL', label: 'TLE / TVL (TLE)' },
-                { value: 'Edukasyon sa Pagpapakatao', label: 'Edukasyon sa Pagpapakatao (ESP)' },
-              ]
+              ? subjects.map((s) => ({
+                  value: s.code && !s.name.startsWith(s.code) ? `${s.code} - ${s.name}` : s.name,
+                  label: s.code && !s.name.startsWith(s.code) ? `${s.code} — ${s.name}` : s.name,
+                }))
+              : BSIT_SUBJECT_OPTIONS
             }
           />
           <label className="form-group" style={{ margin: 0 }}>

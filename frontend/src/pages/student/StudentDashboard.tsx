@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import { lmsFetch, getLmsUser } from '../../lmsApi';
 import type { Quiz, Recommendation, Announcement } from '../../lib/types';
+import { getYearLevelFromBlock } from '../../lib/constants';
 import { 
   BookOpen, CheckCircle2, Award, Sparkles, Send, 
   ArrowRight, ArrowLeft, Clock, AlertCircle, FileQuestion, Calendar, Trophy,
@@ -645,25 +646,31 @@ export default function StudentDashboard() {
 
       <GlassCard>
         <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'white', marginBottom: '1rem' }}>Subject Breakdown</h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          {['Science', 'Mathematics', 'English', 'Araling Panlipunan'].map(subj => {
-            const subjQuizzes = completedQuizzes.filter(q => q.subject === subj);
-            const subjAvg = subjQuizzes.length > 0
-              ? (subjQuizzes.reduce((s, q) => s + Number(q.percentage || 0), 0) / subjQuizzes.length).toFixed(0)
-              : null;
-            return (
-              <div key={subj}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginBottom: '0.4rem', color: 'white' }}>
-                  <span>{subj}</span>
-                  <span style={{ fontWeight: 600 }}>{subjAvg ? `${subjAvg}%` : 'No data yet'}</span>
+        {completedQuizzes.length === 0 ? (
+          <div style={{ color: 'var(--neutral-400)', fontSize: '0.9rem', padding: '1rem 0' }}>
+            No completed quizzes recorded yet. Complete an assessment to view your subject breakdown.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {Array.from(new Set(completedQuizzes.map(q => q.subject))).map(subj => {
+              const subjQuizzes = completedQuizzes.filter(q => q.subject === subj);
+              const subjAvg = subjQuizzes.length > 0
+                ? (subjQuizzes.reduce((s, q) => s + Number(q.percentage || 0), 0) / subjQuizzes.length).toFixed(0)
+                : null;
+              return (
+                <div key={subj}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginBottom: '0.4rem', color: 'white' }}>
+                    <span>{subj}</span>
+                    <span style={{ fontWeight: 600 }}>{subjAvg ? `${subjAvg}%` : 'No data yet'}</span>
+                  </div>
+                  <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: 'var(--radius-full)', overflow: 'hidden' }}>
+                    <div style={{ width: subjAvg ? `${subjAvg}%` : '0%', height: '100%', background: 'linear-gradient(90deg, var(--primary-500), var(--accent-purple-light))' }} />
+                  </div>
                 </div>
-                <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: 'var(--radius-full)', overflow: 'hidden' }}>
-                  <div style={{ width: subjAvg ? `${subjAvg}%` : '0%', height: '100%', background: 'linear-gradient(90deg, var(--primary-500), var(--accent-purple-light))' }} />
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </GlassCard>
     </div>
   );
@@ -805,7 +812,7 @@ export default function StudentDashboard() {
             <h2 style={{ fontSize: '1.3rem', fontWeight: 700, color: 'white' }}>{user?.name || 'Student Name'}</h2>
             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
               <Badge variant="success">Active Student</Badge>
-              <Badge variant="primary">{user?.grade || 'Grade 10'}</Badge>
+              <Badge variant="primary">{user?.section || 'Block - 1A'}</Badge>
             </div>
           </div>
         </div>
@@ -824,9 +831,9 @@ export default function StudentDashboard() {
             </div>
           </div>
           <div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', textTransform: 'uppercase', fontWeight: 600 }}>Grade & Block</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', textTransform: 'uppercase', fontWeight: 600 }}>Block</div>
             <div style={{ color: 'white', fontWeight: 600, marginTop: '0.2rem' }}>
-              {user?.grade || 'Grade 10'} — {user?.section || 'Emerald'}
+              {user?.section || 'Block - 1A'} ({getYearLevelFromBlock(user?.section)})
             </div>
           </div>
           <div>

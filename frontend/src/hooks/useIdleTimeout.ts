@@ -20,7 +20,7 @@ export function useIdleTimeout({
   const warningRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const countdownRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
-  const isExempt = role === 'teacher' || role === 'secretary' || role === 'principal' || role === 'developer';
+  const isExempt = role === 'teacher' || role === 'secretary' || role === 'dean' || role === 'developer';
 
   const clearAllTimers = useCallback(() => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);

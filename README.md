@@ -4,30 +4,28 @@ React and Laravel rebuild based on the original site in `legacy-reference/`. The
 
 ## What's working
 
-- React responsive landing, sign-in, teacher dashboard, and student quiz interface.
-- Laravel token authentication and role checks for teacher and student quiz APIs.
-- Teacher quiz list and dashboard metrics, including submissions and average scores.
-- Quiz drafts generated with Gemini when `GEMINI_API_KEY` is configured. Without a key, the demo generator supports Ecosystems, Photosynthesis, Fractions, Water Cycle, and Context Clues.
-- Students can take published quizzes and receive skill based review suggestions.
-- Quiz answer keys stay on the server. Scoring happens in Laravel and the database prevents a student submitting the same quiz twice.
-- Local demo accounts and an already published Ecosystems quiz.
+- React responsive landing, sign-in, Student, Teacher, Secretary, and Dean dashboards.
+- Laravel token authentication and role-based access control for Student, Teacher, Secretary, and Dean APIs.
+- College Block system (`Block - 1A`–`1E` for 1st Year, `Block - 2A`–`2E` for 2nd Year, `Block - 3A`–`3E` for 3rd Year, and `Block - 4A`–`4E` for 4th Year).
+- Full BSIT curriculum (43 official Subject Codes & Descriptions from `PATH FIT 1`–`4`, `GEC`, `GEE`, `Math`, `NSTP`, and `IT 101`–`122` / `IT Elec 1`–`2`).
+- Teacher quiz creation, manual question authoring, AI question generation, and block-level publishing.
+- Students can take published quizzes and receive skill-based review suggestions.
+- Quiz answer keys stay on the server. Scoring happens in Laravel and the database prevents a student from submitting the same quiz twice.
 
-## Demo sign-ins
+## Default TCC Role Accounts
 
-Seed the local database using the steps below. All demo accounts share this password:
+Seed the database using `php artisan migrate --seed`. Default initial role accounts share this password:
 
 ```text
-LnhsDemo!2026
+TccPortal!2026
 ```
 
-| Role | Login | Alternative |
-| --- | --- | --- |
-| Student | `student.demo@TCC.test` | ID `20273710` |
-| Teacher | `teacher.demo@TCC.test` | - |
-| Secretary | `secretary.demo@TCC.test` | - |
-| Dean | `dean.demo@TCC.test` | - |
-
-The teacher and student accounts have the working quiz experiences. Secretary and principal currently open the protected interface preview. Demo accounts are seeded only in local/testing environments and should not be added to production.
+| Role | Email Login | Student ID Login | Default Block |
+| --- | --- | --- | --- |
+| Student | `student@tcc.edu.ph` | `20273710` | `Block - 1A` (1st Year) |
+| Teacher | `teacher@tcc.edu.ph` | - | - |
+| Secretary | `secretary@tcc.edu.ph` | - | - |
+| Dean | `dean@tcc.edu.ph` | - | - |
 
 ## Run locally on Windows
 
@@ -59,7 +57,7 @@ php artisan migrate --seed
 php artisan serve
 ```
 
-Open the Vite URL shown in the first terminal, usually `http://localhost:5173`. The API runs at `http://localhost:8000`. The sign-in screen has a **Try a demo account** panel while running in development; choose a role to fill in its login and password.
+Open the Vite URL shown in the first terminal, usually `http://localhost:5173`. The API runs at `http://localhost:8000`.
 
 To enable live AI, put a Gemini key in `backend/.env`:
 
@@ -83,11 +81,9 @@ FRONTEND_ALLOWED_ORIGINS=https://your-site.pages.dev
 
 During Render Blueprint setup, provide a Laravel application key as `APP_KEY`. Generate one locally with `php artisan key:generate --show`. Set `GEMINI_API_KEY` in Render's secret environment settings if live AI is wanted. Add a mail provider before relying on account reset emails; the current default writes email to Laravel logs.
 
-Current Render pricing is about **$7/month** for the 512 MB web service plus **$6/month** for the smallest paid PostgreSQL compute plan; Cloudflare Pages is free. Allow for database storage, taxes, and usage. Render's free PostgreSQL plan is temporary, so use the paid plan for persistent school data. Review current provider prices before deployment.
 
 ## Project folders
 
 - `frontend/` - React, TypeScript, Vite, and school image assets.
 - `backend/` - Laravel API, authentication, migrations, demo seeder, and AI integration.
-- `legacy-reference/` - original Firebase application and migration reference.
 - `render.yaml` - Render API and database blueprint.

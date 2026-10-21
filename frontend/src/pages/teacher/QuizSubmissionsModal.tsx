@@ -208,9 +208,9 @@ export default function QuizSubmissionsModal({ quiz, isOpen, onClose }: QuizSubm
                         <strong style={{ color: 'white', fontSize: '1rem' }}>
                           {sub.student?.name || 'Student'}
                         </strong>
-                        {sub.student?.grade && sub.student?.section && (
+                        {sub.student?.section && (
                           <Badge variant="primary" style={{ fontSize: '0.7rem' }}>
-                            {sub.student.grade} - {sub.student.section}
+                            {sub.student.section}
                           </Badge>
                         )}
                         {sub.student?.lrn && (

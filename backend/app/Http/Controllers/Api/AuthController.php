@@ -20,9 +20,18 @@ class AuthController extends Controller
             'password' => ['required', 'string'],
         ]);
 
+        $legacyAliases = [
+            'student.demo@lnhs.test' => 'student@tcc.edu.ph',
+            'teacher.demo@lnhs.test' => 'teacher@tcc.edu.ph',
+            'secretary.demo@lnhs.test' => 'secretary@tcc.edu.ph',
+            'principal.demo@lnhs.test' => 'dean@tcc.edu.ph',
+            'dean.demo@tcc.test' => 'dean@tcc.edu.ph',
+        ];
+        $identifier = $legacyAliases[strtolower(trim($credentials['identifier']))] ?? trim($credentials['identifier']);
+
         $user = User::query()
-            ->where('email', $credentials['identifier'])
-            ->orWhere('lrn', $credentials['identifier'])
+            ->where('email', $identifier)
+            ->orWhere('lrn', $identifier)
             ->first();
 
         if (! $user || ! Hash::check($credentials['password'], $user->password)) {
@@ -113,6 +122,7 @@ class AuthController extends Controller
     /** @return array */
     private function userPayload(User $user): array
     {
+        $normalizedRole = ($user->role === 'principal') ? 'dean' : ($user->role ?? 'student');
         return [
             'id' => $user->id,
             'name' => $user->name,
@@ -120,7 +130,7 @@ class AuthController extends Controller
             'last_name' => $user->last_name,
             'email' => $user->email,
             'lrn' => $user->lrn,
-            'role' => $user->role ?? 'student',
+            'role' => $normalizedRole,
             'grade' => $user->grade,
             'section' => $user->section,
             'status' => $user->status,

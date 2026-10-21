@@ -17,7 +17,7 @@ export default function Topbar({ roleLabel }: TopbarProps) {
   return (
     <header className="dashboard-header">
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', color: 'var(--neutral-300)' }}>
-        <span>LNHS LMS</span>
+        <span>TCC LMS</span>
         <span>/</span>
         <span style={{ color: 'white', fontWeight: 500 }}>{roleLabel}</span>
       </div>

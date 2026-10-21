@@ -13,19 +13,8 @@ class LmsAiService
     {
         $key = config('services.gemini.key');
         if (! $key) {
-            $questions = $this->sampleQuestions($topic);
-            if ($questions === null) {
-                throw ValidationException::withMessages([
-                    'topic' => ['Add a Gemini API key to generate new topics. Without a key, the demo generator supports Ecosystems, Photosynthesis, Fractions, Water Cycle, and Context Clues.'],
-                ]);
-            }
-            if ($count > count($questions)) {
-                throw ValidationException::withMessages([
-                    'count' => ['The offline demo question sets support up to five questions. Add a Gemini API key for longer quizzes.'],
-                ]);
-            }
-
-            return ['questions' => array_slice($questions, 0, $count), 'source' => 'demo-template'];
+            $questions = $this->sampleQuestions($topic, $subject, $count);
+            return ['questions' => array_slice($questions, 0, $count), 'source' => 'local-template'];
         }
 
         $schema = [
@@ -283,8 +272,8 @@ class LmsAiService
         return $clean;
     }
 
-    /** @return array<int, array{prompt: string, options: array<int, string>, correct_index: int, skill: string}|null */
-    private function sampleQuestions(string $topic): ?array
+    /** @return array<int, array{prompt: string, options: array<int, string>, correct_index: int, skill: string}> */
+    private function sampleQuestions(string $topic, string $subject = 'Information Technology', int $count = 5): array
     {
         $sets = [
             'ecosystems' => [
@@ -308,25 +297,34 @@ class LmsAiService
                 ['What is 3/6 in simplest form?', ['1/2', '1/3', '2/3', '3/5'], 0, 'Simplifying fractions'],
                 ['What is 2/3 of 12?', ['6', '8', '9', '10'], 1, 'Fraction of a quantity'],
             ],
-            'water cycle' => [
-                ['What is evaporation?', ['Liquid water changing into water vapor', 'Water vapor becoming ice', 'Rain falling from clouds', 'Water soaking into rock'], 0, 'Evaporation'],
-                ['What happens during condensation?', ['Water vapor cools and forms droplets', 'Ice turns directly into soil', 'Water flows downhill', 'Plants absorb minerals'], 0, 'Condensation'],
-                ['What is precipitation?', ['Water falling from clouds as rain, snow, sleet, or hail', 'Water warming in a lake', 'Clouds moving in the wind', 'Water vapor rising'], 0, 'Precipitation'],
-                ['What supplies most energy that drives the water cycle?', ['The Sun', 'The Moon', 'Earthquakes', 'Ocean tides'], 0, 'Energy in the water cycle'],
-                ['What does collection mean in the water cycle?', ['Water gathers in oceans, lakes, and other bodies', 'Water vapor forms clouds', 'Water freezes in the sky', 'Plants release seeds'], 0, 'Collection'],
-            ],
-            'context clues' => [
-                ['What are context clues?', ['Hints around a word that help explain its meaning', 'Words that rhyme at the end of a poem', 'A list of all chapter titles', 'Punctuation marks only'], 0, 'Using context clues'],
-                ['A sentence says, “The arid desert received almost no rain.” What does arid mean?', ['Very wet', 'Very dry', 'Crowded', 'Cold'], 1, 'Inferring word meaning'],
-                ['Which nearby information is most useful for figuring out an unfamiliar word?', ['A definition or example in the same passage', 'The page number', 'The font size', 'The book cover color'], 0, 'Finding evidence'],
-                ['Why should readers check the whole sentence when using context clues?', ['The surrounding ideas can narrow down the meaning', 'Every word has only one meaning', 'It changes the spelling', 'It removes the need to read'], 0, 'Reading for meaning'],
-                ['A sentence says “Mia was famished, so she ate two lunches.” What does famished most likely mean?', ['Very hungry', 'Very sleepy', 'Angry', 'In a hurry'], 0, 'Inferring word meaning'],
-            ],
         ];
         $key = Str::lower(trim($topic));
-        foreach ($sets as $name => $questions) if (str_contains($key, $name)) {
-            return array_map(fn ($q) => ['prompt' => $q[0], 'options' => $q[1], 'correct_index' => $q[2], 'skill' => $q[3]], $questions);
+        foreach ($sets as $name => $questions) {
+            if (str_contains($key, $name)) {
+                return array_map(fn ($q) => ['prompt' => $q[0], 'options' => $q[1], 'correct_index' => $q[2], 'skill' => $q[3]], $questions);
+            }
         }
-        return null;
+
+        // Dynamic BSIT / Collegiate template questions for any course topic
+        $cleanTopic = trim($topic) ?: 'Core Concepts';
+        $cleanSubject = trim($subject) ?: 'BSIT Course';
+        $templates = [
+            ["Which statement best defines the primary objective of {$cleanTopic} in {$cleanSubject}?", ["Applying structured principles and methodologies to solve problems in {$cleanTopic}", "Ignoring system requirements and documentation standards", "Relying solely on unverified trial-and-error approaches", "Eliminating testing and validation phases"], 0, "{$cleanTopic} Fundamentals"],
+            ["When designing or analyzing a solution involving {$cleanTopic}, which practice ensures maintainability and accuracy?", ["Following modular design, clear documentation, and standard conventions", "Hardcoding all parameters without validation", "Skipping peer review and verification checks", "Using ambiguous naming and unstructured logic"], 0, "Best Practices in {$cleanTopic}"],
+            ["What is a key advantage of mastering {$cleanTopic} within the {$cleanSubject} curriculum?", ["It enables systematic analysis, efficient implementation, and scalable problem solving", "It removes the need for algorithmic thinking", "It restricts interoperability between software components", "It prevents future system upgrades"], 0, "Applied {$cleanTopic}"],
+            ["Which factor is most critical when evaluating performance and reliability in {$cleanTopic}?", ["Correctness, efficiency, and adherence to specification requirements", "Visual appearance of source files only", "Minimizing comments regardless of complexity", "Avoiding edge-case testing"], 0, "Evaluation & Quality Assurance"],
+            ["In a real-world project scenario for {$cleanSubject}, how should errors or edge cases in {$cleanTopic} be handled?", ["By implementing proper validation, exception handling, and systematic testing", "By suppressing all warnings and continuing execution blindly", "By deferring all checks to end users", "By disabling logging and diagnostics"], 0, "Troubleshooting & Validation"],
+            ["Which approach best supports collaborative development when working on {$cleanTopic}?", ["Consistent standards, version control, and clear technical communication", "Isolated changes without documentation", "Duplicating logic across unrelated modules", "Bypassing integration testing"], 0, "Collaborative Engineering"],
+            ["How does {$cleanTopic} contribute to overall system architecture in {$cleanSubject}?", ["It provides a foundational layer for structured data processing and reliable execution", "It replaces all hardware components", "It eliminates the need for security controls", "It operates independently of user requirements"], 0, "Architectural Integration"],
+            ["What is the first step before implementing a complex feature related to {$cleanTopic}?", ["Analyzing the problem requirements, constraints, and expected inputs/outputs", "Deploying directly to production without a plan", "Optimizing code before defining requirements", "Removing existing test cases"], 0, "Requirement Analysis"],
+            ["Which metric best indicates a successful implementation of {$cleanTopic}?", ["Meeting functional specifications with verified test coverage and optimal efficiency", "Having the longest possible source file", "Using the most complex syntax available", "Avoiding user feedback"], 0, "Implementation Metrics"],
+            ["Why is continuous review important when studying {$cleanTopic} in {$cleanSubject}?", ["It reinforces core competencies and bridges theoretical concepts with practical application", "It memorizes answers without understanding underlying logic", "It limits adaptation to modern technologies", "It replaces hands-on laboratory practice"], 0, "Competency Mastery"],
+        ];
+
+        return array_slice(
+            array_map(fn ($q) => ['prompt' => $q[0], 'options' => $q[1], 'correct_index' => $q[2], 'skill' => $q[3]], $templates),
+            0,
+            max(3, min(10, $count))
+        );
     }
 }

@@ -141,7 +141,7 @@ export default function PublishQuizModal({ quiz, isOpen, students, sections, bus
           <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: '1rem' }}>
             <label className="form-group">
               <span className="form-label">Find a student</span>
-              <input className="form-input" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, ID, grade, or block" />
+              <input className="form-input" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, ID, or block" />
             </label>
             {students.length === 0 ? (
               <p style={{ color: 'var(--neutral-300)', fontSize: '0.88rem' }}>No students are available in the current roster.</p>
@@ -154,7 +154,7 @@ export default function PublishQuizModal({ quiz, isOpen, students, sections, bus
                       <input type="checkbox" checked={selected} onChange={() => toggleStudent(student.id)} style={{ accentColor: 'var(--success)' }} />
                       <span style={{ flex: 1 }}>
                         <strong style={{ display: 'block', color: 'white', fontSize: '0.88rem' }}>{student.name}</strong>
-                        <span style={{ display: 'block', color: 'var(--neutral-400)', fontSize: '0.75rem' }}>{[student.grade, student.section, student.lrn].filter(Boolean).join(' · ') || student.email}</span>
+                        <span style={{ display: 'block', color: 'var(--neutral-400)', fontSize: '0.75rem' }}>{[student.section, student.lrn].filter(Boolean).join(' · ') || student.email}</span>
                       </span>
                       {selected && <Check size={16} style={{ color: 'var(--success)' }} />}
                     </label>

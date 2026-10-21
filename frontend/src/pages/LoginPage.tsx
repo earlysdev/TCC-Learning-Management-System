@@ -5,15 +5,6 @@ import { API_BASE } from '../lmsApi';
 import CaptchaVerification from '../components/auth/CaptchaVerification';
 import Button from '../components/ui/Button';
 
-const demoUsers = [
-  { label: 'Student', login: '20273710', hint: 'ID: 20273710' },
-  { label: 'Teacher', login: 'teacher.demo@lnhs.test', hint: 'Science Faculty' },
-  { label: 'Secretary', login: 'secretary.demo@lnhs.test', hint: 'Registrar Office' },
-  { label: 'Dean', login: 'dean.demo@tcc.test', hint: "Dean's Executive Office" },
-];
-
-const demoPassword = 'LnhsDemo!2026';
-
 export default function LoginPage() {
   const navigate = useNavigate();
   const [identifier, setIdentifier] = useState('');
@@ -54,7 +45,8 @@ export default function LoginPage() {
         storage.setItem('lms-user', JSON.stringify(data.user));
       }
 
-      const role = String(data.user?.role || 'student').toLowerCase();
+      const rawRole = String(data.user?.role || 'student').toLowerCase();
+      const role = rawRole === 'principal' ? 'dean' : rawRole;
       navigate(`/${role}`);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Unable to sign in. Please verify your connection.');
@@ -193,34 +185,12 @@ export default function LoginPage() {
             variant="accent" 
             size="lg" 
             type="submit" 
-            disabled={busy || (!captchaVerified && !identifier.includes('demo') && identifier !== '20273710')}
+            disabled={busy || !captchaVerified}
             style={{ width: '100%', marginTop: '0.5rem' }}
           >
             {busy ? 'Authenticating...' : 'Sign In to Workspace'} <ArrowRight size={18} />
           </Button>
         </form>
-
-        {/* Demo Fast-Login Selector */}
-        <div className="demo-pills">
-          <div className="demo-pills-title">Quick Demo Switcher</div>
-          <div className="demo-pills-grid">
-            {demoUsers.map(d => (
-              <button
-                key={d.label}
-                type="button"
-                className="demo-pill-btn"
-                onClick={() => {
-                  setIdentifier(d.login);
-                  setPassword(demoPassword);
-                  setCaptchaVerified(true);
-                }}
-              >
-                <strong>{d.label}</strong>
-                <small>{d.hint}</small>
-              </button>
-            ))}
-          </div>
-        </div>
       </div>
     </div>
   );

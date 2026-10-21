@@ -15,7 +15,7 @@ import Badge from '../../components/ui/Badge';
 import Input from '../../components/ui/Input';
 import Select from '../../components/ui/Select';
 
-interface PrincipalMetrics {
+interface DeanMetrics {
   active_users: number;
   quiz_completion: number;
   avg_performance: number;
@@ -56,7 +56,7 @@ export default function PrincipalDashboard() {
   const navigate = useNavigate();
   const initialSection = subpage ? (pathToSection[subpage] || 'overview') : 'overview';
   const [activeSection, setActiveSection] = useState(initialSection);
-  const [metrics, setMetrics] = useState<PrincipalMetrics>({
+  const [metrics, setMetrics] = useState<DeanMetrics>({
     active_users: 0,
     quiz_completion: 0,
     avg_performance: 0,
@@ -76,26 +76,32 @@ export default function PrincipalDashboard() {
   const [userSearch, setUserSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
 
-  const loadPrincipalData = async () => {
+  const loadDeanData = async () => {
     try {
       setLoading(true);
       setError(null);
-      const metricsData = await lmsFetch<PrincipalMetrics>('/principal/dashboard').catch(() => ({
-        active_users: 4,
-        quiz_completion: 88,
-        avg_performance: 82,
-        security_alerts: 0,
-      }));
-      setMetrics(metricsData);
+      const res = await lmsFetch<{ data?: Record<string, number> } & Record<string, number>>('/dean/dashboard').catch(() => null);
+      const d = res?.data || res || {};
+      setMetrics({
+        active_users: Number(d.active_users ?? 0),
+        quiz_completion: Number(d.quiz_completion ?? 0),
+        avg_performance: Number(d.average_score_percentage ?? d.avg_performance ?? 0),
+        security_alerts: Number(d.unresolved_security_alerts ?? d.security_alerts ?? 0),
+      });
 
-      const allUsers = await lmsFetch<PaginatedResponse<User> | User[]>('/users').catch(() => []);
+      const allUsers = await lmsFetch<PaginatedResponse<User> | { data?: { data?: User[] } | User[] } | User[]>('/users').catch(() => []);
       if (Array.isArray(allUsers)) {
         setUsersList(allUsers);
-      } else if (allUsers && Array.isArray(allUsers.data)) {
-        setUsersList(allUsers.data);
+      } else if (allUsers && 'data' in allUsers) {
+        const inner = allUsers.data;
+        if (Array.isArray(inner)) {
+          setUsersList(inner);
+        } else if (inner && 'data' in inner && Array.isArray(inner.data)) {
+          setUsersList(inner.data);
+        }
       }
 
-      const secLogs = await lmsFetch<PaginatedResponse<SecurityLog> | SecurityLog[]>('/principal/security-logs').catch(() => []);
+      const secLogs = await lmsFetch<PaginatedResponse<SecurityLog> | SecurityLog[]>('/dean/security-logs').catch(() => []);
       if (Array.isArray(secLogs)) {
         setSecurityLogs(secLogs);
       } else if (secLogs && Array.isArray(secLogs.data)) {
@@ -114,7 +120,7 @@ export default function PrincipalDashboard() {
         setSystemSettings(settings);
       }
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to load principal dashboard data');
+      setError(err instanceof Error ? err.message : 'Failed to load dean dashboard data');
     } finally {
       setLoading(false);
     }
@@ -130,7 +136,7 @@ export default function PrincipalDashboard() {
   };
 
   useEffect(() => {
-    loadPrincipalData();
+    loadDeanData();
     loadQuizzes();
   }, []);
 
@@ -163,7 +169,7 @@ export default function PrincipalDashboard() {
         body: JSON.stringify({ status: newStatus }),
       });
       setNotice(`Updated ${targetUser.name}'s status to ${newStatus}.`);
-      await loadPrincipalData();
+      await loadDeanData();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Could not update user status');
     } finally {
@@ -237,8 +243,8 @@ export default function PrincipalDashboard() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem' }}>
         <StatCard label="Active LMS Users" value={loading ? '…' : (metrics.active_users || usersList.length)} icon={<Users size={24} />} detail="Staff and learners" />
-        <StatCard label="Quiz Completion" value={loading ? '…' : `${metrics.quiz_completion || 88}%`} icon={<TrendingUp size={24} />} detail="Overall completion rate" />
-        <StatCard label="Avg Performance" value={loading ? '…' : `${metrics.avg_performance || 82}%`} icon={<Activity size={24} />} detail="School composite score" />
+        <StatCard label="Quiz Completion" value={loading ? '…' : `${metrics.quiz_completion}%`} icon={<TrendingUp size={24} />} detail="Overall completion rate" />
+        <StatCard label="Avg Performance" value={loading ? '…' : `${metrics.avg_performance}%`} icon={<Activity size={24} />} detail="College composite score" />
         <StatCard 
           label="Security Alerts" 
           value={loading ? '…' : securityLogs.filter(l => !l.is_resolved).length} 
@@ -304,7 +310,7 @@ export default function PrincipalDashboard() {
               { value: 'student', label: 'Students' },
               { value: 'teacher', label: 'Teachers' },
               { value: 'secretary', label: 'Secretaries' },
-              { value: 'principal', label: 'Deans' }
+              { value: 'dean', label: 'Deans' }
             ]}
           />
         </div>
@@ -334,8 +340,8 @@ export default function PrincipalDashboard() {
                 <tr key={u.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                   <td style={{ padding: '0.85rem 1.25rem', fontWeight: 600 }}>{u.name}</td>
                   <td style={{ padding: '0.85rem 1.25rem' }}>
-                    <Badge variant={u.role === 'principal' || u.role === 'dean' ? 'error' : u.role === 'teacher' ? 'primary' : u.role === 'secretary' ? 'warning' : 'success'}>
-                      {u.role === 'principal' ? 'DEAN' : u.role.toUpperCase()}
+                    <Badge variant={u.role === 'dean' ? 'error' : u.role === 'teacher' ? 'primary' : u.role === 'secretary' ? 'warning' : 'success'}>
+                      {u.role.toUpperCase()}
                     </Badge>
                   </td>
                   <td style={{ padding: '0.85rem 1.25rem', color: 'var(--neutral-300)' }}>{u.email}</td>
@@ -663,7 +669,7 @@ export default function PrincipalDashboard() {
           <div>
             <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', textTransform: 'uppercase', fontWeight: 600 }}>Email Address</div>
             <div style={{ color: 'white', fontWeight: 600, marginTop: '0.2rem' }}>
-              {user?.email || 'dean.demo@tcc.test'}
+              {user?.email || 'dean@tcc.edu.ph'}
             </div>
           </div>
           <div>
@@ -690,7 +696,7 @@ export default function PrincipalDashboard() {
   };
 
   return (
-    <DashboardLayout role="principal">
+    <DashboardLayout role="dean">
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%', minWidth: 0 }}>
         {/* Navigation Tabs Bar */}
         <div style={{ display: 'flex', gap: '0.5rem', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.5rem', overflowX: 'auto' }}>

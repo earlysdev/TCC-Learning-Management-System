@@ -50,7 +50,7 @@ class ErrorBoundary extends Component<
 }
 
 
-const validRoles = ['student', 'teacher', 'secretary', 'principal', 'dean', 'developer'];
+const validRoles = ['student', 'teacher', 'secretary', 'dean', 'developer'];
 
 function ProtectedRole({ expected, children }: { expected?: string; children: ReactNode }) {
   const navigate = useNavigate();
@@ -67,12 +67,11 @@ function ProtectedRole({ expected, children }: { expected?: string; children: Re
     void lmsFetch<{ user: { role: string } }>('/me')
       .then(({ user }) => {
         if (!mounted) return;
-        const userRole = user.role;
-        const matches = !expected || (expected === userRole) ||
-          ((expected === 'principal' || expected === 'dean') && (userRole === 'principal' || userRole === 'dean'));
+        const userRole = user.role === 'principal' ? 'dean' : user.role;
+        const matches = !expected || expected === userRole;
 
         if (!matches) {
-          const targetPath = (userRole === 'principal' || userRole === 'dean') ? '/dean' : `/${userRole}`;
+          const targetPath = `/${userRole}`;
           navigate(targetPath, { replace: true });
           return;
         }
@@ -124,9 +123,9 @@ function ProtectedRolePage() {
         <SecretaryDashboard />
       </ProtectedRole>
     );
-  } else if (role === 'principal' || role === 'dean' || role === 'developer') {
+  } else if (role === 'dean' || role === 'developer') {
     dashboardNode = (
-      <ProtectedRole expected="principal">
+      <ProtectedRole expected="dean">
         <PrincipalDashboard />
       </ProtectedRole>
     );

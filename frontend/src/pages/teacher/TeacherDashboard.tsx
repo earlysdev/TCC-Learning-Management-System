@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import { lmsFetch, getLmsUser, extractCollection } from '../../lmsApi';
 import type { Quiz, User, Subject } from '../../lib/types';
+import { BSIT_SUBJECT_OPTIONS, ALL_BLOCKS, getYearLevelFromBlock } from '../../lib/constants';
 import { 
   BookOpen, CheckCircle2, Users, Target, Sparkles, 
   ArrowRight, AlertCircle, Eye, EyeOff, Pencil,
@@ -45,22 +46,27 @@ function extractQuiz(res: { quiz?: Quiz } | Quiz): Quiz {
 }
 
 function rosterSections(students: User[]): SectionOption[] {
-  if (!Array.isArray(students)) return [];
-  const groups = new Map<string, SectionOption>();
-  students.forEach((student) => {
-    const label = [student.grade, student.section].filter(Boolean).join(' · ');
-    if (!label) return;
-    const current = groups.get(label);
-    groups.set(label, current ? { ...current, studentCount: (current.studentCount || 0) + 1 } : { id: label, label, studentCount: 1 });
+  const safeList = Array.isArray(students) ? students : [];
+  const counts = new Map<string, number>();
+  safeList.forEach((student) => {
+    const blk = student.section?.trim();
+    if (!blk) return;
+    counts.set(blk, (counts.get(blk) || 0) + 1);
   });
-  return Array.from(groups.values()).sort((left, right) => left.label.localeCompare(right.label));
+
+  const allBlockLabels = Array.from(new Set([...ALL_BLOCKS, ...Array.from(counts.keys())]));
+  return allBlockLabels.map((label) => ({
+    id: label,
+    label,
+    studentCount: counts.get(label) || 0,
+  }));
 }
 
 function toSectionOptions(records: SectionApiRecord[]): SectionOption[] {
   return records.map((record) => {
-    const label = record.label || record.name || [record.grade, record.section].filter(Boolean).join(' · ') || 'Unnamed block';
+    const label = record.name || record.label || 'Unnamed block';
     return {
-      id: record.id ?? label,
+      id: label,
       label,
       studentCount: record.student_count ?? record.students_count,
     };
@@ -95,8 +101,8 @@ export default function TeacherDashboard() {
   const [busy, setBusy] = useState(false);
 
   // AI Quiz Builder form
-  const [subject, setSubject] = useState('Science');
-  const [topic, setTopic] = useState('Ecosystems');
+  const [subject, setSubject] = useState(BSIT_SUBJECT_OPTIONS[2]?.value || 'IT 101 - Introduction To Computing');
+  const [topic, setTopic] = useState('');
   const [difficulty, setDifficulty] = useState('medium');
   const [count, setCount] = useState(5);
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -104,7 +110,7 @@ export default function TeacherDashboard() {
 
   // Student filter
   const [studentSearch, setStudentSearch] = useState('');
-  const [gradeFilter, setGradeFilter] = useState('');
+  const [blockFilter, setBlockFilter] = useState('');
 
   const loadDashboard = async () => {
     try {
@@ -137,7 +143,10 @@ export default function TeacherDashboard() {
       const data = await lmsFetch<unknown>('/subjects');
       const list = collectionFromResponse<Subject>(data);
       setSubjects(Array.isArray(list) ? list : []);
-      if (Array.isArray(list) && list.length > 0 && !subject) setSubject(list[0].name);
+      if (Array.isArray(list) && list.length > 0 && !subject) {
+        const first = list[0];
+        setSubject(first.code ? `${first.code} - ${first.name}` : first.name);
+      }
     } catch {
       // Subjects are optional
     }
@@ -297,9 +306,10 @@ export default function TeacherDashboard() {
   const filteredStudents = safeStudents.filter(s => {
     const matchesSearch = !studentSearch || 
       s.name.toLowerCase().includes(studentSearch.toLowerCase()) || 
-      (s.lrn && s.lrn.includes(studentSearch));
-    const matchesGrade = !gradeFilter || s.grade === gradeFilter;
-    return matchesSearch && matchesGrade;
+      (s.lrn && s.lrn.includes(studentSearch)) ||
+      (s.section && s.section.toLowerCase().includes(studentSearch.toLowerCase()));
+    const matchesBlock = !blockFilter || s.section === blockFilter || getYearLevelFromBlock(s.section) === blockFilter;
+    return matchesSearch && matchesBlock;
   });
 
   const renderOverview = () => (
@@ -479,21 +489,15 @@ export default function TeacherDashboard() {
           {/* Row 1: Primary Scope (Subject and Topic) */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem' }}>
             <Select
-              label="Curriculum Subject"
+              label="Course Code & Subject Description"
               value={subject}
               onChange={setSubject}
               options={subjects.length > 0
-                ? subjects.map((s) => ({ value: s.name, label: `${s.name}${s.code ? ` (${s.code})` : ''}` }))
-                : [
-                  { value: 'Science', label: 'Science (SCI)' },
-                  { value: 'Mathematics', label: 'Mathematics (MATH)' },
-                  { value: 'English', label: 'English (ENG)' },
-                  { value: 'Filipino', label: 'Filipino (FIL)' },
-                  { value: 'Araling Panlipunan', label: 'Araling Panlipunan (AP)' },
-                  { value: 'MAPEH', label: 'MAPEH (MAPEH)' },
-                  { value: 'TLE / TVL', label: 'TLE / TVL (TLE)' },
-                  { value: 'Edukasyon sa Pagpapakatao', label: 'Edukasyon sa Pagpapakatao (ESP)' },
-                ]
+                ? subjects.map((s) => ({
+                    value: s.code && !s.name.startsWith(s.code) ? `${s.code} - ${s.name}` : s.name,
+                    label: s.code && !s.name.startsWith(s.code) ? `${s.code} — ${s.name}` : s.name,
+                  }))
+                : BSIT_SUBJECT_OPTIONS
               }
             />
 
@@ -501,7 +505,7 @@ export default function TeacherDashboard() {
               label="Topic / Unit"
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
-              placeholder="e.g. Cellular Respiration, Newton's Laws"
+              placeholder="e.g. Data Structures, OOP Principles, Relational Databases"
               required
             />
           </div>
@@ -680,33 +684,32 @@ export default function TeacherDashboard() {
           STUDENT ROSTER
         </span>
         <h1 style={{ fontSize: '2rem', fontWeight: 800, color: 'white', marginTop: '0.25rem' }}>
-          Enrolled Learners
+          Students
         </h1>
         <p style={{ color: 'var(--neutral-300)' }}>
-          Directory of student learners enrolled under your grade levels and blocks.
+          Directory of student learners enrolled across college blocks (1st Year – 4th Year).
         </p>
       </div>
 
       <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: '240px' }}>
           <Input 
-            placeholder="Search by student name or ID..."
+            placeholder="Search by student name, ID, or block..."
             value={studentSearch}
             onChange={e => setStudentSearch(e.target.value)}
           />
         </div>
-        <div style={{ width: '180px' }}>
+        <div style={{ width: '210px' }}>
           <Select 
-            value={gradeFilter} 
-            onChange={setGradeFilter}
+            value={blockFilter} 
+            onChange={setBlockFilter}
             options={[
-              { value: '', label: 'All Grades' },
-              { value: 'Grade 7', label: 'Grade 7' },
-              { value: 'Grade 8', label: 'Grade 8' },
-              { value: 'Grade 9', label: 'Grade 9' },
-              { value: 'Grade 10', label: 'Grade 10' },
-              { value: 'Grade 11', label: 'Grade 11' },
-              { value: 'Grade 12', label: 'Grade 12' },
+              { value: '', label: 'All Blocks' },
+              { value: '1st Year', label: 'All 1st Year (1A–1E)' },
+              { value: '2nd Year', label: 'All 2nd Year (2A–2E)' },
+              { value: '3rd Year', label: 'All 3rd Year (3A–3E)' },
+              { value: '4th Year', label: 'All 4th Year (4A–4E)' },
+              ...ALL_BLOCKS.map((blk) => ({ value: blk, label: blk })),
             ]}
           />
         </div>
@@ -718,7 +721,7 @@ export default function TeacherDashboard() {
             <tr style={{ background: 'rgba(255,255,255,0.06)', borderBottom: '1px solid var(--glass-border)' }}>
               <th style={{ padding: '0.85rem 1.25rem' }}>Student Name</th>
               <th style={{ padding: '0.85rem 1.25rem' }}>ID</th>
-              <th style={{ padding: '0.85rem 1.25rem' }}>Grade & Block</th>
+              <th style={{ padding: '0.85rem 1.25rem' }}>Block</th>
               <th style={{ padding: '0.85rem 1.25rem' }}>Email</th>
               <th style={{ padding: '0.85rem 1.25rem' }}>Status</th>
             </tr>
@@ -735,7 +738,12 @@ export default function TeacherDashboard() {
                 <tr key={student.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                   <td style={{ padding: '0.85rem 1.25rem', fontWeight: 600 }}>{student.name}</td>
                   <td style={{ padding: '0.85rem 1.25rem', fontFamily: 'monospace' }}>{student.lrn || '—'}</td>
-                  <td style={{ padding: '0.85rem 1.25rem' }}>{student.grade || 'Grade 10'} {student.section ? `• ${student.section}` : ''}</td>
+                  <td style={{ padding: '0.85rem 1.25rem' }}>
+                    {student.section || 'Block - 1A'}{' '}
+                    <span style={{ color: 'var(--neutral-400)', fontSize: '0.8rem' }}>
+                      ({getYearLevelFromBlock(student.section)})
+                    </span>
+                  </td>
                   <td style={{ padding: '0.85rem 1.25rem', color: 'var(--neutral-300)' }}>{student.email}</td>
                   <td style={{ padding: '0.85rem 1.25rem' }}>
                     <Badge variant={student.status === 'inactive' ? 'warning' : 'success'}>
@@ -804,27 +812,37 @@ export default function TeacherDashboard() {
         </p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
-        <GlassCard style={{ borderLeft: '4px solid var(--accent-purple-light)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-            <Sparkles size={20} style={{ color: 'var(--accent-purple-light)' }} />
-            <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'white' }}>Skill Mastery Observation</h3>
-          </div>
-          <p style={{ color: 'var(--neutral-200)', lineHeight: 1.6, fontSize: '0.9rem' }}>
-            Students performed best on foundational recall questions in Ecosystems structure, with an 85% accuracy rate. However, food chain trophic level calculations scored lower at 62%.
+      {quizzes.length === 0 || metrics.submissions === 0 ? (
+        <GlassCard style={{ textAlign: 'center', padding: '3rem' }}>
+          <Sparkles size={42} style={{ color: 'var(--accent-purple-light)', margin: '0 auto 0.75rem' }} />
+          <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: 'white', margin: 0 }}>No Assessment Telemetry Yet</h3>
+          <p style={{ color: 'var(--neutral-300)', marginTop: '0.5rem', maxWidth: '520px', marginInline: 'auto' }}>
+            Once students complete published quizzes, AI teaching insights and competency remediation suggestions will be generated from live scores.
           </p>
         </GlassCard>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
+          <GlassCard style={{ borderLeft: '4px solid var(--accent-purple-light)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+              <Sparkles size={20} style={{ color: 'var(--accent-purple-light)' }} />
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'white' }}>Class Mastery Summary</h3>
+            </div>
+            <p style={{ color: 'var(--neutral-200)', lineHeight: 1.6, fontSize: '0.9rem' }}>
+              Across {metrics.submissions} completed submission(s), the composite class average is <strong>{metrics.average}%</strong> across {metrics.published} published assessment(s).
+            </p>
+          </GlassCard>
 
-        <GlassCard style={{ borderLeft: '4px solid var(--primary-400)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-            <Target size={20} style={{ color: 'var(--primary-400)' }} />
-            <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'white' }}>Suggested Remediation</h3>
-          </div>
-          <p style={{ color: 'var(--neutral-200)', lineHeight: 1.6, fontSize: '0.9rem' }}>
-            Consider conducting a 10-minute review session focusing on energy pyramid transitions and predator-prey dynamics before launching the next unit test.
-          </p>
-        </GlassCard>
-      </div>
+          <GlassCard style={{ borderLeft: '4px solid var(--primary-400)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+              <Target size={20} style={{ color: 'var(--primary-400)' }} />
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'white' }}>Suggested Action</h3>
+            </div>
+            <p style={{ color: 'var(--neutral-200)', lineHeight: 1.6, fontSize: '0.9rem' }}>
+              Review individual quiz submission logs to inspect missed skill competencies and verify proctoring integrity alerts per block.
+            </p>
+          </GlassCard>
+        </div>
+      )}
     </div>
   );
 
@@ -848,7 +866,7 @@ export default function TeacherDashboard() {
             {user?.initials || 'T'}
           </div>
           <div>
-            <h2 style={{ fontSize: '1.3rem', fontWeight: 700, color: 'white' }}>{user?.name || 'Teacher Demo'}</h2>
+            <h2 style={{ fontSize: '1.3rem', fontWeight: 700, color: 'white' }}>{user?.name || 'TCC Faculty'}</h2>
             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
               <Badge variant="primary">Faculty Teacher</Badge>
               <Badge variant="success">Active</Badge>
@@ -860,19 +878,19 @@ export default function TeacherDashboard() {
           <div>
             <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', textTransform: 'uppercase', fontWeight: 600 }}>Email Address</div>
             <div style={{ color: 'white', fontWeight: 600, marginTop: '0.2rem' }}>
-              {user?.email || 'teacher.demo@lnhs.test'}
+              {user?.email || 'teacher@tcc.edu.ph'}
             </div>
           </div>
           <div>
             <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', textTransform: 'uppercase', fontWeight: 600 }}>Department</div>
             <div style={{ color: 'white', fontWeight: 600, marginTop: '0.2rem' }}>
-              Science & Technology Department
+              College of Information Technology (BSIT)
             </div>
           </div>
           <div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', textTransform: 'uppercase', fontWeight: 600 }}>Assigned Levels</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', textTransform: 'uppercase', fontWeight: 600 }}>Assigned Blocks</div>
             <div style={{ color: 'white', fontWeight: 600, marginTop: '0.2rem' }}>
-              Grade 10 Science
+              1st Year – 4th Year (Blocks 1A–4E)
             </div>
           </div>
           <div>

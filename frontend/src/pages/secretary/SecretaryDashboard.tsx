@@ -3,10 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import { lmsFetch, getLmsUser } from '../../lmsApi';
 import type { User, ActivityLog, PaginatedResponse } from '../../lib/types';
+import { YEAR_LEVEL_BLOCKS, ALL_BLOCKS, getYearLevelFromBlock } from '../../lib/constants';
 import { 
   Users, UserPlus, BookOpen, Activity, ArrowRight,
   CheckCircle2, AlertCircle, FileText, BarChart3, 
-  GraduationCap, Download
+  GraduationCap, Download, Layers
 } from 'lucide-react';
 import GlassCard from '../../components/ui/GlassCard';
 import StatCard from '../../components/ui/StatCard';
@@ -26,6 +27,8 @@ const pathToSection: Record<string, string> = {
   overview: 'overview',
   accounts: 'create_account',
   create_account: 'create_account',
+  sections: 'blocks',
+  blocks: 'blocks',
   records: 'student_records',
   student_records: 'student_records',
   performance: 'performance',
@@ -38,6 +41,7 @@ const pathToSection: Record<string, string> = {
 const sectionToPath: Record<string, string> = {
   overview: '/secretary/dashboard',
   create_account: '/secretary/accounts',
+  blocks: '/secretary/sections',
   student_records: '/secretary/records',
   performance: '/secretary/performance',
   reports: '/secretary/reports',
@@ -66,7 +70,7 @@ export default function SecretaryDashboard() {
 
   // Student filter
   const [searchQuery, setSearchQuery] = useState('');
-  const [gradeFilter, setGradeFilter] = useState('');
+  const [blockFilter, setBlockFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
 
   // Create account form state
@@ -74,28 +78,36 @@ export default function SecretaryDashboard() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('LnhsDemo!2026');
+  const [password, setPassword] = useState('');
   const [lrn, setLrn] = useState('');
-  const [grade, setGrade] = useState('Grade 10');
-  const [section, setSection] = useState('Emerald');
+  const [yearLevel, setYearLevel] = useState('1st Year');
+  const [section, setSection] = useState('Block - 1A');
 
   const loadSecretaryData = async () => {
     try {
       setLoading(true);
       setError(null);
-      const metricsData = await lmsFetch<SecretaryMetrics>('/secretary/dashboard').catch(() => ({
-        total_students: 0,
-        total_teachers: 0,
-        recent_registrations: 0,
+      const res = await lmsFetch<{ data?: SecretaryMetrics } & Partial<SecretaryMetrics>>('/secretary/dashboard').catch(() => null);
+      const metricsPayload = res?.data || res;
+      setMetrics({
+        total_students: Number(metricsPayload?.total_students ?? 0),
+        total_teachers: Number(metricsPayload?.total_teachers ?? 0),
+        recent_registrations: Array.isArray(metricsPayload?.recent_registrations)
+          ? metricsPayload.recent_registrations.length
+          : Number(metricsPayload?.recent_registrations ?? 0),
         system_status: 'Active',
-      }));
-      setMetrics(metricsData);
+      });
 
-      const studentsData = await lmsFetch<PaginatedResponse<User> | User[]>('/users?role=student').catch(() => []);
+      const studentsData = await lmsFetch<PaginatedResponse<User> | { data?: { data?: User[] } | User[] } | User[]>('/users?role=student').catch(() => []);
       if (Array.isArray(studentsData)) {
         setStudents(studentsData);
-      } else if (studentsData && Array.isArray(studentsData.data)) {
-        setStudents(studentsData.data);
+      } else if (studentsData && 'data' in studentsData) {
+        const inner = studentsData.data;
+        if (Array.isArray(inner)) {
+          setStudents(inner);
+        } else if (inner && 'data' in inner && Array.isArray(inner.data)) {
+          setStudents(inner.data);
+        }
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load secretary data');
@@ -142,6 +154,7 @@ export default function SecretaryDashboard() {
 
     try {
       const fullName = `${firstName} ${lastName}`.trim();
+      const computedYearLevel = newUserRole === 'student' ? getYearLevelFromBlock(section) : null;
       await lmsFetch('/users', {
         method: 'POST',
         body: JSON.stringify({
@@ -152,7 +165,7 @@ export default function SecretaryDashboard() {
           password,
           role: newUserRole,
           lrn: newUserRole === 'student' ? lrn : null,
-          grade: newUserRole === 'student' ? grade : null,
+          grade: computedYearLevel,
           section: newUserRole === 'student' ? section : null,
         }),
       });
@@ -162,6 +175,7 @@ export default function SecretaryDashboard() {
       setFirstName('');
       setLastName('');
       setEmail('');
+      setPassword('');
       setLrn('');
       await loadSecretaryData();
       setActiveSection('student_records');
@@ -193,10 +207,11 @@ export default function SecretaryDashboard() {
     const matchesSearch = !searchQuery || 
       s.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
       (s.lrn && s.lrn.includes(searchQuery)) ||
+      (s.section && s.section.toLowerCase().includes(searchQuery.toLowerCase())) ||
       s.email.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesGrade = !gradeFilter || s.grade === gradeFilter;
+    const matchesBlock = !blockFilter || s.section === blockFilter || getYearLevelFromBlock(s.section) === blockFilter;
     const matchesStatus = !statusFilter || s.status === statusFilter;
-    return matchesSearch && matchesGrade && matchesStatus;
+    return matchesSearch && matchesBlock && matchesStatus;
   });
 
   const renderOverview = () => (
@@ -236,10 +251,10 @@ export default function SecretaryDashboard() {
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem' }}>
-        <StatCard label="Total Students" value={loading ? '…' : (metrics.total_students || students.length)} icon={<GraduationCap size={24} />} detail="Enrolled learners" />
-        <StatCard label="Total Teachers" value={loading ? '…' : (metrics.total_teachers || 1)} icon={<Users size={24} />} detail="Faculty members" />
-        <StatCard label="Registrations" value={loading ? '…' : (metrics.recent_registrations || students.length)} icon={<UserPlus size={24} />} detail="Current academic period" />
-        <StatCard label="System Status" value="Online" icon={<Activity size={24} />} detail="School portal active" />
+        <StatCard label="Total Students" value={loading ? '…' : students.length} icon={<GraduationCap size={24} />} detail="Enrolled learners" />
+        <StatCard label="Total Teachers" value={loading ? '…' : metrics.total_teachers} icon={<Users size={24} />} detail="Faculty members" />
+        <StatCard label="College Blocks" value={ALL_BLOCKS.length} icon={<Layers size={24} />} detail="1st Year – 4th Year (A–E)" />
+        <StatCard label="System Status" value="Online" icon={<Activity size={24} />} detail="College portal active" />
       </div>
 
       {/* Quick Access to Recent Students */}
@@ -257,23 +272,36 @@ export default function SecretaryDashboard() {
               <tr style={{ background: 'rgba(255,255,255,0.06)', borderBottom: '1px solid var(--glass-border)' }}>
                 <th style={{ padding: '0.75rem 1rem' }}>Name</th>
                 <th style={{ padding: '0.75rem 1rem' }}>ID</th>
-                <th style={{ padding: '0.75rem 1rem' }}>Grade & Block</th>
+                <th style={{ padding: '0.75rem 1rem' }}>Block</th>
                 <th style={{ padding: '0.75rem 1rem' }}>Status</th>
               </tr>
             </thead>
             <tbody>
-              {students.slice(0, 5).map(s => (
-                <tr key={s.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                  <td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>{s.name}</td>
-                  <td style={{ padding: '0.75rem 1rem', fontFamily: 'monospace' }}>{s.lrn || '—'}</td>
-                  <td style={{ padding: '0.75rem 1rem' }}>{s.grade || 'Grade 10'} • {s.section || 'Emerald'}</td>
-                  <td style={{ padding: '0.75rem 1rem' }}>
-                    <Badge variant={s.status === 'inactive' ? 'warning' : 'success'}>
-                      {s.status || 'Active'}
-                    </Badge>
+              {students.length === 0 ? (
+                <tr>
+                  <td colSpan={4} style={{ padding: '1.75rem', textAlign: 'center', color: 'var(--neutral-400)' }}>
+                    No students enrolled yet.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                students.slice(0, 5).map(s => (
+                  <tr key={s.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                    <td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>{s.name}</td>
+                    <td style={{ padding: '0.75rem 1rem', fontFamily: 'monospace' }}>{s.lrn || '—'}</td>
+                    <td style={{ padding: '0.75rem 1rem' }}>
+                      {s.section || 'Block - 1A'}{' '}
+                      <span style={{ color: 'var(--neutral-400)', fontSize: '0.8rem' }}>
+                        ({getYearLevelFromBlock(s.section)})
+                      </span>
+                    </td>
+                    <td style={{ padding: '0.75rem 1rem' }}>
+                      <Badge variant={s.status === 'inactive' ? 'warning' : 'success'}>
+                        {s.status || 'Active'}
+                      </Badge>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -291,7 +319,7 @@ export default function SecretaryDashboard() {
           Create New Account
         </h1>
         <p style={{ color: 'var(--neutral-300)' }}>
-          Register a verified student learner or faculty teacher to the LNHS LMS database.
+          Register a verified student learner or faculty teacher to the Tagoloan Community College LMS database.
         </p>
       </div>
 
@@ -342,14 +370,14 @@ export default function SecretaryDashboard() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
             <Input 
               label="First Name"
-              placeholder="e.g. Maria"
+              placeholder="e.g. Juan"
               value={firstName}
               onChange={e => setFirstName(e.target.value)}
               required
             />
             <Input 
               label="Last Name"
-              placeholder="e.g. Santos"
+              placeholder="e.g. Dela Cruz"
               value={lastName}
               onChange={e => setLastName(e.target.value)}
               required
@@ -359,7 +387,7 @@ export default function SecretaryDashboard() {
           <Input 
             label="Email Address"
             type="email"
-            placeholder="e.g. maria.santos@lnhs.edu.ph"
+            placeholder="e.g. juan.delacruz@tcc.edu.ph"
             value={email}
             onChange={e => setEmail(e.target.value)}
             required
@@ -368,6 +396,7 @@ export default function SecretaryDashboard() {
           <Input 
             label="Initial Password"
             type="password"
+            placeholder="Enter initial password (min. 8 characters)"
             value={password}
             onChange={e => setPassword(e.target.value)}
             required
@@ -389,19 +418,22 @@ export default function SecretaryDashboard() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--neutral-300)', fontWeight: 600, marginBottom: '0.4rem' }}>
-                    Grade Level
+                    Year Level
                   </label>
                   <select 
-                    value={grade}
-                    onChange={e => setGrade(e.target.value)}
+                    value={yearLevel}
+                    onChange={e => {
+                      const nextYear = e.target.value;
+                      setYearLevel(nextYear);
+                      const availableBlocks = YEAR_LEVEL_BLOCKS[nextYear] || YEAR_LEVEL_BLOCKS['1st Year'];
+                      setSection(availableBlocks[0]);
+                    }}
                     className="form-select"
                   >
-                    <option value="Grade 7">Grade 7</option>
-                    <option value="Grade 8">Grade 8</option>
-                    <option value="Grade 9">Grade 9</option>
-                    <option value="Grade 10">Grade 10</option>
-                    <option value="Grade 11">Grade 11</option>
-                    <option value="Grade 12">Grade 12</option>
+                    <option value="1st Year">1st Year (Blocks 1A–1E)</option>
+                    <option value="2nd Year">2nd Year (Blocks 2A–2E)</option>
+                    <option value="3rd Year">3rd Year (Blocks 3A–3E)</option>
+                    <option value="4th Year">4th Year (Blocks 4A–4E)</option>
                   </select>
                 </div>
 
@@ -414,13 +446,15 @@ export default function SecretaryDashboard() {
                     onChange={e => setSection(e.target.value)}
                     className="form-select"
                   >
-                    <option value="Emerald">Emerald</option>
-                    <option value="Diamond">Diamond</option>
-                    <option value="Sapphire">Sapphire</option>
-                    <option value="Ruby">Ruby</option>
+                    {(YEAR_LEVEL_BLOCKS[yearLevel] || YEAR_LEVEL_BLOCKS['1st Year']).map(blk => (
+                      <option key={blk} value={blk}>{blk}</option>
+                    ))}
                   </select>
                 </div>
               </div>
+              <span style={{ fontSize: '0.78rem', color: 'var(--neutral-400)', marginTop: '-0.5rem' }}>
+                Block number corresponds to Year Level: 1A–1E (1st Year), 2A–2E (2nd Year), 3A–3E (3rd Year), 4A–4E (4th Year).
+              </span>
             </>
           )}
 
@@ -429,6 +463,62 @@ export default function SecretaryDashboard() {
           </Button>
         </form>
       </GlassCard>
+    </div>
+  );
+
+  const renderBlocks = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+        <div>
+          <span style={{ fontSize: '0.8rem', color: 'var(--primary-300)', letterSpacing: '1px', textTransform: 'uppercase', fontWeight: 600 }}>
+            ACADEMIC BLOCKS
+          </span>
+          <h1 style={{ fontSize: '2rem', fontWeight: 800, color: 'white', marginTop: '0.25rem' }}>
+            College Blocks (1st – 4th Year)
+          </h1>
+          <p style={{ color: 'var(--neutral-300)' }}>
+            Block numbers correspond to Year Levels: 1A–1E (1st Year), 2A–2E (2nd Year), 3A–3E (3rd Year), and 4A–4E (4th Year).
+          </p>
+        </div>
+        <Button variant="accent" onClick={() => setActiveSection('create_account')}>
+          <UserPlus size={16} /> Enroll Student to Block
+        </Button>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem' }}>
+        {Object.entries(YEAR_LEVEL_BLOCKS).map(([yearLbl, blocks]) => (
+          <GlassCard key={yearLbl}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'white', margin: 0 }}>{yearLbl}</h3>
+              <Badge variant="primary">{blocks.length} Blocks</Badge>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+              {blocks.map(blk => {
+                const count = students.filter(s => s.section === blk).length;
+                return (
+                  <div
+                    key={blk}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '0.6rem 0.85rem',
+                      background: 'rgba(255,255,255,0.04)',
+                      border: '1px solid var(--glass-border)',
+                      borderRadius: 'var(--radius-sm)',
+                    }}
+                  >
+                    <span style={{ fontWeight: 600, color: 'white', fontSize: '0.9rem' }}>{blk}</span>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--neutral-300)' }}>
+                      {count} {count === 1 ? 'Student' : 'Students'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </GlassCard>
+        ))}
+      </div>
     </div>
   );
 
@@ -443,7 +533,7 @@ export default function SecretaryDashboard() {
             Student Records
           </h1>
           <p style={{ color: 'var(--neutral-300)' }}>
-            Search, verify, and manage official enrollment status of LNHS learners.
+            Search, verify, and manage official enrollment status of TCC learners by Block.
           </p>
         </div>
         <Button variant="accent" onClick={() => setActiveSection('create_account')}>
@@ -461,24 +551,26 @@ export default function SecretaryDashboard() {
       <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: '240px' }}>
           <Input 
-            placeholder="Search by student name, ID, or email..."
+            placeholder="Search by student name, ID, block, or email..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
           />
         </div>
         <select 
-          value={gradeFilter} 
-          onChange={e => setGradeFilter(e.target.value)}
+          value={blockFilter} 
+          onChange={e => setBlockFilter(e.target.value)}
           className="form-select"
-          style={{ width: '160px' }}
+          style={{ width: '200px' }}
         >
-          <option value="">All Grades</option>
-          <option value="Grade 7">Grade 7</option>
-          <option value="Grade 8">Grade 8</option>
-          <option value="Grade 9">Grade 9</option>
-          <option value="Grade 10">Grade 10</option>
-          <option value="Grade 11">Grade 11</option>
-          <option value="Grade 12">Grade 12</option>
+          <option value="">All Blocks</option>
+          {Object.entries(YEAR_LEVEL_BLOCKS).map(([yearLbl, blocks]) => (
+            <optgroup key={yearLbl} label={yearLbl}>
+              <option value={yearLbl}>All {yearLbl}</option>
+              {blocks.map(blk => (
+                <option key={blk} value={blk}>{blk}</option>
+              ))}
+            </optgroup>
+          ))}
         </select>
         <select 
           value={statusFilter} 
@@ -500,7 +592,7 @@ export default function SecretaryDashboard() {
             <tr style={{ background: 'rgba(255,255,255,0.06)', borderBottom: '1px solid var(--glass-border)' }}>
               <th style={{ padding: '0.85rem 1.25rem' }}>Student Name</th>
               <th style={{ padding: '0.85rem 1.25rem' }}>ID</th>
-              <th style={{ padding: '0.85rem 1.25rem' }}>Grade & Block</th>
+              <th style={{ padding: '0.85rem 1.25rem' }}>Block</th>
               <th style={{ padding: '0.85rem 1.25rem' }}>Email</th>
               <th style={{ padding: '0.85rem 1.25rem' }}>Status</th>
               <th style={{ padding: '0.85rem 1.25rem', textAlign: 'right' }}>Actions</th>
@@ -518,7 +610,12 @@ export default function SecretaryDashboard() {
                 <tr key={student.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                   <td style={{ padding: '0.85rem 1.25rem', fontWeight: 600 }}>{student.name}</td>
                   <td style={{ padding: '0.85rem 1.25rem', fontFamily: 'monospace' }}>{student.lrn || '—'}</td>
-                  <td style={{ padding: '0.85rem 1.25rem' }}>{student.grade || 'Grade 10'} • {student.section || 'Emerald'}</td>
+                  <td style={{ padding: '0.85rem 1.25rem' }}>
+                    {student.section || 'Block - 1A'}{' '}
+                    <span style={{ color: 'var(--neutral-400)', fontSize: '0.8rem' }}>
+                      ({getYearLevelFromBlock(student.section)})
+                    </span>
+                  </td>
                   <td style={{ padding: '0.85rem 1.25rem', color: 'var(--neutral-300)' }}>{student.email}</td>
                   <td style={{ padding: '0.85rem 1.25rem' }}>
                     <Badge variant={student.status === 'inactive' ? 'warning' : student.status === 'graduated' ? 'primary' : 'success'}>
@@ -555,6 +652,9 @@ export default function SecretaryDashboard() {
     </div>
   );
 
+  const activeStudentsCount = students.filter(s => s.status !== 'inactive').length;
+  const activeRatePct = students.length > 0 ? Math.round((activeStudentsCount / students.length) * 100) : 0;
+
   const renderPerformance = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       <div>
@@ -565,30 +665,30 @@ export default function SecretaryDashboard() {
           Learner Performance Overview
         </h1>
         <p style={{ color: 'var(--neutral-300)' }}>
-          High-level overview of active enrollment and quiz participation by grade level.
+          High-level overview of active enrollment and participation across college blocks.
         </p>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem' }}>
         <StatCard label="Enrolled Students" value={students.length} icon={<GraduationCap size={24} />} detail="Registered in directory" />
-        <StatCard label="Active Rate" value="98%" icon={<Activity size={24} />} detail="Regular participation" />
-        <StatCard label="School Blocks" value="16" icon={<BarChart3 size={24} />} detail="Active curriculum classes" />
+        <StatCard label="Active Rate" value={`${activeRatePct}%`} icon={<Activity size={24} />} detail="Active student accounts" />
+        <StatCard label="School Blocks" value={ALL_BLOCKS.length} icon={<BarChart3 size={24} />} detail="Blocks 1A–1E to 4A–4E" />
       </div>
 
       <GlassCard>
-        <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'white', marginBottom: '1rem' }}>Grade Level Enrollment Distribution</h3>
+        <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'white', marginBottom: '1rem' }}>Block Enrollment Distribution by Year Level</h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          {['Grade 7', 'Grade 8', 'Grade 9', 'Grade 10', 'Grade 11', 'Grade 12'].map(g => {
-            const count = students.filter(s => s.grade === g).length;
+          {Object.entries(YEAR_LEVEL_BLOCKS).map(([yearLbl, blocks]) => {
+            const count = students.filter(s => getYearLevelFromBlock(s.section) === yearLbl).length;
             const pct = students.length > 0 ? (count / students.length) * 100 : 0;
             return (
-              <div key={g}>
+              <div key={yearLbl}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginBottom: '0.4rem', color: 'white' }}>
-                  <span>{g}</span>
+                  <span>{yearLbl} ({blocks[0]} – {blocks[blocks.length - 1]})</span>
                   <span style={{ fontWeight: 600 }}>{count} Students ({pct.toFixed(0)}%)</span>
                 </div>
                 <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: 'var(--radius-full)', overflow: 'hidden' }}>
-                  <div style={{ width: `${Math.max(pct, 5)}%`, height: '100%', background: 'linear-gradient(90deg, var(--primary-500), var(--accent-purple-light))' }} />
+                  <div style={{ width: `${pct}%`, height: '100%', background: 'linear-gradient(90deg, var(--primary-500), var(--accent-purple-light))' }} />
                 </div>
               </div>
             );
@@ -605,10 +705,10 @@ export default function SecretaryDashboard() {
           DATA EXPORT & REPORTING
         </span>
         <h1 style={{ fontSize: '2rem', fontWeight: 800, color: 'white', marginTop: '0.25rem' }}>
-          Official School Reports
+          Official College Reports
         </h1>
         <p style={{ color: 'var(--neutral-300)' }}>
-          Generate printable enrollment rosters and official DepEd compliance records.
+          Generate printable enrollment rosters and official TCC registrar compliance records.
         </p>
       </div>
 
@@ -619,7 +719,7 @@ export default function SecretaryDashboard() {
             Complete Student Masterlist
           </h3>
           <p style={{ color: 'var(--neutral-300)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
-            Export full student roster including ID, grade, block, and status.
+            Export full student roster including ID, block, and status.
           </p>
           <Button variant="outline" size="sm" onClick={() => alert('Exporting student masterlist CSV...')}>
             <Download size={14} /> Export CSV
@@ -632,7 +732,7 @@ export default function SecretaryDashboard() {
             Graduating Students Roster
           </h3>
           <p style={{ color: 'var(--neutral-300)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
-            Summary of Senior High School completers for S.Y. 2025–2026.
+            Summary of 4th Year graduating students (Blocks 4A–4E) for S.Y. 2025–2026.
           </p>
           <Button variant="outline" size="sm" onClick={() => alert('Generating Graduating Students Report...')}>
             <Download size={14} /> Export PDF
@@ -727,7 +827,7 @@ export default function SecretaryDashboard() {
           <div>
             <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', textTransform: 'uppercase', fontWeight: 600 }}>Email Address</div>
             <div style={{ color: 'white', fontWeight: 600, marginTop: '0.2rem' }}>
-              {user?.email || 'secretary.demo@lnhs.test'}
+              {user?.email || 'secretary@tcc.edu.ph'}
             </div>
           </div>
           <div>
@@ -761,6 +861,7 @@ export default function SecretaryDashboard() {
           {[
             { id: 'overview', label: 'Overview' },
             { id: 'create_account', label: 'Create Account' },
+            { id: 'blocks', label: 'Blocks' },
             { id: 'student_records', label: 'Student Records' },
             { id: 'performance', label: 'Performance' },
             { id: 'reports', label: 'Reports' },
@@ -790,6 +891,7 @@ export default function SecretaryDashboard() {
 
         {activeSection === 'overview' && renderOverview()}
         {activeSection === 'create_account' && renderCreateAccount()}
+        {activeSection === 'blocks' && renderBlocks()}
         {activeSection === 'student_records' && renderStudentRecords()}
         {activeSection === 'performance' && renderPerformance()}
         {activeSection === 'reports' && renderReports()}

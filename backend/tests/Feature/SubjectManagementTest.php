@@ -58,9 +58,9 @@ class SubjectManagementTest extends TestCase
         $secretary = User::where('role', 'secretary')->first() ?? User::factory()->create(['role' => 'secretary']);
 
         $response = $this->actingAs($secretary)->postJson('/api/subjects', [
-            'name' => 'Science',
-            'code' => 'SCI',
-            'grade' => 'All Grades',
+            'name' => 'Introduction To Computing',
+            'code' => 'IT 101',
+            'grade' => '1st Year',
         ]);
 
         $response->assertStatus(422);
@@ -69,15 +69,25 @@ class SubjectManagementTest extends TestCase
     public function test_cannot_delete_subject_with_active_quizzes(): void
     {
         $secretary = User::where('role', 'secretary')->first() ?? User::factory()->create(['role' => 'secretary']);
-        $science = Subject::where('name', 'Science')->firstOrFail();
+        $teacher = User::where('role', 'teacher')->first() ?? User::factory()->create(['role' => 'teacher']);
+        $subject = Subject::where('code', 'IT 101')->firstOrFail();
 
-        // The DemoSeeder creates a Science quiz
-        $this->assertTrue(Quiz::where('subject', 'Science')->exists());
+        Quiz::create([
+            'teacher_id' => $teacher->id,
+            'title' => 'IT 101 Midterm Quiz',
+            'subject' => $subject->name,
+            'topic' => 'Computing Fundamentals',
+            'instructions' => 'Answer all questions.',
+            'questions' => [
+                ['prompt' => 'What does CPU stand for?', 'options' => ['Central Processing Unit', 'Computer Personal Unit', 'Central Program Utility', 'Control Processing Unit'], 'correct_index' => 0],
+            ],
+            'is_published' => true,
+        ]);
 
-        $response = $this->actingAs($secretary)->deleteJson("/api/subjects/{$science->id}");
+        $response = $this->actingAs($secretary)->deleteJson("/api/subjects/{$subject->id}");
 
         $response->assertStatus(422);
-        $this->assertDatabaseHas('subjects', ['id' => $science->id]);
+        $this->assertDatabaseHas('subjects', ['id' => $subject->id]);
     }
 
     public function test_can_delete_unused_subject(): void
