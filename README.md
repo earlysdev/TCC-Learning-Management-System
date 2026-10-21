@@ -10,7 +10,7 @@ A full-stack **Web-Based Learning Management System (LMS)** built for **Tagoloan
 - **Dual-Identifier Authentication:** Students and staff can sign in using either their institutional **Email Address** or **8-digit Student ID** (e.g., `20273710`) with Laravel Sanctum bearer token authentication.
 - **Interactive Security Verification:** Built-in 6-character alphanumeric CAPTCHA verification and password visibility toggle on the glassmorphic sign-in card.
 - **Client-Side Idle Session Watchdog:** Automatically detects user inactivity on student sessions, displays a 60-second countdown modal, dismisses immediately on mouse movement/hover or key press, and auto-signs out when the timer reaches `0:00`.
-- **Role-Based Access Control (RBAC):** Dedicated route guards and backend middleware (`EnsureRole`) separating **Student**, **Teacher**, **Secretary (Registrar)**, and **College Dean** portals.
+- **Role-Based Access Control (RBAC):** Dedicated route guards and backend middleware (`EnsureRole`) separating **Student**, **Teacher**, **Secretary (Secretary)**, and **College Dean** portals.
 - **Self-Service Profile Management:** Every role can update their Full Name, Email Address, and Password from their dashboard **Settings** tab.
 
 ### 2. 🎓 Academic Structure & BSIT Curriculum Management
@@ -20,7 +20,7 @@ A full-stack **Web-Based Learning Management System (LMS)** built for **Tagoloan
   - **3rd Year:** `Block - 3A`, `Block - 3B`, `Block - 3C`, `Block - 3D`, `Block - 3E`
   - **4th Year:** `Block - 4A`, `Block - 4B`, `Block - 4C`, `Block - 4D`, `Block - 4E`
 - **43 Official BSIT Courses:** Pre-seeded with all 43 Bachelor of Science in Information Technology (BSIT) subject codes and descriptions (`PATH FIT 1–4`, `GEC 1–9`, `GEE 1–4`, `Math 1–3`, `NSTP 1–2`, `IT 101–122`, and `IT Elec 1–2`).
-- **Registrar Enrollment & Roster Binding:** The Secretary can enroll students into specific Year Levels and Blocks and manage account activation status.
+- **Secretary Enrollment & Roster Binding:** The Secretary can enroll students into specific Year Levels and Blocks and manage account activation status.
 
 ### 3. 📝 Manual Quiz Authoring & Targeted Publishing Engine
 - **Manual Quiz Builder:** Teachers create custom assessments by selecting a BSIT course, specifying a topic/unit, and authoring multiple-choice questions and answer keys in the **Interactive Quiz Editor Modal**.
@@ -56,7 +56,7 @@ TccPortal!2026
 | :--- | :--- | :--- | :--- | :--- |
 | **Student** | `student@tcc.edu.ph` | `20273710` | `Block - 1A` (1st Year) | `/student/dashboard` |
 | **Teacher** | `teacher@tcc.edu.ph` | — | BSIT Faculty | `/teacher/dashboard` |
-| **Secretary** | `secretary@tcc.edu.ph` | — | Registrar's Office | `/secretary/dashboard` |
+| **Secretary** | `secretary@tcc.edu.ph` | — | Secretary's Office | `/secretary/dashboard` |
 | **College Dean** | `dean@tcc.edu.ph` | — | Office of the Dean | `/dean/dashboard` |
 
 ---
