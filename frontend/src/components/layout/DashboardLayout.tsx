@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { UserRole } from '../../lib/types';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
@@ -16,14 +17,20 @@ interface DashboardLayoutProps {
 export default function DashboardLayout({ role, children }: DashboardLayoutProps) {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const { user, logout } = useAuthContext();
+  const navigate = useNavigate();
   const activeRole: UserRole = role || user?.role || 'student';
   const config = ROLE_CONFIGS[activeRole] || ROLE_CONFIGS.student;
 
+  const handleIdleLogout = useCallback(() => {
+    void logout();
+    navigate('/login');
+  }, [logout, navigate]);
+
   const { showWarning, remainingSeconds, stayActive } = useIdleTimeout({
     role: activeRole,
-    onTimeout: () => logout(),
-    timeoutMinutes: 10,
-    warningMinutes: 9,
+    onTimeout: handleIdleLogout,
+    timeoutMinutes: 2,
+    warningMinutes: 1,
   });
 
   return (
@@ -33,7 +40,7 @@ export default function DashboardLayout({ role, children }: DashboardLayoutProps
         isOpen={showWarning}
         remainingSeconds={remainingSeconds}
         onStayLoggedIn={stayActive}
-        onSignOut={logout}
+        onSignOut={handleIdleLogout}
       />
 
       {/* Mobile Sidebar Overlay */}

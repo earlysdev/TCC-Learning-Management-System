@@ -35,7 +35,7 @@ export default function SessionTimeoutModal({ isOpen, remainingSeconds, onStayLo
           {formatTime(remainingSeconds)}
         </div>
         <p style={{ color: 'var(--neutral-400)', fontSize: '0.875rem' }}>
-          Please click "Stay Signed In" to continue working.
+          Move your mouse, hover your cursor, or press any key to stay signed in.
         </p>
       </div>
     </Modal>
