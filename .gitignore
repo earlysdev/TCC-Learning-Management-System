@@ -12,5 +12,5 @@ vendor/
 /backend/storage/*.key
 /backend/storage/logs/*.log
 /backend/bootstrap/cache/*.php
-/legacy-reference/node_modules/
-/legacy-reference/.firebase/
+/legacy-reference/
+legacy-reference/
