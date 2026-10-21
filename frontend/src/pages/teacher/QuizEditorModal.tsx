@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { 
   Plus, Trash2, ArrowUp, ArrowDown, ChevronsUp, ChevronsDown, 
-  Award, CheckCircle2 
+  Award, CheckCircle2, Clock3, Shuffle 
 } from 'lucide-react';
 import type { Question, Quiz, Subject } from '../../lib/types';
 import { BSIT_SUBJECT_OPTIONS } from '../../lib/constants';
@@ -16,6 +16,8 @@ export interface QuizEditorValues {
   topic: string;
   instructions: string;
   allow_review: boolean;
+  time_limit_minutes: number;
+  shuffle_questions: boolean;
   questions: Array<Required<Pick<Question, 'prompt' | 'options' | 'correct_index'>> & { skill?: string; points?: number }>;
 }
 
@@ -37,6 +39,7 @@ const emptyQuestion = (): QuizEditorValues['questions'][number] => ({
 });
 
 function toEditorValues(quiz: Quiz): QuizEditorValues {
+  const qList = quiz.questions || [];
   return {
     id: quiz.id,
     title: quiz.title,
@@ -44,7 +47,9 @@ function toEditorValues(quiz: Quiz): QuizEditorValues {
     topic: quiz.topic,
     instructions: quiz.instructions || '',
     allow_review: Boolean(quiz.allow_review),
-    questions: (quiz.questions || []).map((question) => ({
+    time_limit_minutes: Number(quiz.time_limit_minutes) > 0 ? Number(quiz.time_limit_minutes) : 15,
+    shuffle_questions: qList.length >= 3 ? Boolean(quiz.shuffle_questions ?? true) : false,
+    questions: qList.map((question) => ({
       prompt: question.prompt || '',
       skill: question.skill || '',
       points: Number.isInteger(question.points) && Number(question.points) > 0 ? Number(question.points) : 1,
@@ -166,6 +171,22 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
     });
   };
 
+  // Shuffle questions order when there are 3 or more questions
+  const shuffleQuestionsOrder = () => {
+    if (!draft || draft.questions.length < 3) return;
+    setDraft((current) => {
+      if (!current || current.questions.length < 3) return current;
+      const shuffled = [...current.questions];
+      for (let i = shuffled.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const temp = shuffled[i];
+        shuffled[i] = shuffled[j];
+        shuffled[j] = temp;
+      }
+      return { ...current, questions: shuffled };
+    });
+  };
+
   const submit = () => {
     const title = draft.title.trim();
     const subject = draft.subject.trim();
@@ -193,6 +214,8 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
       subject,
       topic,
       instructions,
+      time_limit_minutes: Math.max(1, Math.min(300, Number(draft.time_limit_minutes) || 15)),
+      shuffle_questions: draft.questions.length >= 3 ? Boolean(draft.shuffle_questions) : false,
       questions: draft.questions.map((question) => ({
         ...question,
         prompt: question.prompt.trim(),
@@ -252,7 +275,7 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
         )}
 
         {/* Quiz Metadata */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
           <label className="form-group" style={{ margin: 0 }}>
             <span className="form-label">Quiz Title</span>
             <input className="form-input" value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} />
@@ -273,6 +296,19 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
             <span className="form-label">Topic / Unit</span>
             <input className="form-input" value={draft.topic} onChange={(event) => setDraft({ ...draft, topic: event.target.value })} />
           </label>
+          <label className="form-group" style={{ margin: 0 }}>
+            <span className="form-label" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+              <Clock3 size={13} style={{ color: '#fbbf24' }} /> Time Limit (Minutes)
+            </span>
+            <input
+              type="number"
+              min={1}
+              max={300}
+              className="form-input"
+              value={draft.time_limit_minutes ?? 15}
+              onChange={(event) => setDraft({ ...draft, time_limit_minutes: Math.max(1, Math.min(300, Number(event.target.value) || 15)) })}
+            />
+          </label>
         </div>
 
         <label className="form-group" style={{ margin: 0 }}>
@@ -286,18 +322,37 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
           />
         </label>
 
-        <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.65rem', color: 'var(--neutral-200)', fontSize: '0.9rem', cursor: 'pointer', background: 'rgba(255,255,255,0.03)', padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid rgba(255,255,255,0.06)' }}>
-          <input
-            type="checkbox"
-            checked={draft.allow_review}
-            onChange={(event) => setDraft({ ...draft, allow_review: event.target.checked })}
-            style={{ accentColor: 'var(--primary-400)', marginTop: '0.2rem', width: '16px', height: '16px' }}
-          />
-          <span>
-            <strong style={{ color: 'white', display: 'block' }}>Allow Answer Review After Submission</strong>
-            Students can review full answer keys and explanations once they submit.
-          </span>
-        </label>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '0.75rem' }}>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.65rem', color: 'var(--neutral-200)', fontSize: '0.9rem', cursor: 'pointer', background: 'rgba(255,255,255,0.03)', padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <input
+              type="checkbox"
+              checked={draft.allow_review}
+              onChange={(event) => setDraft({ ...draft, allow_review: event.target.checked })}
+              style={{ accentColor: 'var(--primary-400)', marginTop: '0.2rem', width: '16px', height: '16px' }}
+            />
+            <span>
+              <strong style={{ color: 'white', display: 'block' }}>Allow Answer Review After Submission</strong>
+              Students can review full answer keys and explanations once they submit.
+            </span>
+          </label>
+
+          {draft.questions.length >= 3 && (
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.65rem', color: 'var(--neutral-200)', fontSize: '0.9rem', cursor: 'pointer', background: draft.shuffle_questions ? 'rgba(63,81,181,0.14)' : 'rgba(255,255,255,0.03)', padding: '0.75rem', borderRadius: 'var(--radius-md)', border: `1px solid ${draft.shuffle_questions ? 'var(--primary-400)' : 'rgba(255,255,255,0.06)'}` }}>
+              <input
+                type="checkbox"
+                checked={Boolean(draft.shuffle_questions)}
+                onChange={(event) => setDraft({ ...draft, shuffle_questions: event.target.checked })}
+                style={{ accentColor: 'var(--primary-400)', marginTop: '0.2rem', width: '16px', height: '16px' }}
+              />
+              <span>
+                <strong style={{ color: 'white', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  <Shuffle size={14} style={{ color: '#fbbf24' }} /> Shuffle Questions
+                </strong>
+                Randomize question order for each student attempt ({draft.questions.length} questions).
+              </span>
+            </label>
+          )}
+        </div>
 
         {/* Questions Header with Direct Move Toolbar */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', borderTop: '1px solid var(--glass-border)', paddingTop: '1.25rem' }}>
@@ -314,6 +369,18 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
           </div>
 
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            {draft.questions.length >= 3 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={shuffleQuestionsOrder}
+                title="Shuffle Question Order"
+                style={{ gap: '0.35rem', borderColor: 'rgba(251, 191, 36, 0.35)', color: '#fbbf24' }}
+              >
+                <Shuffle size={14} /> Shuffle Order
+              </Button>
+            )}
             <Button 
               type="button" 
               variant="outline" 

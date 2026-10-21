@@ -123,6 +123,7 @@ export default function StudentQuizTakePage() {
   const { quizId } = useParams<{ quizId: string }>();
   const navigate = useNavigate();
   const [quiz, setQuiz] = useState<Quiz | null>(null);
+  const [questionOrder, setQuestionOrder] = useState<number[]>([]);
   const [result, setResult] = useState<QuizResult | null>(null);
   const [answers, setAnswers] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
@@ -192,6 +193,17 @@ export default function StudentQuizTakePage() {
       .then((data) => {
         if (!mounted) return;
         setQuiz(data.quiz);
+        const qLen = data.quiz?.questions?.length ?? 0;
+        const order = Array.from({ length: qLen }, (_, idx) => idx);
+        if (data.quiz?.shuffle_questions && qLen >= 3) {
+          for (let i = order.length - 1; i > 0; i -= 1) {
+            const j = Math.floor(Math.random() * (i + 1));
+            const tmp = order[i];
+            order[i] = order[j];
+            order[j] = tmp;
+          }
+        }
+        setQuestionOrder(order);
         setResult(data.attempt);
         if (!data.attempt && data.quiz) {
           const limitMins = Number(data.quiz.time_limit_minutes) > 0 ? Number(data.quiz.time_limit_minutes) : 15;
@@ -619,28 +631,32 @@ export default function StudentQuizTakePage() {
           {error && <div className="quiz-inline-error" role="alert"><AlertTriangle size={18} /> {error}</div>}
 
           <form onSubmit={submitQuiz} className="quiz-question-form">
-            {quiz.questions?.map((question, questionIndex) => (
-              <fieldset key={questionIndex} className="quiz-question-card">
-                <legend><span>{questionIndex + 1}</span>{question.prompt}</legend>
-                <div className="quiz-options">
-                  {question.options.map((option, optionIndex) => {
-                    const selected = answers[questionIndex] === optionIndex;
-                    return (
-                      <label className={`quiz-option ${selected ? 'is-selected' : ''}`} key={optionIndex}>
-                        <input
-                          type="radio"
-                          name={`question-${questionIndex}`}
-                          checked={selected}
-                          onChange={() => handleAnswer(questionIndex, optionIndex)}
-                        />
-                        <span className="quiz-option-letter">{String.fromCharCode(65 + optionIndex)}</span>
-                        <span>{option}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </fieldset>
-            ))}
+            {(questionOrder.length > 0 ? questionOrder : (quiz.questions?.map((_, idx) => idx) ?? [])).map((originalIndex, displayIndex) => {
+              const question = quiz.questions?.[originalIndex];
+              if (!question) return null;
+              return (
+                <fieldset key={originalIndex} className="quiz-question-card">
+                  <legend><span>{displayIndex + 1}</span>{question.prompt}</legend>
+                  <div className="quiz-options">
+                    {question.options.map((option, optionIndex) => {
+                      const selected = answers[originalIndex] === optionIndex;
+                      return (
+                        <label className={`quiz-option ${selected ? 'is-selected' : ''}`} key={optionIndex}>
+                          <input
+                            type="radio"
+                            name={`question-${originalIndex}`}
+                            checked={selected}
+                            onChange={() => handleAnswer(originalIndex, optionIndex)}
+                          />
+                          <span className="quiz-option-letter">{String.fromCharCode(65 + optionIndex)}</span>
+                          <span>{option}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </fieldset>
+              );
+            })}
             <div className="quiz-submit-row">
               <span><Clock3 size={17} /> Review your answers before submitting.</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>

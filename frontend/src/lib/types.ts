@@ -22,8 +22,12 @@ export interface Quiz {
   instructions: string | null;
   question_count: number;
   time_limit_minutes?: number;
+  shuffle_questions?: boolean;
   is_published?: boolean;
   allow_review?: boolean;
+  target_type?: QuizAudienceType;
+  target_sections?: Array<string | number>;
+  target_student_ids?: number[];
   audience_type?: QuizAudienceType;
   audience?: QuizAudience;
   generated_by_ai?: boolean;

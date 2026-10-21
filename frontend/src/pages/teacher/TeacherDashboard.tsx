@@ -245,6 +245,8 @@ export default function TeacherDashboard() {
           topic: draft.topic,
           instructions: draft.instructions,
           allow_review: draft.allow_review,
+          time_limit_minutes: draft.time_limit_minutes,
+          shuffle_questions: draft.questions.length >= 3 ? Boolean(draft.shuffle_questions) : false,
           questions: draft.questions,
         }),
       });
@@ -281,18 +283,22 @@ export default function TeacherDashboard() {
           section_ids: audience.section_ids,
           target_student_ids: audience.student_ids,
           student_ids: audience.student_ids,
+          time_limit_minutes: audience.time_limit_minutes,
+          shuffle_questions: audience.shuffle_questions,
         }),
       });
       const fallback: Quiz = {
         ...publishingQuiz,
         is_published: true,
+        time_limit_minutes: audience.time_limit_minutes,
+        shuffle_questions: audience.shuffle_questions,
         audience_type: audience.type,
         audience: { type: audience.type },
       };
       const updated = extractQuiz(response || fallback);
       setQuizzes((current) => current.map((quiz) => quiz.id === publishingQuiz.id ? updated : quiz));
       setPublishingQuiz(null);
-      setNotice(`"${publishingQuiz.title}" is published to ${audience.type === 'all' ? 'all students' : audience.type === 'section' ? 'the selected blocks' : 'the selected students'}.`);
+      setNotice(`"${publishingQuiz.title}" is published to ${audience.type === 'all' ? 'all students' : audience.type === 'section' ? 'the selected blocks' : 'the selected students'} (${audience.time_limit_minutes} mins${audience.shuffle_questions ? ', Shuffled' : ''}).`);
       void loadDashboard();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Could not publish this quiz');
@@ -588,7 +594,7 @@ export default function TeacherDashboard() {
                 </div>
                 <h3 style={{ fontSize: '1.35rem', fontWeight: 700, color: 'white' }}>{quiz.title}</h3>
                 <p style={{ color: 'var(--neutral-300)', fontSize: '0.85rem', marginTop: '0.2rem' }}>
-                  {quiz.question_count} Questions • {quiz.attempts_count || 0} Submissions • {quiz.average || 0}% Class Average
+                  {quiz.question_count} Questions • {quiz.time_limit_minutes || 15} Mins{quiz.question_count >= 3 && quiz.shuffle_questions ? ' • Shuffled' : ''} • {quiz.attempts_count || 0} Submissions • {quiz.average || 0}% Class Average
                 </p>
               </div>
 

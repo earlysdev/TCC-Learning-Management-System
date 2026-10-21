@@ -134,6 +134,7 @@ class QuizController extends Controller
             'topic' => ['sometimes', 'string', 'max:120'],
             'instructions' => ['sometimes', 'string'],
             'time_limit_minutes' => ['sometimes', 'nullable', 'integer', 'between:1,300'],
+            'shuffle_questions' => ['sometimes', 'boolean'],
             'target_type' => ['sometimes', 'in:all,section,individual'],
             'target_sections' => ['sometimes', 'nullable', 'array'],
             'target_student_ids' => ['sometimes', 'nullable', 'array'],
@@ -165,6 +166,7 @@ class QuizController extends Controller
             'target_sections' => ['sometimes', 'nullable', 'array'],
             'target_student_ids' => ['sometimes', 'nullable', 'array'],
             'time_limit_minutes' => ['sometimes', 'nullable', 'integer', 'between:1,300'],
+            'shuffle_questions' => ['sometimes', 'boolean'],
         ]);
         
         $quiz->update($input);
@@ -231,7 +233,8 @@ class QuizController extends Controller
                 'topic' => $quiz->topic,
                 'instructions' => $quiz->instructions,
                 'question_count' => count($quiz->questions ?? []),
-                'time_limit_minutes' => $quiz->time_limit_minutes,
+                'time_limit_minutes' => $quiz->time_limit_minutes ?? 15,
+                'shuffle_questions' => (bool) ($quiz->shuffle_questions ?? false),
                 'target_type' => $quiz->target_type,
                 'attempted' => (bool) $attempt,
                 'score' => $attempt?->score,
@@ -260,7 +263,8 @@ class QuizController extends Controller
                 'subject' => $quiz->subject,
                 'topic' => $quiz->topic,
                 'instructions' => $quiz->instructions,
-                'time_limit_minutes' => $quiz->time_limit_minutes,
+                'time_limit_minutes' => $quiz->time_limit_minutes ?? 15,
+                'shuffle_questions' => (bool) ($quiz->shuffle_questions ?? false),
                 'questions' => collect($quiz->questions ?? [])->map(fn (array $question) => [
                     'prompt' => $question['prompt'],
                     'options' => $question['options'],
@@ -465,7 +469,8 @@ class QuizController extends Controller
             'target_type' => $quiz->target_type ?? 'all',
             'target_sections' => $quiz->target_sections ?? [],
             'target_student_ids' => $quiz->target_student_ids ?? [],
-            'time_limit_minutes' => $quiz->time_limit_minutes,
+            'time_limit_minutes' => $quiz->time_limit_minutes ?? 15,
+            'shuffle_questions' => (bool) ($quiz->shuffle_questions ?? false),
             'attempts_count' => $quiz->attempts_count ?? 0,
             'average' => round((float) ($quiz->attempts_avg_percentage ?? 0), 1),
             'questions' => $quiz->questions ?? [],

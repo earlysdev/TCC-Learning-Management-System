@@ -22,6 +22,7 @@ class Quiz extends Model
         'target_sections',
         'target_student_ids',
         'time_limit_minutes',
+        'shuffle_questions',
     ];
 
     protected function casts(): array
@@ -34,6 +35,7 @@ class Quiz extends Model
             'target_sections' => 'array',
             'target_student_ids' => 'array',
             'time_limit_minutes' => 'integer',
+            'shuffle_questions' => 'boolean',
         ];
     }
 
