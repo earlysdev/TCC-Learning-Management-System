@@ -15,6 +15,7 @@ import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import Input from '../../components/ui/Input';
 import Select from '../../components/ui/Select';
+import ProfileUpdateCard from '../../components/ui/ProfileUpdateCard';
 import QuizEditorModal, { type QuizEditorValues } from './QuizEditorModal';
 import PublishQuizModal, { type PublishAudience, type SectionOption } from './PublishQuizModal';
 import QuizSubmissionsModal from './QuizSubmissionsModal';
@@ -901,6 +902,8 @@ export default function TeacherDashboard() {
           </div>
         </div>
       </GlassCard>
+
+      <ProfileUpdateCard />
     </div>
   );
 

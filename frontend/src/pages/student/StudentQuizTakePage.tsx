@@ -4,6 +4,8 @@ import {
   AlertTriangle,
   CheckCircle2,
   ChevronLeft,
+  ChevronsDown,
+  ChevronsUp,
   Clock3,
   Eye,
   ExternalLink,
@@ -133,6 +135,7 @@ export default function StudentQuizTakePage() {
   const [interruption, setInterruption] = useState<Interruption | null>(null);
   const [integrityIncidentCount, setIntegrityIncidentCount] = useState(0);
   const [violationsList, setViolationsList] = useState<Array<{ type: string; label: string; timestamp: string }>>([]);
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const startTimeRef = useRef<string>(new Date().toISOString());
   const lastIntegrityEvent = useRef<{ eventType: IntegrityEventType; occurredAt: number } | null>(null);
 
@@ -190,6 +193,10 @@ export default function StudentQuizTakePage() {
         if (!mounted) return;
         setQuiz(data.quiz);
         setResult(data.attempt);
+        if (!data.attempt && data.quiz) {
+          const limitMins = Number(data.quiz.time_limit_minutes) > 0 ? Number(data.quiz.time_limit_minutes) : 15;
+          setTimeLeft(limitMins * 60);
+        }
         if (data.attempt?.cheating_attempts_count) {
           setIntegrityIncidentCount(data.attempt.cheating_attempts_count);
         }
@@ -209,6 +216,34 @@ export default function StudentQuizTakePage() {
   }, [quizId]);
 
   const isAssessmentActive = Boolean(quiz && !result && !loading);
+
+  useEffect(() => {
+    if (!isAssessmentActive || timeLeft === null || submitting) return;
+    if (timeLeft <= 0) {
+      if (!quiz || !quizId) return;
+      setSubmitting(true);
+      const qCount = quiz.questions?.length ?? 0;
+      const paddedAnswers = Array.from({ length: qCount }, (_, idx) => answers[idx] ?? 0);
+      void lmsFetch<{ attempt: QuizResult }>(`/student/quizzes/${quizId}/submit`, {
+        method: 'POST',
+        body: JSON.stringify({
+          answers: paddedAnswers,
+          cheating_attempts_count: integrityIncidentCount,
+          violations: violationsList,
+          started_at: startTimeRef.current,
+        }),
+      })
+        .then((data) => setResult(data.attempt))
+        .catch(() => undefined)
+        .finally(() => setSubmitting(false));
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setTimeLeft((prev) => (prev !== null && prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [isAssessmentActive, timeLeft, submitting, quiz, quizId, answers, integrityIncidentCount, violationsList]);
 
   useEffect(() => {
     if (!isAssessmentActive) return;
@@ -525,7 +560,15 @@ export default function StudentQuizTakePage() {
     >
       <header className="quiz-take-header">
         <div className="quiz-take-brand"><ShieldCheck size={22} /> TCC Assessment</div>
-        <div className="quiz-take-status"><span aria-hidden="true" /> Proctoring active (Anti-Cheat)</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          {timeLeft !== null && (
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.35rem 0.75rem', borderRadius: '999px', background: timeLeft < 60 ? 'rgba(239, 83, 80, 0.25)' : 'rgba(255, 255, 255, 0.08)', border: `1px solid ${timeLeft < 60 ? '#ef5350' : 'rgba(255,255,255,0.14)'}`, color: timeLeft < 60 ? '#ff8a80' : '#fbbf24', fontWeight: 800, fontFamily: 'monospace', fontSize: '0.95rem' }}>
+              <Clock3 size={16} />
+              <span>{Math.floor(timeLeft / 60).toString().padStart(2, '0')}:{(timeLeft % 60).toString().padStart(2, '0')}</span>
+            </div>
+          )}
+          <div className="quiz-take-status"><span aria-hidden="true" /> Proctoring active (Anti-Cheat)</div>
+        </div>
         <Button variant="outline" size="sm" onClick={closeAssessment}>Exit Assessment</Button>
       </header>
 
@@ -558,7 +601,18 @@ export default function StudentQuizTakePage() {
               <p className="quiz-result-eyebrow">Secure Assessment Window</p>
               <h2>Answer each question</h2>
             </div>
-            <div className="quiz-question-count"><FileQuestion size={18} /> {quiz.questions?.length ?? 0} questions</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <div className="quiz-question-count"><FileQuestion size={18} /> {quiz.questions?.length ?? 0} questions</div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })}
+                title="Direct Scroll to Bottom"
+              >
+                <ChevronsDown size={15} /> Scroll to Bottom
+              </Button>
+            </div>
           </div>
 
           {quiz.instructions && <p className="quiz-instructions">{quiz.instructions}</p>}
@@ -589,9 +643,20 @@ export default function StudentQuizTakePage() {
             ))}
             <div className="quiz-submit-row">
               <span><Clock3 size={17} /> Review your answers before submitting.</span>
-              <Button variant="accent" size="lg" type="submit" disabled={submitting || isBlocked}>
-                <Send size={18} /> {submitting ? 'Submitting…' : 'Submit Assessment'}
-              </Button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                  title="Direct Scroll to Top"
+                >
+                  <ChevronsUp size={15} /> Scroll to Top
+                </Button>
+                <Button variant="accent" size="lg" type="submit" disabled={submitting || isBlocked}>
+                  <Send size={18} /> {submitting ? 'Submitting…' : 'Submit Assessment'}
+                </Button>
+              </div>
             </div>
           </form>
         </section>

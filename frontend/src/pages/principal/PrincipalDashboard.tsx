@@ -14,6 +14,7 @@ import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import Input from '../../components/ui/Input';
 import Select from '../../components/ui/Select';
+import ProfileUpdateCard from '../../components/ui/ProfileUpdateCard';
 
 interface DeanMetrics {
   active_users: number;
@@ -696,6 +697,8 @@ export default function PrincipalDashboard() {
           </div>
         </div>
       </GlassCard>
+
+      <ProfileUpdateCard />
     </div>
   );
 

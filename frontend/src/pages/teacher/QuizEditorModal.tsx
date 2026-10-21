@@ -60,9 +60,32 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setDraft(quiz ? toEditorValues(quiz) : null);
+    if (!quiz) {
+      setDraft(null);
+      return;
+    }
+    const savedRaw = localStorage.getItem(`tcc_quiz_draft_${quiz.id}`);
+    if (savedRaw) {
+      try {
+        const parsed = JSON.parse(savedRaw) as QuizEditorValues;
+        if (parsed && parsed.id === quiz.id && Array.isArray(parsed.questions)) {
+          setDraft(parsed);
+          setValidationError(null);
+          return;
+        }
+      } catch {
+        // Ignore invalid local draft
+      }
+    }
+    setDraft(toEditorValues(quiz));
     setValidationError(null);
   }, [quiz, isOpen]);
+
+  useEffect(() => {
+    if (quiz && draft && draft.id === quiz.id) {
+      localStorage.setItem(`tcc_quiz_draft_${quiz.id}`, JSON.stringify(draft));
+    }
+  }, [quiz, draft]);
 
   if (!quiz || !draft) return null;
 
@@ -163,6 +186,7 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
     }
 
     setValidationError(null);
+    localStorage.removeItem(`tcc_quiz_draft_${draft.id}`);
     onSave({
       ...draft,
       title,
@@ -188,9 +212,14 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
       title={`Edit Quiz: ${quiz.title}`}
       footer={(
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: '0.75rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--neutral-300)', fontSize: '0.85rem' }}>
-            <Award size={15} style={{ color: '#fbbf24' }} />
-            <span>Total Points: <strong style={{ color: 'white' }}>{totalPoints} pts</strong> ({draft.questions.length} questions)</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--neutral-300)', fontSize: '0.85rem', flexWrap: 'wrap' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+              <Award size={15} style={{ color: '#fbbf24' }} />
+              Total Points: <strong style={{ color: 'white' }}>{totalPoints} pts</strong> ({draft.questions.length} questions)
+            </span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.75rem', color: '#a5d6a7', background: 'rgba(67, 160, 71, 0.15)', border: '1px solid rgba(67, 160, 71, 0.3)', padding: '0.15rem 0.55rem', borderRadius: '999px' }}>
+              <CheckCircle2 size={12} /> Local Draft Auto-Saved
+            </span>
           </div>
           <div style={{ display: 'flex', gap: '0.75rem' }}>
             <Button variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>

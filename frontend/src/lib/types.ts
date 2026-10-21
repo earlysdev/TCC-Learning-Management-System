@@ -21,6 +21,7 @@ export interface Quiz {
   topic: string;
   instructions: string | null;
   question_count: number;
+  time_limit_minutes?: number;
   is_published?: boolean;
   allow_review?: boolean;
   audience_type?: QuizAudienceType;

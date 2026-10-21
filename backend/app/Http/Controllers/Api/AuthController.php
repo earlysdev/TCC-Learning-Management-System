@@ -109,6 +109,45 @@ class AuthController extends Controller
         return response()->json(['user' => $this->userPayload($request->user())]);
     }
 
+    public function updateProfile(Request $request): JsonResponse
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email,' . $user->id],
+            'password' => ['nullable', 'string', 'min:8'],
+        ]);
+
+        $parts = preg_split('/\s+/', trim($validated['name']), 2);
+        $updates = [
+            'name' => trim($validated['name']),
+            'first_name' => $parts[0] ?? $user->first_name,
+            'last_name' => $parts[1] ?? $user->last_name,
+            'email' => trim($validated['email']),
+        ];
+
+        if (!empty($validated['password'])) {
+            $updates['password'] = Hash::make($validated['password']);
+        }
+
+        $user->update($updates);
+
+        \App\Models\ActivityLog::create([
+            'user_id' => $user->id,
+            'action' => 'update_profile',
+            'description' => "Updated personal profile information ({$user->email})",
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
+
+        return response()->json([
+            'message' => 'Profile updated successfully.',
+            'user' => $this->userPayload($user->fresh()),
+        ]);
+    }
+
     public function logout(Request $request): JsonResponse
     {
         $request->user()->currentAccessToken()?->delete();

@@ -13,6 +13,7 @@ import GlassCard from '../../components/ui/GlassCard';
 import StatCard from '../../components/ui/StatCard';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
+import ProfileUpdateCard from '../../components/ui/ProfileUpdateCard';
 
 export default function StudentDashboard() {
   const user = getLmsUser();
@@ -844,6 +845,8 @@ export default function StudentDashboard() {
           </div>
         </div>
       </GlassCard>
+
+      <ProfileUpdateCard />
     </div>
   );
 

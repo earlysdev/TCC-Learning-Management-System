@@ -14,6 +14,7 @@ import StatCard from '../../components/ui/StatCard';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import Input from '../../components/ui/Input';
+import ProfileUpdateCard from '../../components/ui/ProfileUpdateCard';
 
 interface SecretaryMetrics {
   total_students: number;
@@ -844,6 +845,8 @@ export default function SecretaryDashboard() {
           </div>
         </div>
       </GlassCard>
+
+      <ProfileUpdateCard />
     </div>
   );
 
