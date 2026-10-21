@@ -1,8 +1,6 @@
 # TCC Learning Management System
 
-React and Laravel rebuild based on the original site in `legacy-reference/`. The original Firebase source and school images remain there for reference. Firebase browser-side Gemini credentials were removed from the copied reference; keep provider keys on the Laravel server.
-
-## What's working
+## What's cooking
 
 - React responsive landing, sign-in, teacher dashboard, and student quiz interface.
 - Laravel token authentication and role checks for teacher and student quiz APIs.
