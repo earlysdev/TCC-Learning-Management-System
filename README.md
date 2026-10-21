@@ -81,11 +81,8 @@ FRONTEND_ALLOWED_ORIGINS=https://your-site.pages.dev
 
 During Render Blueprint setup, provide a Laravel application key as `APP_KEY`. Generate one locally with `php artisan key:generate --show`. Set `GEMINI_API_KEY` in Render's secret environment settings if live AI is wanted. Add a mail provider before relying on account reset emails; the current default writes email to Laravel logs.
 
-Current Render pricing is about **$7/month** for the 512 MB web service plus **$6/month** for the smallest paid PostgreSQL compute plan; Cloudflare Pages is free. Allow for database storage, taxes, and usage. Render's free PostgreSQL plan is temporary, so use the paid plan for persistent school data. Review current provider prices before deployment.
-
 ## Project folders
 
 - `frontend/` - React, TypeScript, Vite, and school image assets.
 - `backend/` - Laravel API, authentication, migrations, demo seeder, and AI integration.
-- `legacy-reference/` - original Firebase application and migration reference.
 - `render.yaml` - Render API and database blueprint.
