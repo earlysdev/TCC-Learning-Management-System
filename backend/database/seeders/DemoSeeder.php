@@ -38,7 +38,7 @@ class DemoSeeder extends Seeder
             'dean.demo@tcc.test',
         ])->delete();
 
-        $password = 'LnhsDemo!2026';
+        $password = 'TccPortal!2026';
         $accounts = [
             [
                 'name' => 'TCC Student',
