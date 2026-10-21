@@ -398,7 +398,7 @@ export default function LandingPage() {
               </div>
               <h3>Dean & Faculty Analytics</h3>
               <p>
-                Monitor college performance, student retention, section progress, passing rates, and active academic audit trails in real time.
+                Monitor college performance, student retention, block progress, passing rates, and active academic audit trails in real time.
               </p>
               <ul className="feature-list">
                 <li><CheckCircle2 size={16} color="#fbbf24" /> College-level pass rates & averages</li>

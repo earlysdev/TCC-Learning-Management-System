@@ -30,7 +30,7 @@ interface PublishQuizModalProps {
 
 const audienceChoices: Array<{ type: AudienceType; label: string; detail: string; icon: typeof UsersRound }> = [
   { type: 'all', label: 'All students', detail: 'Make this quiz available to every enrolled student.', icon: UsersRound },
-  { type: 'section', label: 'Selected sections', detail: 'Choose one or more class sections.', icon: Layers },
+  { type: 'section', label: 'Selected blocks', detail: 'Choose one or more class blocks.', icon: Layers },
   { type: 'individual', label: 'Individual students', detail: 'Choose specific learners from your roster.', icon: UserRoundCheck },
 ];
 
@@ -74,7 +74,7 @@ export default function PublishQuizModal({ quiz, isOpen, students, sections, bus
   const audienceSummary = audienceType === 'all'
     ? 'all enrolled students'
     : audienceType === 'section'
-      ? `${sectionIds.length} selected section${sectionIds.length === 1 ? '' : 's'}`
+      ? `${sectionIds.length} selected block${sectionIds.length === 1 ? '' : 's'}`
       : `${studentIds.length} selected student${studentIds.length === 1 ? '' : 's'}`;
 
   return (
@@ -117,9 +117,9 @@ export default function PublishQuizModal({ quiz, isOpen, students, sections, bus
 
         {audienceType === 'section' && (
           <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: '1rem' }}>
-            <h3 style={{ color: 'white', fontSize: '1rem', margin: 0 }}>Select sections</h3>
+            <h3 style={{ color: 'white', fontSize: '1rem', margin: 0 }}>Select blocks</h3>
             {sections.length === 0 ? (
-              <p style={{ color: 'var(--neutral-300)', fontSize: '0.88rem' }}>No sections are available in the current roster. Add student section details first.</p>
+              <p style={{ color: 'var(--neutral-300)', fontSize: '0.88rem' }}>No blocks are available in the current roster. Add student block details first.</p>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.6rem', marginTop: '0.75rem' }}>
                 {sections.map((section) => {
@@ -141,7 +141,7 @@ export default function PublishQuizModal({ quiz, isOpen, students, sections, bus
           <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: '1rem' }}>
             <label className="form-group">
               <span className="form-label">Find a student</span>
-              <input className="form-input" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, LRN, grade, or section" />
+              <input className="form-input" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, ID, grade, or block" />
             </label>
             {students.length === 0 ? (
               <p style={{ color: 'var(--neutral-300)', fontSize: '0.88rem' }}>No students are available in the current roster.</p>

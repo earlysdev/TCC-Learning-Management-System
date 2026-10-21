@@ -58,7 +58,7 @@ function rosterSections(students: User[]): SectionOption[] {
 
 function toSectionOptions(records: SectionApiRecord[]): SectionOption[] {
   return records.map((record) => {
-    const label = record.label || record.name || [record.grade, record.section].filter(Boolean).join(' · ') || 'Unnamed section';
+    const label = record.label || record.name || [record.grade, record.section].filter(Boolean).join(' · ') || 'Unnamed block';
     return {
       id: record.id ?? label,
       label,
@@ -71,7 +71,7 @@ function quizAudienceLabel(quiz: Quiz): string | null {
   if (quiz.audience?.label) return quiz.audience.label;
   const type = quiz.audience?.type || quiz.audience_type;
   if (type === 'all') return 'All students';
-  if (type === 'section') return 'Selected sections';
+  if (type === 'section') return 'Selected blocks';
   if (type === 'individual') return 'Selected students';
   return null;
 }
@@ -284,7 +284,7 @@ export default function TeacherDashboard() {
       const updated = extractQuiz(response || fallback);
       setQuizzes((current) => current.map((quiz) => quiz.id === publishingQuiz.id ? updated : quiz));
       setPublishingQuiz(null);
-      setNotice(`"${publishingQuiz.title}" is published to ${audience.type === 'all' ? 'all students' : audience.type === 'section' ? 'the selected sections' : 'the selected students'}.`);
+      setNotice(`"${publishingQuiz.title}" is published to ${audience.type === 'all' ? 'all students' : audience.type === 'section' ? 'the selected blocks' : 'the selected students'}.`);
       void loadDashboard();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Could not publish this quiz');
@@ -531,11 +531,11 @@ export default function TeacherDashboard() {
             />
 
             <Select
-              label="Target Section (Optional)"
+              label="Target Block (Optional)"
               value={selectedTargetSection}
               onChange={setSelectedTargetSection}
               options={[
-                { value: '', label: 'No section — assign later' },
+                { value: '', label: 'No block — assign later' },
                 ...sections.map((s) => ({
                   value: String(s.id),
                   label: `${s.label}${s.studentCount ? ` (${s.studentCount} ${s.studentCount === 1 ? 'student' : 'students'})` : ''}`
@@ -620,7 +620,7 @@ export default function TeacherDashboard() {
                     variant="outline"
                     size="sm"
                     onClick={() => setPublishingQuiz(quiz)}
-                    title="Change target audience (all, section, individual)"
+                    title="Change target audience (all, block, individual)"
                   >
                     <Target size={14} /> Target: {quizAudienceLabel(quiz) || 'All'}
                   </Button>
@@ -683,14 +683,14 @@ export default function TeacherDashboard() {
           Enrolled Learners
         </h1>
         <p style={{ color: 'var(--neutral-300)' }}>
-          Directory of student learners enrolled under your grade levels and sections.
+          Directory of student learners enrolled under your grade levels and blocks.
         </p>
       </div>
 
       <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: '240px' }}>
           <Input 
-            placeholder="Search by student name or LRN..."
+            placeholder="Search by student name or ID..."
             value={studentSearch}
             onChange={e => setStudentSearch(e.target.value)}
           />
@@ -717,8 +717,8 @@ export default function TeacherDashboard() {
           <thead>
             <tr style={{ background: 'rgba(255,255,255,0.06)', borderBottom: '1px solid var(--glass-border)' }}>
               <th style={{ padding: '0.85rem 1.25rem' }}>Student Name</th>
-              <th style={{ padding: '0.85rem 1.25rem' }}>LRN</th>
-              <th style={{ padding: '0.85rem 1.25rem' }}>Grade & Section</th>
+              <th style={{ padding: '0.85rem 1.25rem' }}>ID</th>
+              <th style={{ padding: '0.85rem 1.25rem' }}>Grade & Block</th>
               <th style={{ padding: '0.85rem 1.25rem' }}>Email</th>
               <th style={{ padding: '0.85rem 1.25rem' }}>Status</th>
             </tr>

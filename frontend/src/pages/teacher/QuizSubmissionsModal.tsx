@@ -138,7 +138,7 @@ export default function QuizSubmissionsModal({ quiz, isOpen, onClose }: QuizSubm
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search student by name, LRN, or section..."
+            placeholder="Search student by name, ID, or block..."
             className="form-input"
             style={{ paddingLeft: '2.5rem', width: '100%' }}
           />
@@ -215,7 +215,7 @@ export default function QuizSubmissionsModal({ quiz, isOpen, onClose }: QuizSubm
                         )}
                         {sub.student?.lrn && (
                           <span style={{ fontSize: '0.75rem', color: 'var(--neutral-400)' }}>
-                            LRN: {sub.student.lrn}
+                            ID: {sub.student.lrn}
                           </span>
                         )}
                       </div>

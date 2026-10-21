@@ -134,8 +134,8 @@ export default function SecretaryDashboard() {
     setError(null);
     setNotice(null);
 
-    if (newUserRole === 'student' && lrn.length !== 12) {
-      setError('Student LRN must be exactly 12 digits.');
+    if (newUserRole === 'student' && lrn.trim().length < 4) {
+      setError('Student ID is required (e.g. 20273710).');
       setBusy(false);
       return;
     }
@@ -256,8 +256,8 @@ export default function SecretaryDashboard() {
             <thead>
               <tr style={{ background: 'rgba(255,255,255,0.06)', borderBottom: '1px solid var(--glass-border)' }}>
                 <th style={{ padding: '0.75rem 1rem' }}>Name</th>
-                <th style={{ padding: '0.75rem 1rem' }}>LRN</th>
-                <th style={{ padding: '0.75rem 1rem' }}>Grade & Section</th>
+                <th style={{ padding: '0.75rem 1rem' }}>ID</th>
+                <th style={{ padding: '0.75rem 1rem' }}>Grade & Block</th>
                 <th style={{ padding: '0.75rem 1rem' }}>Status</th>
               </tr>
             </thead>
@@ -377,13 +377,13 @@ export default function SecretaryDashboard() {
           {newUserRole === 'student' && (
             <>
               <Input 
-                label="Learner Reference Number (LRN)"
-                placeholder="12-digit LRN (e.g. 123456789012)"
+                label="Student ID"
+                placeholder="e.g. 20273710"
                 value={lrn}
                 onChange={e => setLrn(e.target.value.replace(/\D/g, '').slice(0, 12))}
                 maxLength={12}
                 required
-                helpText="Students can use their 12-digit LRN as their login username."
+                helpText="Students can use their Student ID (e.g. 20273710) as their login username."
               />
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
@@ -407,7 +407,7 @@ export default function SecretaryDashboard() {
 
                 <div>
                   <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--neutral-300)', fontWeight: 600, marginBottom: '0.4rem' }}>
-                    Section
+                    Block
                   </label>
                   <select 
                     value={section}
@@ -461,7 +461,7 @@ export default function SecretaryDashboard() {
       <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: '240px' }}>
           <Input 
-            placeholder="Search by student name, LRN, or email..."
+            placeholder="Search by student name, ID, or email..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
           />
@@ -499,8 +499,8 @@ export default function SecretaryDashboard() {
           <thead>
             <tr style={{ background: 'rgba(255,255,255,0.06)', borderBottom: '1px solid var(--glass-border)' }}>
               <th style={{ padding: '0.85rem 1.25rem' }}>Student Name</th>
-              <th style={{ padding: '0.85rem 1.25rem' }}>LRN</th>
-              <th style={{ padding: '0.85rem 1.25rem' }}>Grade & Section</th>
+              <th style={{ padding: '0.85rem 1.25rem' }}>ID</th>
+              <th style={{ padding: '0.85rem 1.25rem' }}>Grade & Block</th>
               <th style={{ padding: '0.85rem 1.25rem' }}>Email</th>
               <th style={{ padding: '0.85rem 1.25rem' }}>Status</th>
               <th style={{ padding: '0.85rem 1.25rem', textAlign: 'right' }}>Actions</th>
@@ -572,7 +572,7 @@ export default function SecretaryDashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem' }}>
         <StatCard label="Enrolled Students" value={students.length} icon={<GraduationCap size={24} />} detail="Registered in directory" />
         <StatCard label="Active Rate" value="98%" icon={<Activity size={24} />} detail="Regular participation" />
-        <StatCard label="School Sections" value="16" icon={<BarChart3 size={24} />} detail="Active curriculum classes" />
+        <StatCard label="School Blocks" value="16" icon={<BarChart3 size={24} />} detail="Active curriculum classes" />
       </div>
 
       <GlassCard>
@@ -619,7 +619,7 @@ export default function SecretaryDashboard() {
             Complete Student Masterlist
           </h3>
           <p style={{ color: 'var(--neutral-300)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
-            Export full student roster including LRN, grade, section, and status.
+            Export full student roster including ID, grade, block, and status.
           </p>
           <Button variant="outline" size="sm" onClick={() => alert('Exporting student masterlist CSV...')}>
             <Download size={14} /> Export CSV

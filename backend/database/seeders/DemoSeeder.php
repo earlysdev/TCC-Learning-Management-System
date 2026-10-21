@@ -14,8 +14,8 @@ class DemoSeeder extends Seeder
     {
         $password = 'LnhsDemo!2026';
         $accounts = [
-            ['name' => 'Demo Student', 'first_name' => 'Demo', 'last_name' => 'Student', 'email' => 'student.demo@lnhs.test', 'lrn' => '123456789012', 'role' => 'student', 'grade' => 'Grade 7', 'section' => 'Rizal', 'school_year' => '2025-2026'],
-            ['name' => 'Maria Santos', 'first_name' => 'Maria', 'last_name' => 'Santos', 'email' => 'maria.santos@lnhs.test', 'lrn' => '123456789013', 'role' => 'student', 'grade' => 'Grade 10', 'section' => 'Emerald', 'school_year' => '2025-2026'],
+            ['name' => 'Demo Student', 'first_name' => 'Demo', 'last_name' => 'Student', 'email' => 'student.demo@lnhs.test', 'lrn' => '20273710', 'role' => 'student', 'grade' => 'Grade 7', 'section' => 'Rizal', 'school_year' => '2025-2026'],
+            ['name' => 'Maria Santos', 'first_name' => 'Maria', 'last_name' => 'Santos', 'email' => 'maria.santos@lnhs.test', 'lrn' => '20273711', 'role' => 'student', 'grade' => 'Grade 10', 'section' => 'Emerald', 'school_year' => '2025-2026'],
             ['name' => 'Demo Teacher', 'first_name' => 'Demo', 'last_name' => 'Teacher', 'email' => 'teacher.demo@lnhs.test', 'lrn' => null, 'role' => 'teacher', 'school_year' => null],
             ['name' => 'Demo Secretary', 'first_name' => 'Demo', 'last_name' => 'Secretary', 'email' => 'secretary.demo@lnhs.test', 'lrn' => null, 'role' => 'secretary', 'school_year' => null],
             ['name' => 'College Dean', 'first_name' => 'College', 'last_name' => 'Dean', 'email' => 'dean.demo@tcc.test', 'lrn' => null, 'role' => 'dean', 'school_year' => null],

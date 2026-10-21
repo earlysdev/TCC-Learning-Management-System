@@ -22,7 +22,7 @@ LnhsDemo!2026
 
 | Role | Login | Alternative |
 | --- | --- | --- |
-| Student | `student.demo@TCC.test` | LRN `123456789012` |
+| Student | `student.demo@TCC.test` | ID `20273710` |
 | Teacher | `teacher.demo@TCC.test` | - |
 | Secretary | `secretary.demo@TCC.test` | - |
 | Dean | `dean.demo@TCC.test` | - |

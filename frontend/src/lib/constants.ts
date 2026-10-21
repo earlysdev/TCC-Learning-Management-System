@@ -58,7 +58,7 @@ export const ROLE_CONFIGS: Record<UserRole, RoleConfig> = {
     navItems: [
       { label: 'Overview', path: '/secretary/dashboard', icon: LayoutDashboard },
       { label: 'Create Account', path: '/secretary/accounts', icon: UserPlus },
-      { label: 'Sections & Grades', path: '/secretary/sections', icon: Layers },
+      { label: 'Blocks & Grades', path: '/secretary/sections', icon: Layers },
       { label: 'Student Records', path: '/secretary/records', icon: FileText },
       { label: 'Performance', path: '/secretary/performance', icon: BarChart },
       { label: 'Reports', path: '/secretary/reports', icon: FileText },

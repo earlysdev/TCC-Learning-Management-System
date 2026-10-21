@@ -82,7 +82,7 @@ class QuizTargetingAndAntiCheatTest extends TestCase
     {
         $teacher = User::where('role', 'teacher')->first();
         $studentEmerald = User::where('email', 'maria.santos@lnhs.test')->first(); // Grade 10, Emerald
-        $studentRizal = User::where('lrn', '123456789012')->first(); // Grade 7, Rizal
+        $studentRizal = User::where('lrn', '20273710')->first(); // Grade 7, Rizal
 
         // Create quiz targeted specifically to Emerald
         $quiz = Quiz::create([

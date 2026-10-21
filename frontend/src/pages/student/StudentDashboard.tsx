@@ -812,9 +812,9 @@ export default function StudentDashboard() {
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.25rem', borderTop: '1px solid var(--glass-border)', paddingTop: '1.25rem' }}>
           <div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', textTransform: 'uppercase', fontWeight: 600 }}>Learner Reference No. (LRN)</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', textTransform: 'uppercase', fontWeight: 600 }}>Student ID</div>
             <div style={{ color: 'white', fontWeight: 600, marginTop: '0.2rem', fontFamily: 'monospace', fontSize: '1.05rem' }}>
-              {user?.lrn || '123456789012'}
+              {user?.lrn || '20273710'}
             </div>
           </div>
           <div>
@@ -824,7 +824,7 @@ export default function StudentDashboard() {
             </div>
           </div>
           <div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', textTransform: 'uppercase', fontWeight: 600 }}>Grade & Section</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', textTransform: 'uppercase', fontWeight: 600 }}>Grade & Block</div>
             <div style={{ color: 'white', fontWeight: 600, marginTop: '0.2rem' }}>
               {user?.grade || 'Grade 10'} — {user?.section || 'Emerald'}
             </div>

@@ -6,7 +6,7 @@ import CaptchaVerification from '../components/auth/CaptchaVerification';
 import Button from '../components/ui/Button';
 
 const demoUsers = [
-  { label: 'Student', login: '123456789012', hint: 'LRN: 123456789012' },
+  { label: 'Student', login: '20273710', hint: 'ID: 20273710' },
   { label: 'Teacher', login: 'teacher.demo@lnhs.test', hint: 'Science Faculty' },
   { label: 'Secretary', login: 'secretary.demo@lnhs.test', hint: 'Registrar Office' },
   { label: 'Dean', login: 'dean.demo@tcc.test', hint: "Dean's Executive Office" },
@@ -40,7 +40,7 @@ export default function LoginPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || 'Invalid email/LRN or password.');
+        throw new Error(data.message || 'Invalid email/ID or password.');
       }
 
       if (data.token) {
@@ -65,7 +65,7 @@ export default function LoginPage() {
 
   const handleForgotPassword = async () => {
     if (!identifier) {
-      setError('Please enter your email or LRN first to request password reset instructions.');
+      setError('Please enter your email or ID first to request password reset instructions.');
       return;
     }
     setBusy(true);
@@ -123,7 +123,7 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit}>
           <div className="login-form-group">
             <label className="login-form-label" htmlFor="identifier">
-              Email or Learner Reference Number (LRN)
+              Email or ID
             </label>
             <input 
               id="identifier"
@@ -131,7 +131,7 @@ export default function LoginPage() {
               className="login-input"
               value={identifier}
               onChange={e => setIdentifier(e.target.value)}
-              placeholder="e.g. 123456789012 or teacher@tcc.edu.ph"
+              placeholder="e.g. 20273710 or teacher@tcc.edu.ph"
               autoComplete="username"
               required
             />
@@ -193,7 +193,7 @@ export default function LoginPage() {
             variant="accent" 
             size="lg" 
             type="submit" 
-            disabled={busy || (!captchaVerified && !identifier.includes('demo') && identifier !== '123456789012')}
+            disabled={busy || (!captchaVerified && !identifier.includes('demo') && identifier !== '20273710')}
             style={{ width: '100%', marginTop: '0.5rem' }}
           >
             {busy ? 'Authenticating...' : 'Sign In to Workspace'} <ArrowRight size={18} />
