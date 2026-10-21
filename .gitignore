@@ -1,0 +1,16 @@
+.DS_Store
+Thumbs.db
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+vendor/
+/backend/.phpunit.cache/
+/backend/database/*.sqlite
+/backend/.env
+/backend/storage/*.key
+/backend/storage/logs/*.log
+/backend/bootstrap/cache/*.php
+/legacy-reference/node_modules/
+/legacy-reference/.firebase/

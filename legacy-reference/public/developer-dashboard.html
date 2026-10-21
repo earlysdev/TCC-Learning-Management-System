@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Developer Dashboard - LNHS LMS">
+    <title>Dev Dashboard - LNHS LMS</title>
+    <link rel="icon" type="image/png" href="assets/images/logo.png">
+
+    <link rel="stylesheet" href="css/global.css">
+    <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="stylesheet" href="css/developer.css">
+</head>
+
+<body class="developer-dashboard">
+    <!-- Desktop-Only Blocker: shown on mobile via CSS (@media max-width:1024px) -->
+    <div class="desktop-required-overlay">
+        <div class="dro-icon">🖥️</div>
+        <h2>Developer Console</h2>
+        <p>The Developer Dashboard is only accessible from a desktop or laptop. Please use a larger screen to continue.
+        </p>
+        <span class="dro-badge">📱 Mobile not supported for this role</span>
+        <button onclick="droLogout()"
+            style="margin-top:1rem;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#fca5a5;padding:0.75rem 2rem;border-radius:99px;font-size:0.9rem;font-weight:600;cursor:pointer;">
+            🚪 Logout
+        </button>
+    </div>
+
+    <div class="dashboard-container">
+        <aside class="sidebar developer-sidebar">
+            <div class="sidebar-header">
+                <img src="assets/images/logo.png" alt="LNHS Logo" class="sidebar-logo">
+                <h2 class="sidebar-title">LNHS LMS</h2>
+                <span class="sidebar-badge developer-badge">🖥️ Developer</span>
+            </div>
+
+            <nav class="sidebar-nav">
+                <a href="#" class="nav-item active" data-section="overview">
+                    <span class="nav-icon">🖥️</span>
+                    <span class="nav-label">System Overview</span>
+                </a>
+                <a href="#" class="nav-item" data-section="database">
+                    <span class="nav-icon">🗄️</span>
+                    <span class="nav-label">Database</span>
+                </a>
+                <a href="#" class="nav-item" data-section="security">
+                    <span class="nav-icon">🛡️</span>
+                    <span class="nav-label">Security Monitor</span>
+                </a>
+                <a href="#" class="nav-item" data-section="logs">
+                    <span class="nav-icon">📜</span>
+                    <span class="nav-label">System Logs</span>
+                </a>
+                <a href="#" class="nav-item" data-section="backups">
+                    <span class="nav-icon">💾</span>
+                    <span class="nav-label">Backups</span>
+                </a>
+                <a href="#" class="nav-item" data-section="settings">
+                    <span class="nav-icon">⚙️</span>
+                    <span class="nav-label">Settings</span>
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <button class="btn btn-outline btn-sm" id="logoutBtn">
+                    <span>🚪</span> Logout
+                </button>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="dashboard-header">
+                <div>
+                    <h1 class="dashboard-title">Welcome, <span id="developerName">Developer</span>!</h1>
+                    <p class="dashboard-subtitle">🖥️ Developer Console — System Monitoring & Maintenance</p>
+                    <p class="user-activity" style="font-size: 0.875rem; margin-top: 0.5rem;">
+                        Server Status: <span id="serverStatus" style="color: #22c55e;">Online</span>
+                        &nbsp;•&nbsp; Last ping: <span id="lastPingTime">--:--:--</span>
+                    </p>
+                </div>
+                <div class="header-actions">
+                    <button class="btn btn-outline header-action-btn refresh-btn-lg" id="refreshDashboardBtn"
+                        title="Refresh Dashboard">
+                        🔄 Refresh
+                    </button>
+                    <div class="server-status">
+                        <span class="status-dot status-good"></span>
+                        <span>Operational</span>
+                    </div>
+                    <div class="user-avatar developer-avatar">
+                        <span id="userInitials">DV</span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- ==================== OVERVIEW ==================== -->
+            <section id="overviewSection" class="content-section">
+                <div class="grid grid-4 mb-8">
+                    <div class="stat-card card-glass developer-card">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #06b6d4, #0891b2)">⚡</div>
+                        <div class="stat-content">
+                            <h3 class="stat-value" id="cpuLoad">12%</h3>
+                            <p class="stat-label">System Load</p>
+                        </div>
+                    </div>
+                    <div class="stat-card card-glass developer-card">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #8b5cf6, #7c3aed)">🧠</div>
+                        <div class="stat-content">
+                            <h3 class="stat-value" id="memoryUsage">4.2GB</h3>
+                            <p class="stat-label">Memory Usage</p>
+                        </div>
+                    </div>
+                    <div class="stat-card card-glass developer-card">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #10b981, #059669)">💾</div>
+                        <div class="stat-content">
+                            <h3 class="stat-value" id="dbSize">145MB</h3>
+                            <p class="stat-label">Database Size</p>
+                        </div>
+                    </div>
+                    <div class="stat-card card-glass developer-card">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #f59e0b, #d97706)">👥</div>
+                        <div class="stat-content">
+                            <h3 class="stat-value" id="activeConnections">24</h3>
+                            <p class="stat-label">Active Connections</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-2 mb-6">
+                    <div class="card terminal-card">
+                        <div class="card-header">
+                            <h2 class="card-title">🚀 Real-Time Activity Stream</h2>
+                        </div>
+                        <div class="card-body">
+                            <div id="terminalOutput" class="terminal-output">
+                                <div class="log-line"><span class="timestamp">[System]</span> <span
+                                        class="prefix info">INFO</span> System initialization complete</div>
+                                <div class="log-line"><span class="timestamp">[System]</span> <span
+                                        class="prefix success">OK</span> Database connected</div>
+                                <div class="log-line"><span class="timestamp">[System]</span> <span
+                                        class="prefix info">INFO</span> Monitoring services started</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 class="card-title">📊 System Health Metrics <span class="live-pulse">● LIVE</span></h2>
+                        </div>
+                        <div class="card-body">
+                            <div class="health-metrics">
+                                <div class="metric-row">
+                                    <span>API Latency</span>
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" id="apiLatencyBar" style="width: 10%; background: #22c55e; transition: width 0.8s ease;"></div>
+                                    </div>
+                                    <span class="metric-value" id="apiLatencyValue">--ms</span>
+                                </div>
+                                <div class="metric-row">
+                                    <span>DB Reads</span>
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" id="dbReadsBar" style="width: 5%; background: #3b82f6; transition: width 0.8s ease;"></div>
+                                    </div>
+                                    <span class="metric-value" id="dbReadsValue">0</span>
+                                </div>
+                                <div class="metric-row">
+                                    <span>Error Rate</span>
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" id="errorRateBar" style="width: 0%; background: #ef4444; transition: width 0.8s ease;"></div>
+                                    </div>
+                                    <span class="metric-value" id="errorRateValue">0%</span>
+                                </div>
+                                <div class="metric-row">
+                                    <span>Uptime</span>
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" id="uptimeBar" style="width: 100%; background: #22c55e; transition: width 0.8s ease;"></div>
+                                    </div>
+                                    <span class="metric-value" id="uptimeValue">0m</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">Quick Actions</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="grid grid-3 gap-4">
+                            <button class="btn btn-primary"
+                                onclick="document.querySelector('[data-section=database]').click()">
+                                🗄️ Database Manager
+                            </button>
+                            <button class="btn btn-accent"
+                                onclick="document.querySelector('[data-section=security]').click()">
+                                🛡️ Security Monitor
+                            </button>
+                            <button class="btn btn-success" onclick="createBackup()">
+                                💾 Create Backup
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==================== DATABASE ==================== -->
+            <section id="databaseSection" class="content-section hidden">
+                <div class="section-header mb-6">
+                    <h2 class="section-title">Database Management</h2>
+                    <button class="btn btn-primary" onclick="exportData()">
+                        📥 Export JSON
+                    </button>
+                </div>
+
+                <div class="grid grid-4 mb-6">
+                    <div class="stat-card card-glass developer-card">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #06b6d4, #0891b2)">👥</div>
+                        <div class="stat-content">
+                            <h3 class="stat-value" id="countUsers">0</h3>
+                            <p class="stat-label">Users</p>
+                        </div>
+                    </div>
+                    <div class="stat-card card-glass developer-card">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #8b5cf6, #7c3aed)">📝</div>
+                        <div class="stat-content">
+                            <h3 class="stat-value" id="countQuizzes">0</h3>
+                            <p class="stat-label">Quizzes</p>
+                        </div>
+                    </div>
+                    <div class="stat-card card-glass developer-card">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #10b981, #059669)">📊</div>
+                        <div class="stat-content">
+                            <h3 class="stat-value" id="countResults">0</h3>
+                            <p class="stat-label">Results</p>
+                        </div>
+                    </div>
+                    <div class="stat-card card-glass developer-card">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #f59e0b, #d97706)">📋</div>
+                        <div class="stat-content">
+                            <h3 class="stat-value" id="countLogs">0</h3>
+                            <p class="stat-label">Logs</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">🔒 Collection Browser <span style="font-size: 0.75rem; color: #f59e0b; font-weight: 400; margin-left: 0.5rem;">Personal data is masked</span></h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="collection-browser">
+                            <div class="collection-list">
+                                <button class="collection-btn active" onclick="loadCollection('users')">users</button>
+                                <button class="collection-btn" onclick="loadCollection('quizzes')">quizzes</button>
+                                <button class="collection-btn"
+                                    onclick="loadCollection('quizResults')">quizResults</button>
+                                <button class="collection-btn"
+                                    onclick="loadCollection('activityLogs')">activityLogs</button>
+                                <button class="collection-btn"
+                                    onclick="loadCollection('securityLogs')">securityLogs</button>
+                            </div>
+                            <div class="document-viewer">
+                                <div id="jsonViewer">Select a collection to view data...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==================== SECURITY MONITOR ==================== -->
+            <section id="securitySection" class="content-section hidden">
+                <div class="section-header mb-6">
+                    <h2 class="section-title">Security Incident Monitor</h2>
+                    <div class="section-actions">
+                        <button class="btn btn-warning" onclick="clearSecurityAlerts()">
+                            Clear All Alerts
+                        </button>
+                        <button class="btn btn-primary" onclick="runSecurityScan()">
+                            Run Security Scan
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Security Stats -->
+                <div class="grid grid-4 mb-6">
+                    <div class="stat-card card-glass developer-card">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #3b82f6, #2563eb)">📊</div>
+                        <div class="stat-content">
+                            <h3 class="stat-value" id="secTotalIncidents">0</h3>
+                            <p class="stat-label">Total Incidents</p>
+                        </div>
+                    </div>
+                    <div class="stat-card card-glass developer-card">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #ef4444, #dc2626)">🔴</div>
+                        <div class="stat-content">
+                            <h3 class="stat-value" id="secCriticalHigh">0</h3>
+                            <p class="stat-label">Critical / High</p>
+                        </div>
+                    </div>
+                    <div class="stat-card card-glass developer-card">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #f59e0b, #d97706)">⚠️</div>
+                        <div class="stat-content">
+                            <h3 class="stat-value" id="secUnresolved">0</h3>
+                            <p class="stat-label">Unresolved</p>
+                        </div>
+                    </div>
+                    <div class="stat-card card-glass developer-card">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #22c55e, #16a34a)">✅</div>
+                        <div class="stat-content">
+                            <h3 class="stat-value" id="secResolved">0</h3>
+                            <p class="stat-label">Resolved</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-2 gap-6 mb-6">
+                    <!-- Active Threats -->
+                    <div class="card security-panel">
+                        <div class="card-header">
+                            <h3 class="card-title">🚨 Active Threats</h3>
+                        </div>
+                        <div class="card-body threats-scroll" id="activeThreatsList">
+                            <div class="empty-state">
+                                <span class="icon" style="font-size: 3rem;">🛡️</span>
+                                <p>No active threats detected</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Failed Logins -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">🔑 Recent Failed Logins</h3>
+                        </div>
+                        <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>IP Address</th>
+                                        <th>User / Email</th>
+                                        <th>Time</th>
+                                        <th>Reason</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="failedLoginsBody">
+                                    <tr>
+                                        <td colspan="5" class="text-center">Loading data...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Security Event Timeline -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">📅 Security Event Timeline</h3>
+                    </div>
+                    <div class="card-body">
+                        <div id="securityTimeline" class="security-timeline">
+                            <p style="color: var(--menu-text);">Loading timeline...</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==================== SYSTEM LOGS ==================== -->
+            <section id="logsSection" class="content-section hidden">
+                <div class="section-header mb-6">
+                    <h2 class="section-title">System Logs</h2>
+                    <div class="logs-filter-bar">
+                        <select id="logTypeFilter" class="form-input filter-select" onchange="filterLogs()">
+                            <option value="all">All Sources</option>
+                            <option value="activity">📋 Activity</option>
+                            <option value="security">🛡️ Security</option>
+                        </select>
+                        <select id="logSeverityFilter" class="form-input filter-select" onchange="filterLogs()">
+                            <option value="all">All Severity</option>
+                            <option value="critical">🔴 Critical</option>
+                            <option value="high">🟠 High</option>
+                            <option value="medium">🟡 Medium</option>
+                            <option value="low">🟢 Low</option>
+                            <option value="info">ℹ️ Info</option>
+                        </select>
+                        <div class="search-box">
+                            <input type="text" placeholder="Search logs..." id="logSearch" class="form-input">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-body">
+                        <div class="logs-container" id="fullLogsContainer">
+                            <p style="color: var(--menu-text);">Navigate to this section to load logs...</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==================== BACKUPS ==================== -->
+            <section id="backupsSection" class="content-section hidden">
+                <div class="section-header mb-6">
+                    <h2 class="section-title">System Backups</h2>
+                    <button class="btn btn-primary" onclick="createBackup()">
+                        ➕ Create New Backup
+                    </button>
+                </div>
+
+                <div class="card mb-6">
+                    <div class="card-header">
+                        <h3 class="card-title">💡 Backup Info</h3>
+                    </div>
+                    <div class="card-body">
+                        <p style="color: var(--menu-text); line-height: 1.7; font-size: 0.9rem;">
+                            <strong style="color: #22c55e;">Create</strong> a backup to snapshot all Firestore collections (users, quizzes, quizResults, activityLogs, securityLogs).
+                            <strong style="color: #3b82f6;">Download</strong> saves the backup as a JSON file (personal data is masked for privacy).
+                            <strong style="color: #f59e0b;">Restore</strong> writes backup data back to Firestore (merge mode — existing docs are updated, not deleted).
+                            Backups are stored in browser memory and will be lost on page reload.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-body">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Backup ID</th>
+                                    <th>Date Created</th>
+                                    <th>Size</th>
+                                    <th>Type</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="backupsTableBody">
+                                <tr>
+                                    <td colspan="6" class="text-center">No backups found — create one to get started</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==================== SETTINGS ==================== -->
+            <section id="settingsSection" class="content-section hidden">
+                <div class="section-header mb-6">
+                    <h2 class="section-title">⚙️ System Settings</h2>
+                    <button class="btn btn-primary" onclick="saveSettings()">
+                        💾 Save Settings
+                    </button>
+                </div>
+
+                <div class="grid grid-2 gap-6">
+                    <!-- Security Settings -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">🛡️ Security Settings</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="settings-group">
+                                <div class="setting-row">
+                                    <div class="setting-info">
+                                        <label class="setting-label">🔧 Maintenance Mode</label>
+                                        <p class="setting-desc">Disable access for all users except developers.</p>
+                                    </div>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="maintenanceModeToggle">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+                                <div class="setting-row">
+                                    <div class="setting-info">
+                                        <label class="setting-label">🔑 Max Login Attempts</label>
+                                        <p class="setting-desc">Number of failed login attempts before lockout.</p>
+                                    </div>
+                                    <input type="number" id="maxLoginAttemptsInput" class="form-input setting-input" min="3" max="20" value="5">
+                                </div>
+                                <div class="setting-row">
+                                    <div class="setting-info">
+                                        <label class="setting-label">⏱️ Session Timeout (minutes)</label>
+                                        <p class="setting-desc">Auto-logout after inactivity period.</p>
+                                    </div>
+                                    <input type="number" id="sessionTimeoutInput" class="form-input setting-input" min="5" max="120" value="30">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Maintenance Settings -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">🗃️ Data Management</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="settings-group">
+                                <div class="setting-row">
+                                    <div class="setting-info">
+                                        <label class="setting-label">📜 Log Retention (days)</label>
+                                        <p class="setting-desc">Auto-delete resolved logs older than this.</p>
+                                    </div>
+                                    <input type="number" id="logRetentionInput" class="form-input setting-input" min="7" max="365" value="90">
+                                </div>
+                                <div class="setting-row">
+                                    <div class="setting-info">
+                                        <label class="setting-label">🗑️ Cleanup Old Logs</label>
+                                        <p class="setting-desc">Manually delete old resolved security logs.</p>
+                                    </div>
+                                    <button class="btn btn-warning btn-sm" onclick="cleanupOldLogs()">
+                                        Run Cleanup
+                                    </button>
+                                </div>
+                                <div class="setting-row">
+                                    <div class="setting-info">
+                                        <label class="setting-label">💾 Auto-Backup</label>
+                                        <p class="setting-desc">Enable automatic scheduled backups.</p>
+                                    </div>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="autoBackupToggle">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+                                <div class="setting-row">
+                                    <div class="setting-info">
+                                        <label class="setting-label">📅 Backup Frequency</label>
+                                        <p class="setting-desc">How often auto-backups should run.</p>
+                                    </div>
+                                    <select id="autoBackupFrequency" class="form-input setting-input">
+                                        <option value="daily">Daily</option>
+                                        <option value="weekly" selected>Weekly</option>
+                                        <option value="monthly">Monthly</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+
+    <!-- <script src="js/security/console-shield.js"></script> -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
+    <script src="js/utils/lnhs-cookies.js"></script>
+    <script src="js/firebase-config.js"></script>
+
+
+    <script src="js/security/session-manager.js"></script>
+    <script src="js/security/activity-tracker.js"></script>
+    <script src="js/security/security-logger.js"></script>
+
+    <script src="js/utils/permissions.js"></script>
+    <script src="js/utils/navigation-guard.js"></script>
+
+    <!-- Mobile Navigation -->
+    <script src="js/utils/mobile-nav.js"></script>
+
+    <script src="js/developer.js"></script>
+
+    <!-- Desktop-only blocker logout -->
+    <script>
+        function droLogout() {
+            firebase.auth().signOut()
+                .then(() => { window.location.href = 'login.html'; })
+                .catch(() => { window.location.href = 'login.html'; });
+        }
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Take Quiz - LNHS LMS">
+    <title>Quiz - LNHS LMS</title>
+    <link rel="icon" type="image/png" href="assets/images/logo.png">
+
+    <!-- Global Styles -->
+    <link rel="stylesheet" href="css/global.css">
+    <link rel="stylesheet" href="css/quiz.css">
+</head>
+
+<body>
+    <div class="quiz-container">
+        <!-- Quiz Header -->
+        <header class="quiz-header card-glass">
+            <div class="header-left">
+                <a href="student-dashboard.html" class="back-link">← Back to Dashboard</a>
+                <h1 class="quiz-title" id="quizTitle">Loading Quiz...</h1>
+            </div>
+            <div class="header-right">
+                <div class="timer" id="timer">
+                    <span class="timer-icon">⏱️</span>
+                    <span id="timerDisplay">00:00</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Progress Bar -->
+        <div class="progress-container">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <p class="progress-text">
+                Question <span id="currentQuestion">1</span> of <span id="totalQuestions">10</span>
+            </p>
+        </div>
+
+        <!-- Quiz Content -->
+        <main class="quiz-content" id="quizContent">
+            <!-- Questions will be loaded here -->
+        </main>
+
+        <!-- Navigation Buttons -->
+        <div class="quiz-navigation" id="quizNavigation">
+            <button class="btn btn-outline" id="prevBtn" disabled>Previous</button>
+            <button class="btn btn-primary" id="nextBtn">Next</button>
+            <button class="btn btn-success hidden" id="submitBtn">Submit Quiz</button>
+        </div>
+
+        <!-- Results Modal -->
+        <div class="modal hidden" id="resultsModal">
+            <div class="modal-content card-glass">
+                <div class="results-header">
+                    <div class="results-icon">🎉</div>
+                    <h2 class="results-title">Quiz Completed!</h2>
+                </div>
+
+                <div class="results-score">
+                    <div class="score-circle">
+                        <div class="score-percentage" id="finalPercentage">0%</div>
+                        <div class="score-label">Score</div>
+                    </div>
+                </div>
+
+                <div class="results-details">
+                    <div class="result-item">
+                        <span class="result-label">Correct Answers:</span>
+                        <span class="result-value" id="correctAnswers">0</span>
+                    </div>
+                    <div class="result-item">
+                        <span class="result-label">Total Questions:</span>
+                        <span class="result-value" id="totalQuestionsResult">0</span>
+                    </div>
+                    <div class="result-item">
+                        <span class="result-label">Points:</span>
+                        <span class="result-value"><span id="finalScore">0</span>/<span id="maxScore">0</span></span>
+                    </div>
+                </div>
+
+                <div class="ai-recommendations" id="aiRecommendationsSection">
+                    <h3>🤖 AI Recommendations</h3>
+                    <div class="recommendations-loading">Generating personalized recommendations...</div>
+                    <div class="recommendations-content hidden" id="aiRecommendationsContent"></div>
+                </div>
+
+                <div class="modal-actions">
+                    <button class="btn btn-primary" onclick="window.location.href='student-dashboard.html'">
+                        Back to Dashboard
+                    </button>
+                    <button class="btn btn-outline" id="reviewBtn">Review Answers</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script src="js/security/console-shield.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
+    <!-- Firebase Config -->
+    <script src="js/utils/lnhs-cookies.js"></script>
+    <script src="js/firebase-config.js"></script>
+
+    <!-- Security Scripts -->
+    <script src="js/security/tab-monitor.js"></script>
+    <script src="js/security/screenshot-blocker.js"></script>
+    <script src="js/security/activity-tracker.js"></script>
+
+    <!-- AI Recommendations -->
+    <script src="js/ai-recommendations.js"></script>
+
+    <!-- Quiz Logic -->
+    <script src="js/quiz.js"></script>
+</body>
+
+</html>

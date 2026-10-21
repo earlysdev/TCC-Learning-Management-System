@@ -1,0 +1,235 @@
+  rules_version = '2';
+  service cloud.firestore {
+    match /databases/{database}/documents {
+
+      function isAuthenticated() {
+        return request.auth != null;
+      }
+
+      function isOwner(userId) {
+        return request.auth.uid == userId;
+      }
+
+      function getUserRole() {
+        return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+      }
+
+      function hasRole(role) {
+        return isAuthenticated() && getUserRole() == role;
+      }
+
+      function isStudent() {
+        return hasRole('student');
+      }
+
+      function isTeacher() {
+        return hasRole('teacher');
+      }
+
+      function isSecretary() {
+        return hasRole('secretary');
+      }
+
+      function isPrincipal() {
+        return hasRole('principal');
+      }
+
+      function isAdmin() {
+        return hasRole('admin') || hasRole('principal') || hasRole('secretary') || hasRole('developer');
+      }
+
+      match /users/{userId} {
+        // LRN login fallback: allow unauthenticated list so login.js can query by lrn field
+        // This is needed for students whose lrnMapping document was not created
+        allow list: if true;
+
+        // Any authenticated user can read user data (needed for role lookups, dashboard queries)
+        allow read: if isAuthenticated();
+
+        // Users can update their OWN document — but cannot change role, email, or LRN
+        allow update: if isAuthenticated() && isOwner(userId)
+                      && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'email', 'lrn']);
+
+        // Teachers can ONLY update student documents (e.g. grade, section assignment)
+        // They cannot escalate or modify other teachers / admin accounts
+        allow update: if isTeacher()
+                      && resource.data.role == 'student';
+
+        // Only admins (principal / secretary) can create, update (like status toggle), or delete accounts
+        allow create: if isAdmin();
+        allow update: if isAdmin();
+        allow delete: if isAdmin();
+
+        // Known devices subcollection — for IP-based device verification
+        match /knownDevices/{deviceId} {
+          // Users can read and write their own known devices
+          allow read, write: if isAuthenticated() && isOwner(userId);
+
+          // Admins can read/manage any user's devices
+          allow read, write: if isAdmin();
+        }
+      }
+
+      match /lrnMapping/{lrn} {
+        // Anyone can read a specific LRN mapping to get the email during login
+        allow get: if true;
+        // Also allow list queries on lrnMapping (needed for LRN fallback login query)
+        allow list: if true;
+
+        // Only admins can create/update LRN mappings (when creating/updating students)
+        allow write: if isAdmin();
+      }
+
+      match /quizzes/{quizId} {
+        allow read: if isStudent();
+
+        allow read: if isTeacher() && resource.data.createdBy == request.auth.uid;
+
+        allow read: if isTeacher();
+
+        allow read: if isAdmin();
+
+        allow create: if isTeacher() && request.resource.data.createdBy == request.auth.uid;
+
+        allow update: if isTeacher() && resource.data.createdBy == request.auth.uid;
+
+        allow delete: if isTeacher() && resource.data.createdBy == request.auth.uid;
+
+        allow write: if isAdmin();
+      }
+
+      match /quizResults/{resultId} {
+        // Students can only read their own results
+        allow read: if isStudent() && resource.data.studentId == request.auth.uid;
+
+        // Teachers and admins can read all results
+        allow read: if isTeacher();
+        allow read: if isAdmin();
+
+        // Students can only submit results for themselves — one-time create, no edits
+        allow create: if isStudent() && request.resource.data.studentId == request.auth.uid;
+
+        // Teachers can update results (for manual essay grading), but only specific fields
+        allow update: if isTeacher() 
+                      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['score', 'maxScore', 'percentage', 'questionScores']);
+                      
+        // Results are immutable for students — only principals can delete (e.g. data cleanup)
+        allow delete: if isPrincipal();
+      }
+
+      match /quizAttempts/{attemptId} {
+        allow read: if isStudent() && resource.data.studentId == request.auth.uid;
+
+        allow read: if isTeacher();
+
+        allow create: if isStudent() && request.resource.data.studentId == request.auth.uid;
+
+        allow update: if isStudent() 
+                      && resource.data.studentId == request.auth.uid 
+                      && resource.data.isCompleted == false;
+
+        allow delete: if false;
+      }
+
+      match /aiRecommendations/{recommendationId} {
+        allow read: if isStudent() && resource.data.studentId == request.auth.uid;
+
+        allow read: if isTeacher();
+
+        allow create: if isStudent() && request.resource.data.studentId == request.auth.uid;
+
+        allow create: if isTeacher();
+
+        allow update: if isTeacher();
+
+        allow delete: if isTeacher();
+      }
+
+      match /announcements/{announcementId} {
+        allow read: if isAuthenticated();
+
+        allow create: if isTeacher() && request.resource.data.createdBy == request.auth.uid;
+
+        allow update: if isTeacher() && resource.data.createdBy == request.auth.uid;
+
+        allow delete: if isTeacher() && resource.data.createdBy == request.auth.uid;
+
+        allow write: if isAdmin();
+      }
+
+      match /notifications/{notificationId} {
+        // FIX: also allow read if recipientRole matches (for principal dashboard query)
+        allow read: if isAuthenticated() && (
+                      resource.data.userId == request.auth.uid ||
+                      resource.data.recipientRole == getUserRole() ||
+                      isAdmin()
+                    );
+
+        allow create: if isAuthenticated();
+
+        allow update: if isAuthenticated() 
+                      && resource.data.userId == request.auth.uid
+                      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead', 'read', 'readAt']);
+
+        // FIX: allow admin to mark notifications as read (isRead + readAt fields)
+        allow update: if isAdmin()
+                      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead', 'readAt']);
+
+        allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      }
+
+      match /analytics/{analyticsId} {
+        allow read: if isTeacher();
+
+        allow read: if isAdmin();
+
+        allow write: if isTeacher() || isAdmin();
+      }
+
+      match /sessions/{sessionId} {
+        allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+
+        allow read: if isAdmin();
+
+        allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+
+        allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
+
+        allow delete: if isAdmin();
+      }
+
+      match /systemConfig/{configId} {
+        // Any authenticated user can read system config (e.g. current school year)
+        allow read: if isAuthenticated();
+
+        // Only admins (principal / secretary) can write system config
+        allow write: if isAdmin();
+      }
+
+      match /activityLogs/{logId} {
+        allow read: if isAdmin();
+
+        allow create: if isAuthenticated();
+
+        allow update, delete: if false;
+      }
+
+      match /securityLogs/{logId} {
+        allow read: if isAdmin();
+
+        allow create: if isAuthenticated();
+
+        // FIX: allow admins (principal) to update logs e.g. marking as resolved
+        allow update: if isAdmin();
+
+        allow delete: if false;
+      }
+
+      match /systemSettings/{configId} {
+        // All authenticated users can read (needed for maintenance mode check)
+        allow read: if isAuthenticated();
+        // Only admins/developers can modify settings
+        allow write: if isAdmin();
+      }
+    }
+  }

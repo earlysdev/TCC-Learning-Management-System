@@ -1,0 +1,1292 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Principal Dashboard - LNHS LMS Administration & Oversight">
+    <title>Principal Dashboard - LNHS LMS</title>
+    <link rel="icon" type="image/png" href="assets/images/logo.png">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@600;700;800&display=swap"
+        rel="stylesheet">
+
+    <!-- Stylesheets -->
+    <link rel="stylesheet" href="css/global.css">
+    <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="stylesheet" href="css/principal.css">
+</head>
+
+<body>
+    <!-- Desktop-Only Blocker: shown on mobile via CSS (@media max-width:1024px) -->
+    <div class="desktop-required-overlay">
+        <div class="dro-icon">🖥️</div>
+        <h2>Desktop Required</h2>
+        <p>The Principal Dashboard requires a desktop or laptop screen to use. Please switch to a larger device to
+            continue.</p>
+        <span class="dro-badge">📱 Mobile not supported for this role</span>
+        <button onclick="droLogout()"
+            style="margin-top:1rem;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#fca5a5;padding:0.75rem 2rem;border-radius:99px;font-size:0.9rem;font-weight:600;cursor:pointer;">
+            🚪 Logout
+        </button>
+    </div>
+
+    <!-- Mobile Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleMobileSidebar()"></div>
+
+    <div class="dashboard-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <img src="assets/images/logo.png" alt="LNHS Logo" class="sidebar-logo">
+                <h2 class="sidebar-title">LNHS LMS</h2>
+                <span class="sidebar-badge principal-badge">🏢 Principal</span>
+            </div>
+
+            <nav class="sidebar-nav">
+                <a href="#" class="nav-item active" data-section="overview">
+                    <span class="nav-icon">📊</span>
+                    <span class="nav-label">Overview</span>
+                </a>
+                <a href="#" class="nav-item" data-section="users">
+                    <span class="nav-icon">👥</span>
+                    <span class="nav-label">User Management</span>
+                </a>
+                <a href="#" class="nav-item" data-section="student-records">
+                    <span class="nav-icon">📚</span>
+                    <span class="nav-label">Student Records</span>
+                </a>
+
+                <a href="#" class="nav-item" data-section="quizzes">
+                    <span class="nav-icon">📝</span>
+                    <span class="nav-label">Quiz Oversight</span>
+                </a>
+                <a href="#" class="nav-item" data-section="security">
+                    <span class="nav-icon">🛡️</span>
+                    <span class="nav-label">Security</span>
+                </a>
+                <a href="#" class="nav-item" data-section="analytics">
+                    <span class="nav-icon">📈</span>
+                    <span class="nav-label">Analytics</span>
+                </a>
+                <a href="#" class="nav-item" data-section="activity">
+                    <span class="nav-icon">📋</span>
+                    <span class="nav-label">Activity Logs</span>
+                </a>
+                <a href="#" class="nav-item" data-section="health">
+                    <span class="nav-icon">💚</span>
+                    <span class="nav-label">System Health</span>
+                </a>
+                <a href="#" class="nav-item" data-section="settings">
+                    <span class="nav-icon">⚙️</span>
+                    <span class="nav-label">Settings</span>
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <button class="btn btn-error btn-sm" id="logoutBtn">
+                    <span>🚪</span> Logout
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Top Bar (Mobile) -->
+            <div class="mobile-topbar">
+                <button class="hamburger-btn" id="hamburgerBtn" onclick="toggleMobileSidebar()">
+                    <span></span><span></span><span></span>
+                </button>
+                <h2 class="mobile-title">LNHS LMS</h2>
+                <div class="user-avatar principal-avatar mobile-avatar">
+                    <span id="userInitialsMobile">PR</span>
+                </div>
+            </div>
+
+            <!-- Dashboard Header -->
+            <header class="dashboard-header principal-header">
+                <div class="header-content">
+                    <div class="header-greeting">
+                        <p class="greeting-label">Welcome back,</p>
+                        <h1 class="dashboard-title"><span id="principalName">Principal</span></h1>
+                        <p class="dashboard-subtitle">🏢 Principal Dashboard — Full System Administration & Oversight
+                        </p>
+                    </div>
+                    <p class="header-timestamp">
+                        Last active: <span id="lastActivityTime">Just now</span>
+                    </p>
+                </div>
+                <div class="header-actions">
+                    <button class="btn btn-outline header-action-btn refresh-btn-lg" id="refreshDashboardBtn"
+                        title="Refresh Dashboard"
+                        style="border-color: rgba(255,255,255,0.2); color: rgba(255,255,255,0.8);">
+                        🔄 Refresh
+                    </button>
+                    <div class="user-avatar principal-avatar">
+                        <span id="userInitials">PR</span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- ===================== OVERVIEW SECTION ===================== -->
+            <section id="overviewSection" class="content-section">
+                <!-- Stats Row -->
+                <div class="principal-stats-row">
+                    <div class="stat-card card-glass">
+                        <button class="stat-card-goto" onclick="document.querySelector('[data-section=users]').click()"
+                            title="Go to User Management">→</button>
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #3f51b5, #5c6bc0)">👨‍🎓</div>
+                        <div class="stat-content">
+                            <h3 class="stat-value" id="totalStudents">0</h3>
+                            <p class="stat-label">Total Students</p>
+                        </div>
+                    </div>
+                    <div class="stat-card card-glass">
+                        <button class="stat-card-goto" onclick="document.querySelector('[data-section=users]').click()"
+                            title="Go to User Management">→</button>
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #43a047, #66bb6a)">👨‍🏫</div>
+                        <div class="stat-content">
+                            <h3 class="stat-value" id="totalTeachers">0</h3>
+                            <p class="stat-label">Total Teachers</p>
+                        </div>
+                    </div>
+                    <div class="stat-card card-glass">
+                        <button class="stat-card-goto"
+                            onclick="document.querySelector('[data-section=quizzes]').click()"
+                            title="Go to Quiz Oversight">→</button>
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #7b1fa2, #ab47bc)">📝</div>
+                        <div class="stat-content">
+                            <h3 class="stat-value" id="totalQuizzes">0</h3>
+                            <p class="stat-label">Total Quizzes</p>
+                        </div>
+                    </div>
+                    <div class="stat-card card-glass">
+                        <button class="stat-card-goto"
+                            onclick="document.querySelector('[data-section=security]').click()"
+                            title="Go to Security">→</button>
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #c62828, #ef5350)">🚨</div>
+                        <div class="stat-content">
+                            <h3 class="stat-value" id="securityAlerts">0</h3>
+                            <p class="stat-label">Security Alerts</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bento Grid Layout -->
+                <div class="bento-grid">
+                    <!-- System Performance (Large) -->
+                    <div class="bento-card bento-wide">
+                        <div class="bento-header">
+                            <h2 class="bento-title">📊 System Performance</h2>
+                            <span class="bento-badge badge-live">● Live</span>
+                        </div>
+                        <div class="bento-body">
+                            <div class="perf-metrics-grid">
+                                <div class="perf-metric">
+                                    <div class="perf-ring" data-value="0" id="avgScoreRing">
+                                        <svg viewBox="0 0 100 100">
+                                            <circle cx="50" cy="50" r="42" class="ring-bg" />
+                                            <circle cx="50" cy="50" r="42" class="ring-fill ring-blue"
+                                                stroke-dasharray="264" stroke-dashoffset="264" />
+                                        </svg>
+                                        <span class="ring-value" id="avgScore">0%</span>
+                                    </div>
+                                    <p class="perf-label">Avg Score</p>
+                                </div>
+                                <div class="perf-metric">
+                                    <div class="perf-ring" data-value="0" id="completionRateRing">
+                                        <svg viewBox="0 0 100 100">
+                                            <circle cx="50" cy="50" r="42" class="ring-bg" />
+                                            <circle cx="50" cy="50" r="42" class="ring-fill ring-green"
+                                                stroke-dasharray="264" stroke-dashoffset="264" />
+                                        </svg>
+                                        <span class="ring-value" id="completionRate">0%</span>
+                                    </div>
+                                    <p class="perf-label">Completion</p>
+                                </div>
+                                <div class="perf-metric">
+                                    <div class="perf-ring" data-value="0" id="activeUsersRing">
+                                        <svg viewBox="0 0 100 100">
+                                            <circle cx="50" cy="50" r="42" class="ring-bg" />
+                                            <circle cx="50" cy="50" r="42" class="ring-fill ring-purple"
+                                                stroke-dasharray="264" stroke-dashoffset="264" />
+                                        </svg>
+                                        <span class="ring-value" id="activeUsers">0</span>
+                                    </div>
+                                    <p class="perf-label">Active Users</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Recent Security Events -->
+                    <div class="bento-card bento-tall">
+                        <div class="bento-header">
+                            <h2 class="bento-title">🛡️ Security Events</h2>
+                        </div>
+                        <div class="bento-body bento-scroll">
+                            <div id="recentSecurityEvents" class="security-events-list">
+                                <p style="color: white; text-align: center; padding: 2rem 0;">No recent
+                                    security events</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quick Actions -->
+                    <div class="bento-card bento-actions">
+                        <div class="bento-header">
+                            <h2 class="bento-title">⚡ Quick Actions</h2>
+                        </div>
+                        <div class="bento-body">
+                            <div class="quick-actions-grid">
+                                <button class="action-tile action-blue"
+                                    onclick="document.querySelector('[data-section=users]').click()">
+                                    <span class="action-icon">👥</span>
+                                    <span class="action-text">Manage Users</span>
+                                </button>
+                                <button class="action-tile action-purple"
+                                    onclick="document.querySelector('[data-section=quizzes]').click()">
+                                    <span class="action-icon">📝</span>
+                                    <span class="action-text">View Quizzes</span>
+                                </button>
+                                <button class="action-tile action-green"
+                                    onclick="document.querySelector('[data-section=analytics]').click()">
+                                    <span class="action-icon">📈</span>
+                                    <span class="action-text">Analytics</span>
+                                </button>
+                                <button class="action-tile action-red"
+                                    onclick="document.querySelector('[data-section=security]').click()">
+                                    <span class="action-icon">🛡️</span>
+                                    <span class="action-text">Security</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ✅ FIX: Added Notifications Panel (notificationsList was missing from HTML) -->
+                    <div class="bento-card bento-wide">
+                        <div class="bento-header"
+                            style="display: flex; justify-content: space-between; align-items: center;">
+                            <h2 class="bento-title">
+                                🔔 Notifications
+                                <span id="notifCount"
+                                    style="display:none; background: #ef4444; color: white; font-size: 0.7rem; font-weight: 700; border-radius: 999px; padding: 0.15rem 0.5rem; margin-left: 0.4rem; vertical-align: middle;"></span>
+                            </h2>
+                            <button class="btn btn-sm btn-outline" onclick="markAllAsRead()"
+                                style="font-size: 0.8rem; padding: 0.35rem 0.85rem;">
+                                ✅ Mark All Read
+                            </button>
+                        </div>
+                        <div class="bento-body bento-scroll">
+                            <div id="notificationsList" class="notifications-list">
+                                <p style="color: white; text-align: center; padding: 2rem 0;">Loading
+                                    notifications...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ===================== USER MANAGEMENT ===================== -->
+            <section id="usersSection" class="content-section hidden">
+                <div class="section-header mb-6">
+                    <div>
+                        <h2 class="section-title">User Management</h2>
+                        <p style="color: var(--gray-600); font-size: 0.95rem; margin-top: 0.5rem;">
+                            Manage all system users, roles, and account statuses
+                        </p>
+                    </div>
+                    <button class="btn btn-primary" onclick="createUser()">
+                        <span>➕</span> Create New User
+                    </button>
+                </div>
+
+                <!-- Search and Filter Bar -->
+                <div class="card mb-6">
+                    <div class="card-body">
+                        <div class="search-filter-row">
+                            <div class="form-group" style="margin-bottom: 0; flex: 2;">
+                                <label class="form-label">Search Users</label>
+                                <input type="text" id="userSearchInput" class="form-input"
+                                    placeholder="Search by name, email, or LRN..." onkeyup="filterUsersTable()">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 0; flex: 1;">
+                                <label class="form-label">Filter by Status</label>
+                                <select id="userStatusFilter" class="form-input" onchange="filterUsersTable()">
+                                    <option value="all">All Status</option>
+                                    <option value="active">Active Only</option>
+                                    <option value="inactive">Inactive Only</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="margin-bottom: 0; flex: 1;">
+                                <label class="form-label">School Year</label>
+                                <select id="userSchoolYearFilter" class="form-input" onchange="filterUsersTable()">
+                                    <option value="all">All Years</option>
+                                    <option value="2024-2025">2024-2025</option>
+                                    <option value="2025-2026">2025-2026</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Role Filter Tabs -->
+                <div class="quiz-tabs mb-6">
+                    <button class="tab-btn active" data-role="all">All Users</button>
+                    <button class="tab-btn" data-role="teacher">Teachers</button>
+                    <button class="tab-btn" data-role="student">Students</button>
+                    <button class="tab-btn" data-role="secretary">Secretaries</button>
+                    <button class="tab-btn" data-role="developer">Developers</button>
+                </div>
+
+                <div class="card">
+                    <div class="card-body" style="padding: 0;">
+                        <div class="table-container">
+                            <table class="data-table enhanced-table">
+                                <thead>
+                                    <tr>
+                                        <th>
+                                            <div class="th-content"><span>Name</span></div>
+                                        </th>
+                                        <th class="hide-mobile">
+                                            <div class="th-content"><span>Email</span></div>
+                                        </th>
+                                        <th>
+                                            <div class="th-content"><span>Role</span></div>
+                                        </th>
+                                        <th>
+                                            <div class="th-content"><span>Status</span></div>
+                                        </th>
+                                        <th>
+                                            <div class="th-content"><span>SY</span></div>
+                                        </th>
+                                        <th class="hide-mobile">
+                                            <div class="th-content"><span>Last Active</span></div>
+                                        </th>
+                                        <th>
+                                            <div class="th-content"><span>Actions</span></div>
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody id="usersTableBody">
+                                    <tr>
+                                        <td colspan="6" class="text-center">Loading users...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ===================== STUDENT RECORDS ===================== -->
+            <section id="studentRecordsSection" class="content-section hidden">
+                <div class="section-header mb-6">
+                    <h2 class="section-title">📚 Student Records</h2>
+                    <p style="font-size:0.85rem;color:var(--gray-400);margin-top:0.25rem;">View and filter students by
+                        School Year and Section</p>
+                </div>
+
+                <!-- Quick Access Buttons -->
+                <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1.5rem;">
+                    <button class="btn btn-primary" id="pGoToGraduatedBtn"
+                        style="background:linear-gradient(135deg,#7b1fa2,#ab47bc);gap:0.5rem;padding:0.75rem 1.5rem;border-radius:12px;font-weight:600;">
+                        🎓 Graduated Students
+                    </button>
+                    <button class="btn btn-primary" id="pGoToSchoolYearBtn"
+                        style="background:linear-gradient(135deg,#1565c0,#42a5f5);gap:0.5rem;padding:0.75rem 1.5rem;border-radius:12px;font-weight:600;">
+                        🗓️ School Year
+                    </button>
+                </div>
+
+                <div class="card mb-6">
+                    <div class="card-body" style="padding:1.5rem;">
+                        <div style="display:flex;gap:1rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:1.5rem;">
+                            <div class="form-group" style="min-width:150px;">
+                                <label class="form-label">School Year</label>
+                                <select id="pSrSchoolYearFilter" class="form-input">
+                                    <option value="all">All School Years</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="min-width:150px;">
+                                <label class="form-label">Grade Level</label>
+                                <select id="pSrGradeFilter" class="form-input">
+                                    <option value="all">All Grades</option>
+                                    <option value="7">Grade 7</option>
+                                    <option value="8">Grade 8</option>
+                                    <option value="9">Grade 9</option>
+                                    <option value="10">Grade 10</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="min-width:150px;">
+                                <label class="form-label">Section</label>
+                                <select id="pSrSectionFilter" class="form-input">
+                                    <option value="all">All Sections</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="flex:1;min-width:180px;">
+                                <label class="form-label">Search</label>
+                                <input type="search" id="pSrSearchInput" class="form-input"
+                                    placeholder="Search by name or LRN...">
+                            </div>
+                        </div>
+
+                        <div id="pStudentRecordsStats"
+                            style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1.5rem;"></div>
+
+                        <div class="table-container">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th style="text-align:center;">LRN</th>
+                                        <th style="text-align:center;">Grade</th>
+                                        <th style="text-align:center;">Section</th>
+                                        <th style="text-align:center;">School Year</th>
+                                        <th style="text-align:center;">Status</th>
+                                        <th>Email</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="pStudentRecordsBody">
+                                    <tr>
+                                        <td colspan="7" class="text-center">Loading student records...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ===================== SCHOOL YEAR MANAGEMENT ===================== -->
+            <section id="schoolYearSection" class="content-section hidden">
+                <div class="section-header mb-6"
+                    style="display:flex; justify-content:space-between; align-items:flex-start;">
+                    <div>
+                        <h2 class="section-title">📅 School Year Management</h2>
+                        <p style="color:var(--gray-600);font-size:0.95rem;margin-top:0.5rem;">Manage the current school
+                            year, promote students, and assign sections.</p>
+                    </div>
+                    <button class="btn btn-outline btn-sm"
+                        onclick="document.querySelector('[data-section=\'student-records\']').click()"
+                        style="margin-top:0.5rem;">
+                        ← Back to Student Records
+                    </button>
+                </div>
+
+                <div style="display:flex;flex-direction:column;gap:1.5rem;">
+
+                    <!-- Current SY Status -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">📆 Current School Year Status</h3>
+                        </div>
+                        <div class="card-body">
+                            <div id="pSchoolYearStatus" style="color:var(--gray-400);font-size:0.95rem;">Loading school
+                                year...</div>
+                        </div>
+                    </div>
+
+                    <!-- Set School Year Interval -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">⚙️ Set School Year Interval</h3>
+                        </div>
+                        <div class="card-body">
+                            <div style="display:flex;gap:1rem;flex-wrap:wrap;align-items:flex-end;">
+                                <div class="form-group" style="min-width:180px;">
+                                    <label class="form-label">School Year Label</label>
+                                    <input type="text" id="pSyLabel" class="form-input" placeholder="e.g. 2025-2026">
+                                </div>
+                                <div class="form-group" style="min-width:170px;">
+                                    <label class="form-label">Start Date</label>
+                                    <input type="date" id="pSyStartDate" class="form-input">
+                                </div>
+                                <div class="form-group" style="min-width:170px;">
+                                    <label class="form-label">End Date</label>
+                                    <input type="date" id="pSyEndDate" class="form-input">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" style="opacity:0;">&nbsp;</label>
+                                    <button class="btn btn-primary" onclick="pSaveSchoolYear()">💾 Save School
+                                        Year</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Moving Up (Promote Students) -->
+                    <div class="card" style="border:2px solid rgba(239,68,68,0.3);">
+                        <div class="card-header" style="background:rgba(239,68,68,0.08);">
+                            <h3 class="card-title" style="color:#f87171;">🎓 Moving Up</h3>
+                            <p style="font-size:0.82rem;color:var(--gray-400);margin-top:0.25rem;">Use at end of school
+                                year. Increments selected active students by one grade level, archives their history,
+                                and
+                                clears their section assignment.</p>
+                        </div>
+                        <div class="card-body">
+                            <div style="display:flex;gap:1rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:1rem;">
+                                <div class="form-group" style="min-width:150px;">
+                                    <label class="form-label">Grade Level</label>
+                                    <select id="pMoveUpGradeFilter" class="form-input"
+                                        onchange="pRenderMoveUpStudents()">
+                                        <option value="">Select Grade</option>
+                                        <option value="7">Grade 7</option>
+                                        <option value="8">Grade 8</option>
+                                        <option value="9">Grade 9</option>
+                                        <option value="10">Grade 10</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" style="min-width:200px;">
+                                    <label class="form-label">New School Year Label</label>
+                                    <input type="text" id="pPromotionTargetSY" class="form-input"
+                                        placeholder="e.g. 2026-2027">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" style="opacity:0;">&nbsp;</label>
+                                    <button class="btn btn-error" onclick="pMoveUpStudents()"
+                                        style="background:linear-gradient(135deg,#ef4444,#b91c1c);">🚀 Move Up Selected
+                                        Students</button>
+                                </div>
+                            </div>
+
+                            <!-- Student Selection List -->
+                            <div id="pMoveUpStudentsListContainer" class="form-group"
+                                style="margin-top:1rem; display:none;">
+                                <label class="form-label">Select Students to Move Up</label>
+                                <div style="display:flex;align-items:center;margin-bottom:0.5rem;">
+                                    <input type="checkbox" id="pSelectAllMoveUp"
+                                        onchange="pToggleAllMoveUp(this.checked)"
+                                        style="width:16px;height:16px;cursor:pointer;margin-right:0.5rem;">
+                                    <label for="pSelectAllMoveUp"
+                                        style="cursor:pointer;font-weight:600;font-size:0.85rem;">Select / Deselect
+                                        All</label>
+                                </div>
+                                <div id="pMoveUpStudentsList"
+                                    style="max-height:250px;overflow-y:auto;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:0.75rem;">
+                                    <!-- Populated by JS -->
+                                </div>
+                            </div>
+
+                            <p style="font-size:0.78rem;color:#f87171;margin-top:0.75rem;">⚠️ This action is
+                                irreversible. Sections will be cleared for moved up students and must be re-assigned.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Bulk Section Assigner -->
+                    <div class="card" style="border:2px solid rgba(99,102,241,0.3);">
+                        <div class="card-header" style="background:rgba(99,102,241,0.08);">
+                            <h3 class="card-title" style="color:#a5b4fc;">📋 Bulk Section Assigner</h3>
+                            <p style="font-size:0.82rem;color:var(--gray-400);margin-top:0.25rem;">Assign a section to
+                                selected students of a given grade (e.g. after promotion). You may also update existing
+                                sections.</p>
+                        </div>
+                        <div class="card-body">
+                            <div style="display:flex;gap:1rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:1rem;">
+                                <div class="form-group" style="min-width:150px;">
+                                    <label class="form-label">Grade Level</label>
+                                    <select id="pBulkAssignGrade" class="form-input"
+                                        onchange="pRenderUnassignedStudents(this.value)">
+                                        <option value="">Select Grade</option>
+                                        <option value="7">Grade 7</option>
+                                        <option value="8">Grade 8</option>
+                                        <option value="9">Grade 9</option>
+                                        <option value="10">Grade 10</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" style="min-width:180px;">
+                                    <label class="form-label">Section to Assign</label>
+                                    <input type="text" id="pBulkAssignSection" class="form-input"
+                                        placeholder="e.g. A, Rizal">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" style="opacity:0;">&nbsp;</label>
+                                    <button class="btn btn-primary" onclick="pBulkAssignSection()"
+                                        style="background:linear-gradient(135deg,#6366f1,#4f46e5);">✅ Assign to All
+                                        Listed</button>
+                                </div>
+                            </div>
+                            <div id="pUnassignedStudentsList"
+                                style="font-size:0.85rem;color:var(--gray-400);padding:0.5rem 0;">
+                                <em>Select a grade to view students.</em>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </section>
+
+            <!-- ===================== GRADUATED STUDENTS ===================== -->
+            <section id="pGraduatedSection" class="content-section hidden">
+                <div class="section-header mb-6"
+                    style="display:flex; justify-content:space-between; align-items:flex-start;">
+                    <div>
+                        <h2 class="section-title">🎓 Graduated Students</h2>
+                        <p style="font-size:0.85rem;color:var(--gray-400);margin-top:0.25rem;">Alumni who completed
+                            Grade 10
+                            and were promoted beyond the school.</p>
+                    </div>
+                    <button class="btn btn-outline btn-sm"
+                        onclick="document.querySelector('[data-section=\'student-records\']').click()"
+                        style="margin-top:0.5rem;">
+                        ← Back to Student Records
+                    </button>
+                </div>
+
+                <div class="card mb-6">
+                    <div class="card-body" style="padding:1.5rem;">
+                        <div style="display:flex;gap:1rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:1.5rem;">
+                            <div class="form-group" style="min-width:150px;">
+                                <label class="form-label">School Year</label>
+                                <select id="pGradSyFilter" class="form-input">
+                                    <option value="all">All School Years</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="flex:1;min-width:180px;">
+                                <label class="form-label">Search</label>
+                                <input type="search" id="pGradSearchInput" class="form-input"
+                                    placeholder="Search by name or LRN...">
+                            </div>
+                        </div>
+
+                        <div id="pGraduatedStats" style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1.5rem;">
+                        </div>
+
+                        <div class="table-container">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th style="text-align:center;">LRN</th>
+                                        <th style="text-align:center;">School Year Graduated</th>
+                                        <th style="text-align:center;">Status</th>
+                                        <th>Email</th>
+                                        <th style="text-align:center;">History</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="pGraduatedStudentsBody">
+                                    <tr>
+                                        <td colspan="6" class="text-center">Loading graduated students...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+
+            <section id="quizzesSection" class="content-section hidden">
+                <div class="section-header mb-6">
+                    <h2 class="section-title">Quiz Oversight</h2>
+                </div>
+
+                <div class="quiz-tabs mb-6">
+                    <button class="tab-btn active" data-status="all">All Quizzes</button>
+                    <button class="tab-btn" data-status="present">Present</button>
+                    <button class="tab-btn" data-status="upcoming">Upcoming</button>
+                    <button class="tab-btn" data-status="past">Past</button>
+                </div>
+
+                <div id="quizzesList" class="quizzes-grid">
+                    <p style="color: white; text-align: center;">Loading quizzes...</p>
+                </div>
+            </section>
+
+            <!-- ===================== SECURITY ===================== -->
+            <section id="securitySection" class="content-section hidden">
+                <div class="section-header mb-6">
+                    <h2 class="section-title">System Security</h2>
+                </div>
+
+                <div class="principal-stats-row mb-6">
+                    <div class="stat-card card-glass">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #ef4444, #f87171)">⚡</div>
+                        <div class="stat-content">
+                            <h3 class="stat-value" id="criticalCount">0</h3>
+                            <p class="stat-label">Critical</p>
+                        </div>
+                    </div>
+                    <div class="stat-card card-glass">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #f97316, #fb923c)">⚠️</div>
+                        <div class="stat-content">
+                            <h3 class="stat-value" id="highCount">0</h3>
+                            <p class="stat-label">High</p>
+                        </div>
+                    </div>
+                    <div class="stat-card card-glass">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #f59e0b, #fbbf24)">⚠️</div>
+                        <div class="stat-content">
+                            <h3 class="stat-value" id="mediumCount">0</h3>
+                            <p class="stat-label">Medium</p>
+                        </div>
+                    </div>
+                    <div class="stat-card card-glass">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #10b981, #34d399)">ℹ️</div>
+                        <div class="stat-content">
+                            <h3 class="stat-value" id="lowCount">0</h3>
+                            <p class="stat-label">Low</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header"
+                        style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+                        <h2 class="card-title">Security Logs</h2>
+                        <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+                            <select id="securityLogsSeverityFilter" class="form-input"
+                                style="width: 160px; padding: 0.5rem 0.75rem; font-size: 0.85rem;"
+                                onchange="filterSecurityLogs()">
+                                <option value="all">All Severities</option>
+                                <option value="critical">Critical</option>
+                                <option value="high">High</option>
+                                <option value="medium">Medium</option>
+                                <option value="low">Low</option>
+                            </select>
+                            <input type="text" id="securityLogsSearch" class="form-input"
+                                placeholder="🔍 Search logs..."
+                                style="width: 220px; padding: 0.5rem 0.75rem; font-size: 0.85rem;"
+                                oninput="filterSecurityLogs()">
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div id="securityLogsList" class="security-logs">
+                            <p style="color: white;">Loading security logs...</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ===================== ANALYTICS ===================== -->
+            <section id="analyticsSection" class="content-section hidden">
+                <div class="section-header mb-6">
+                    <h2 class="section-title">System Analytics</h2>
+                </div>
+
+                <div class="principal-stats-row mb-6">
+                    <div class="stat-card card-glass">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #7b1fa2, #ab47bc)">📝</div>
+                        <div class="stat-content">
+                            <h3 class="stat-value" id="analyticsQuizzes">0</h3>
+                            <p class="stat-label">Total Quizzes</p>
+                        </div>
+                    </div>
+                    <div class="stat-card card-glass">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #3f51b5, #5c6bc0)">📊</div>
+                        <div class="stat-content">
+                            <h3 class="stat-value" id="analyticsAvgScore">0%</h3>
+                            <p class="stat-label">Average Score</p>
+                        </div>
+                    </div>
+                    <div class="stat-card card-glass">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #43a047, #66bb6a)">✅</div>
+                        <div class="stat-content">
+                            <h3 class="stat-value" id="analyticsCompletionRate">0%</h3>
+                            <p class="stat-label">Completion Rate</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">📈 Performance Trends</h2>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="principalPerformanceTrendsChart" height="280"></canvas>
+                        <div id="principalTrendsEmpty"
+                            style="display:none;text-align:center;padding:3rem;color:rgba(255,255,255,0.5);">
+                            <div style="font-size:3rem;margin-bottom:0.75rem;">📊</div>
+                            <p style="margin:0;">No quiz data yet. Performance trends will appear once students submit
+                                quizzes.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ===================== ACTIVITY LOGS (Principal View) ===================== -->
+            <section id="activitySection" class="content-section hidden">
+                <div class="section-header mb-6">
+                    <h2 class="section-title">📋 Global Activity Logs</h2>
+                    <p style="color: var(--gray-600); font-size: 0.95rem; margin-top: 0.5rem;">
+                        Monitor real-time interactions across the entire system
+                    </p>
+                </div>
+
+                <div class="card">
+                    <div class="card-header"
+                        style="display: flex; justify-content: space-between; align-items: center;">
+                        <h3 class="card-title">System-wide Activity</h3>
+                        <div class="header-actions">
+                            <select id="principalActivityFilter" class="form-input"
+                                style="width: 200px; padding: 0.4rem;">
+                                <option value="all">All Activities</option>
+                                <option value="login">Logins/Logouts</option>
+                                <option value="quiz">Quiz Activity</option>
+                                <option value="user_management">User Management</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="card-body" style="padding:0;">
+                        <div id="principalActivityLogsList" class="activity-logs"
+                            style="max-height:520px;overflow-y:auto;padding:0.5rem 0;">
+                            <p style="color: white; text-align: center; padding: 2rem;">Loading activity
+                                logs...</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ===================== SETTINGS ===================== -->
+            <section id="settingsSection" class="content-section hidden">
+                <div class="section-header mb-6">
+                    <h2 class="section-title">System Settings</h2>
+                </div>
+
+                <div class="settings-grid-layout">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">General Settings</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-group">
+                                <label class="form-label">School Name</label>
+                                <input type="text" id="schoolName" class="form-input"
+                                    value="Tagoloan Community College">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">System Email</label>
+                                <input type="email" id="systemEmail" class="form-input" value="principal@lnhs.edu.ph">
+                            </div>
+                            <button class="btn btn-primary mt-4" onclick="saveSettings()">Save Changes</button>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">Security Configuration</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-group">
+                                <label class="form-label">Session Timeout (minutes)</label>
+                                <input type="number" id="sessionTimeout" class="form-input" value="10">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Max Login Attempts</label>
+                                <input type="number" id="maxLoginAttempts" class="form-input" value="3">
+                            </div>
+                            <button class="btn btn-warning mt-4" onclick="saveSecuritySettings()">Update
+                                Security</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ===================== SYSTEM HEALTH ===================== -->
+            <section id="healthSection" class="content-section hidden">
+                <div class="section-header mb-6">
+                    <h2 class="section-title">💚 System Health Monitoring</h2>
+                </div>
+
+                <div class="principal-stats-row mb-6">
+                    <div class="stat-card card-glass">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #3f51b5, #5c6bc0)">🗄️</div>
+                        <div class="stat-content">
+                            <h3 class="stat-value" id="healthDocCount">0</h3>
+                            <p class="stat-label">Total Documents</p>
+                        </div>
+                    </div>
+                    <div class="stat-card card-glass">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #43a047, #66bb6a)">📶</div>
+                        <div class="stat-content">
+                            <h3 class="stat-value" id="healthActiveSessions">0</h3>
+                            <p class="stat-label">Active Sessions</p>
+                        </div>
+                    </div>
+                    <div class="stat-card card-glass">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #7b1fa2, #ab47bc)">⚡</div>
+                        <div class="stat-content">
+                            <h3 class="stat-value" id="healthSystemLoad">Normal</h3>
+                            <p class="stat-label">System Load</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-3 gap-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">Database Status</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="status-indicator status-good">
+                                <span class="status-dot"></span>
+                                <span>Operational</span>
+                            </div>
+                            <div class="health-details" style="margin-top: 1rem;">
+                                <p>Collections: <strong id="healthCollectionCount">0</strong></p>
+                                <p>Total Documents: <strong id="healthDocumentCount">0</strong></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">Active Sessions</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="session-stats">
+                                <p>Current Sessions: <strong id="healthCurrentSessions">0</strong></p>
+                                <p>Peak Today: <strong id="healthPeakSessions">0</strong></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">Storage Usage</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="storage-info">
+                                <p>Used: <strong id="healthStorageUsed">0 MB</strong></p>
+                                <p>Available: <strong>Unlimited (Firebase)</strong></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Create Account Modal (matching Secretary pattern) -->
+    <div id="principalCreateAccountModal" class="modal hidden">
+        <div class="modal-overlay" onclick="closePrincipalCreateModal()"></div>
+        <div class="modal-content" style="max-width: 700px;">
+            <div class="modal-header"
+                style="background: linear-gradient(135deg, #3f51b5, #5c6bc0); border-radius: 16px 16px 0 0;">
+                <h2 class="modal-title" style="color: white;">➕ Create New Account</h2>
+                <button class="modal-close" onclick="closePrincipalCreateModal()" style="color: white;">✕</button>
+            </div>
+            <div class="modal-body" style="padding: 2rem;">
+                <form id="principalCreateUserForm">
+                    <div class="form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+                        <div class="form-group">
+                            <label class="form-label">Account Type</label>
+                            <select id="pUserRole" class="form-input" required>
+                                <option value="">Select Role</option>
+                                <option value="student">Student</option>
+                                <option value="teacher">Teacher</option>
+                                <option value="secretary">Secretary</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="pLrnGroup" style="display: none;">
+                            <label class="form-label">LRN (Learner Reference Number)</label>
+                            <input type="text" id="pUserLRN" class="form-input" placeholder="12-digit LRN">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">First Name</label>
+                            <input type="text" id="pUserFirstName" class="form-input" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Middle Initial <small
+                                    style="opacity:0.6;">(optional)</small></label>
+                            <input type="text" id="pUserMiddleInitial" class="form-input" placeholder="e.g., A"
+                                maxlength="2" style="max-width:120px;">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Last Name</label>
+                            <input type="text" id="pUserLastName" class="form-input" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Email Address</label>
+                            <input type="email" id="pUserEmail" class="form-input" required>
+                        </div>
+                        <div class="form-group" style="grid-column: 1 / -1;">
+                            <label class="form-label">Password</label>
+                            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                <input type="text" id="pUserPassword" class="form-input" required minlength="6"
+                                    placeholder="Enter or generate a password" style="flex: 1;">
+                                <button type="button" class="btn btn-accent" onclick="principalGeneratePassword()"
+                                    style="white-space: nowrap; padding: 0.6rem 1rem; font-size: 0.85rem;">🔑
+                                    Generate</button>
+                            </div>
+                        </div>
+                        <div class="form-group" id="pGradeGroup" style="display: none;">
+                            <label class="form-label">Grade Level</label>
+                            <select id="pUserGrade" class="form-input">
+                                <option value="">Select Grade</option>
+                                <option value="7">Grade 7</option>
+                                <option value="8">Grade 8</option>
+                                <option value="9">Grade 9</option>
+                                <option value="10">Grade 10</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="pSectionGroup" style="display: none;">
+                            <label class="form-label">Section</label>
+                            <input type="text" id="pUserSection" class="form-input" placeholder="e.g., A, B, C">
+                        </div>
+                        <div class="form-group" id="pSchoolYearGroup" style="display: none;">
+                            <label class="form-label">School Year</label>
+                            <select id="pUserSchoolYear" class="form-input">
+                                <option value="2025-2026">2025-2026</option>
+                                <option value="2024-2025">2024-2025</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-actions mt-6" style="display:flex;gap:0.75rem;">
+                        <button type="submit" class="btn btn-primary" style="flex:1;">✅ Create Account</button>
+                        <button type="button" class="btn btn-secondary" onclick="closePrincipalCreateModal()"
+                            style="flex:1;">❌ Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Account Created Success Modal -->
+    <div id="principalAccountCreatedModal" class="modal hidden">
+        <div class="modal-overlay" onclick="closePrincipalAccountModal()"></div>
+        <div class="modal-content" style="max-width: 550px;">
+            <div class="modal-header"
+                style="background: linear-gradient(135deg, #43a047, #66bb6a); border-radius: 16px 16px 0 0;">
+                <h2 class="modal-title" style="color: white;">✅ Account Created Successfully!</h2>
+                <button class="modal-close" onclick="closePrincipalAccountModal()" style="color: black;">✕</button>
+            </div>
+            <div class="modal-body" style="padding: 2rem;">
+                <p style="color: var(--gray-600); margin-bottom: 1.5rem; font-size: 0.95rem;">The account has been
+                    created. Below are the login credentials.</p>
+                <div
+                    style="background: var(--gray-100); border: 1px solid var(--gray-200); border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem;">
+                    <div style="display: grid; gap: 1rem;">
+                        <div>
+                            <span
+                                style="font-size: 0.75rem; text-transform: uppercase; color: var(--gray-400); font-weight: 600;">Full
+                                Name</span>
+                            <p id="pCredName"
+                                style="font-weight: 600; color: var(--gray-800); font-size: 1rem; margin: 0.25rem 0 0;">
+                            </p>
+                        </div>
+                        <div>
+                            <span
+                                style="font-size: 0.75rem; text-transform: uppercase; color: var(--gray-400); font-weight: 600;">Role</span>
+                            <p id="pCredRole"
+                                style="font-weight: 600; color: var(--gray-800); font-size: 1rem; margin: 0.25rem 0 0; text-transform: capitalize;">
+                            </p>
+                        </div>
+                        <div id="pCredLRNRow" style="display: none;">
+                            <span
+                                style="font-size: 0.75rem; text-transform: uppercase; color: var(--gray-400); font-weight: 600;">LRN</span>
+                            <p id="pCredLRN"
+                                style="font-weight: 600; color: var(--gray-800); font-size: 1rem; margin: 0.25rem 0 0; font-family: monospace;">
+                            </p>
+                        </div>
+                        <div>
+                            <span
+                                style="font-size: 0.75rem; text-transform: uppercase; color: var(--gray-400); font-weight: 600;">Email</span>
+                            <p id="pCredEmail"
+                                style="font-weight: 600; color: var(--gray-800); font-size: 1rem; margin: 0.25rem 0 0;">
+                            </p>
+                        </div>
+                        <div>
+                            <span
+                                style="font-size: 0.75rem; text-transform: uppercase; color: var(--gray-400); font-weight: 600;">Password</span>
+                            <p id="pCredPassword"
+                                style="font-weight: 600; color: #fbbf24; font-size: 1rem; margin: 0.25rem 0 0; font-family: monospace; background: rgba(251,191,36,0.15); padding: 0.5rem; border-radius: 6px; display: inline-block;">
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                    <button class="btn btn-secondary" onclick="principalCopyCredentials()"
+                        style="width: 100%; padding: 0.75rem;">📋 Copy Credentials</button>
+                    <button class="btn btn-secondary" onclick="closePrincipalAccountModal()"
+                        style="width: 100%; padding: 0.75rem;">✕ Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal (Standard - shared with all dashboards) -->
+    <div id="settingsModal" class="modal hidden">
+        <div class="modal-overlay" onclick="closeSettingsModal()"></div>
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h2 class="modal-title">⚙️ Settings</h2>
+                <button class="modal-close" onclick="closeSettingsModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <!-- User Info -->
+                <div class="settings-section">
+                    <h3 class="settings-section-title">🏢 Principal Information</h3>
+                    <div class="settings-info-grid">
+                        <div class="settings-info-item">
+                            <span class="settings-info-label">Full Name</span>
+                            <span class="settings-info-value" id="settingsFullName">—</span>
+                        </div>
+                        <div class="settings-info-item">
+                            <span class="settings-info-label">Email</span>
+                            <span class="settings-info-value" id="settingsEmail">—</span>
+                        </div>
+                        <div class="settings-info-item">
+                            <span class="settings-info-label">Role</span>
+                            <span class="settings-info-value" id="settingsRole">—</span>
+                        </div>
+                        <div class="settings-info-item">
+                            <span class="settings-info-label">Account Created</span>
+                            <span class="settings-info-value" id="settingsDateCreated">—</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Appearance -->
+                <div class="settings-section">
+                    <h3 class="settings-section-title">🎨 Appearance</h3>
+                    <div class="settings-toggle-row">
+                        <div>
+                            <span class="settings-toggle-label">Dark Mode</span>
+                            <span class="settings-toggle-desc">Switch between light and dark theme</span>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="darkModeToggle">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Change Password -->
+                <div class="settings-section">
+                    <h3 class="settings-section-title">🔒 Change Password</h3>
+                    <div class="form-group">
+                        <label class="form-label">Current Password</label>
+                        <div class="password-input-wrapper">
+                            <input type="password" id="currentPassword" class="form-input"
+                                placeholder="Enter current password">
+                            <button type="button" class="pw-eye-btn"
+                                onclick="togglePwVisibility('currentPassword', this)" title="Show/Hide"></button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">New Password</label>
+                        <div class="password-input-wrapper">
+                            <input type="password" id="newPassword" class="form-input" placeholder="Min. 6 characters"
+                                minlength="6" oninput="updatePwStrength(this.value)">
+                            <button type="button" class="pw-eye-btn" onclick="togglePwVisibility('newPassword', this)"
+                                title="Show/Hide"></button>
+                        </div>
+                        <div class="pw-strength-bar-wrap">
+                            <div class="pw-strength-bar" id="pwStrengthBar"></div>
+                        </div>
+                        <span class="pw-strength-label" id="pwStrengthLabel"></span>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Confirm New Password</label>
+                        <div class="password-input-wrapper">
+                            <input type="password" id="confirmPassword" class="form-input"
+                                placeholder="Re-enter new password" oninput="checkPwMatch()">
+                            <button type="button" class="pw-eye-btn"
+                                onclick="togglePwVisibility('confirmPassword', this)" title="Show/Hide"></button>
+                        </div>
+                        <span class="pw-match-label" id="pwMatchLabel"></span>
+                    </div>
+                    <button class="btn btn-primary" onclick="changePassword()" style="width: 100%; margin-top: 0.5rem;">
+                        🔐 Update Password
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase -->
+    <script src="js/security/console-shield.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
+    <!-- App Scripts -->
+    <script src="js/utils/lnhs-cookies.js"></script>
+    <script src="js/firebase-config.js"></script>
+
+    <!-- Mobile Navigation -->
+    <script src="js/utils/mobile-nav.js"></script>
+
+    <!-- Email Service -->
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+    <script src="js/email-config.js"></script>
+
+    <!-- Dashboard Settings (theme + settings modal) -->
+    <script src="js/utils/dashboard-settings.js"></script>
+
+    <!-- Security Modules -->
+    <script src="js/security/session-manager.js"></script>
+    <script src="js/security/activity-tracker.js"></script>
+    <script src="js/security/security-logger.js"></script>
+
+    <!-- Utility Modules -->
+    <script src="js/utils/permissions.js"></script>
+    <script src="js/utils/navigation-guard.js"></script>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+    <!-- Principal Dashboard Script -->
+    <script src="js/principal.js"></script>
+
+    <!-- Staff Tutorial -->
+    <script src="js/utils/staff-tutorial.js"></script>
+
+    <!-- Mobile Sidebar Toggle -->
+    <script>
+        function toggleMobileSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            sidebar.classList.toggle('sidebar-open');
+            overlay.classList.toggle('overlay-visible');
+        }
+
+        // Close sidebar when nav item clicked on mobile
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', () => {
+                if (window.innerWidth <= 1024) {
+                    toggleMobileSidebar();
+                }
+            });
+        });
+
+        // Desktop-only blocker logout button
+        function droLogout() {
+            firebase.auth().signOut()
+                .then(() => { window.location.href = 'login.html'; })
+                .catch(() => { window.location.href = 'login.html'; });
+        }
+
+        // Quick Access Buttons in Student Records
+        function showPrincipalSection(sectionId) {
+            document.querySelectorAll('.content-section').forEach(s => s.classList.add('hidden'));
+            const target = document.getElementById(sectionId);
+            if (target) target.classList.remove('hidden');
+        }
+
+        const pGoToGraduatedBtn = document.getElementById('pGoToGraduatedBtn');
+        if (pGoToGraduatedBtn) {
+            pGoToGraduatedBtn.addEventListener('click', () => {
+                showPrincipalSection('pGraduatedSection');
+                if (typeof renderPrincipalGraduatedStudents === 'function') renderPrincipalGraduatedStudents();
+            });
+        }
+
+        const pGoToSchoolYearBtn = document.getElementById('pGoToSchoolYearBtn');
+        if (pGoToSchoolYearBtn) {
+            pGoToSchoolYearBtn.addEventListener('click', () => {
+                showPrincipalSection('schoolYearSection');
+                if (typeof pLoadCurrentSchoolYear === 'function') pLoadCurrentSchoolYear();
+            });
+        }
+
+    </script>
+</body>
+
+</html>

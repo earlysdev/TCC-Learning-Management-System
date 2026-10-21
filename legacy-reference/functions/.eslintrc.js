@@ -1,0 +1,1 @@
+module.exports = { env: { es6: true, node: true }, extends: ['eslint:recommended', 'google'], rules: { quotes: ['error', 'double'], 'max-len': 'off', 'require-jsdoc': 'off', 'object-curly-spacing': 'off', 'indent': 'off', 'comma-dangle': 'off' } };

@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description"
+    content="Tagoloan Community College Learning Management System - Integrated with Online Quiz, Analytics Module and AI-Driven Recommendations">
+  <meta name="google-site-verification" content="ati3PeLuOKJJcu7rlRiL4gJPpPQtHBnPhFXBvqczQoc">
+  <title>LNHS LMS</title>
+  <link rel="icon" type="image/png" href="assets/images/logo.png">
+
+  <link rel="stylesheet" href="css/global.css">
+  <link rel="stylesheet" href="css/homepage.css">
+  <script src="js/security/console-shield.js"></script>
+</head>
+
+<body>
+  <header class="navbar">
+    <div class="container">
+      <div class="navbar-content">
+        <div class="logo-section">
+          <img src="assets/images/logo.png" alt="LNHS Logo" class="logo-img">
+          <div class="logo-text">
+            <h1 class="logo-title">Tagoloan Community College</h1>
+            <p class="logo-subtitle">Learning Management System</p>
+          </div>
+        </div>
+
+        <nav class="nav-buttons">
+          <a href="#about" class="btn btn-glass">About</a>
+          <a href="#features" class="btn btn-glass">Features</a>
+          <a href="#download-app" class="btn btn-glass" style="display: flex; align-items: center; gap: 8px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+              <line x1="12" y1="18" x2="12.01" y2="18"></line>
+            </svg>
+            Get App
+          </a>
+          <a href="login.html" class="btn btn-primary">Login</a>
+        </nav>
+      </div>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div class="hero-slider">
+      <div class="hero-slide active" style="background-image: url('assets/images/Inside.jpg')">
+        <div class="hero-overlay"></div>
+        <div class="hero-content animate-fade-in">
+          <h1 class="hero-title">Welcome to LNHS LMS</h1>
+          <p class="hero-subtitle">Empowering Education Through Technology</p>
+          <a href="#login-section" class="btn btn-accent btn-lg">Get Started</a>
+        </div>
+      </div>
+
+      <div class="hero-slide" style="background-image: url('assets/images/Covered\ Court.png')">
+        <div class="hero-overlay"></div>
+        <div class="hero-content">
+          <h1 class="hero-title">AI-Powered Learning</h1>
+          <p class="hero-subtitle">Personalized Recommendations for Every Student</p>
+          <a href="#features" class="btn btn-accent btn-lg">Learn More</a>
+        </div>
+      </div>
+
+      <div class="hero-slide" style="background-image: url('assets/images/Lapasan\ National\ High\ School.jpg')">
+        <div class="hero-overlay"></div>
+        <div class="hero-content">
+          <h1 class="hero-title">Track Your Progress</h1>
+          <p class="hero-subtitle">Real-time Analytics and Performance Insights</p>
+          <a href="login.html" class="btn btn-accent btn-lg">Start Learning</a>
+        </div>
+      </div>
+    </div>
+
+    <button class="slider-btn slider-prev" onclick="changeSlide(0)">‹</button>
+    <button class="slider-btn slider-next" onclick="changeSlide(1)">›</button>
+
+    <div class="slider-indicators">
+      <span class="indicator active" onclick="goToSlide(0)"></span>
+      <span class="indicator" onclick="goToSlide(1)"></span>
+      <span class="indicator" onclick="goToSlide(2)"></span>
+    </div>
+  </section>
+
+  <section id="about" class="section section-about">
+    <div class="container">
+      <h2 class="section-title text-center">About Tagoloan Community College</h2>
+      <h2 class="section-title text-center">Learning Management System</h2>
+      <p class="section-description text-center">
+        Tagoloan Community College's Learning Management System integrates cutting-edge technology
+        with traditional education to provide students with an exceptional learning experience.
+      </p>
+
+      <div class="grid grid-3 mt-8">
+        <div class="card" style="text-align:center;">
+          <div class="icon-wrapper">
+            <svg class="icon" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+              <path fill-rule="evenodd"
+                d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z"
+                clip-rule="evenodd" />
+            </svg>
+          </div>
+          <h3>Vision</h3>
+          <p style="font-size:0.9rem;line-height:1.7;">
+            We dream of Filipinos who passionately love their country and whose values and competencies enable them to
+            realize their full potential and contribute meaningfully to building the nation.
+          </p>
+          <p style="font-size:0.85rem;line-height:1.7;margin-top:0.75rem;opacity:0.85;">
+            As a learner-centered public institution, the Department of Education continuously improves itself to better
+            serve its stakeholders.
+          </p>
+        </div>
+
+        <div class="card" style="text-align:center;">
+          <div class="icon-wrapper">
+            <svg class="icon" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd"
+                d="M6 6V5a3 3 0 013-3h2a3 3 0 013 3v1h2a2 2 0 012 2v3.57A22.952 22.952 0 0110 13a22.95 22.95 0 01-8-1.43V8a2 2 0 012-2h2zm2-1a1 1 0 011-1h2a1 1 0 011 1v1H8V5zm1 5a1 1 0 011-1h.01a1 1 0 110 2H10a1 1 0 01-1-1z"
+                clip-rule="evenodd" />
+              <path
+                d="M2 13.692V16a2 2 0 002 2h12a2 2 0 002-2v-2.308A24.974 24.974 0 0110 15c-2.796 0-5.487-.46-8-1.308z" />
+            </svg>
+          </div>
+          <h3>Mission</h3>
+          <p style="font-size:0.9rem;line-height:1.7;">
+            To protect and promote the right of every Filipino to quality, equitable, culture-based, and complete basic
+            education where:
+          </p>
+          <ul
+            style="text-align:left;font-size:0.82rem;line-height:1.7;margin-top:0.5rem;padding-left:1.2rem;opacity:0.9;">
+            <li>Students learn in a child-friendly, gender-sensitive, safe, and motivating environment.</li>
+            <li>Teachers facilitate learning and constantly nurture every learner.</li>
+            <li>Administrators and staff ensure an enabling and supportive environment for effective learning.</li>
+            <li>Family, community, and other stakeholders are actively engaged and share responsibility for developing
+              life-long learners.</li>
+          </ul>
+        </div>
+
+        <div class="card" style="text-align:center;">
+          <div class="icon-wrapper">
+            <svg class="icon" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd"
+                d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z"
+                clip-rule="evenodd" />
+            </svg>
+          </div>
+          <h3>Core Values</h3>
+          <div style="display:flex;flex-direction:column;gap:0.6rem;margin-top:0.5rem;">
+            <span
+              style="background:#667eea;color:#ffffff;padding:0.5rem 1rem;border-radius:12px;font-weight:600;font-size:0.95rem;text-shadow:0 1px 2px rgba(0,0,0,0.15);">Maka-Diyos</span>
+            <span
+              style="background:#43a047;color:#ffffff;padding:0.5rem 1rem;border-radius:12px;font-weight:600;font-size:0.95rem;text-shadow:0 1px 2px rgba(0,0,0,0.15);">Maka-tao</span>
+            <span
+              style="background:#00897b;color:#ffffff;padding:0.5rem 1rem;border-radius:12px;font-weight:600;font-size:0.95rem;text-shadow:0 1px 2px rgba(0,0,0,0.15);">Makakalikasan</span>
+            <span
+              style="background:#f57c00;color:#ffffff;padding:0.5rem 1rem;border-radius:12px;font-weight:600;font-size:0.95rem;text-shadow:0 1px 2px rgba(0,0,0,0.15);">Makabansa</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="features" class="section section-features">
+    <div class="container">
+      <h2 class="section-title text-center">Platform Features</h2>
+      <p class="section-description text-center">
+        Everything you need for a modern learning experience
+      </p>
+
+      <div class="grid grid-3 mt-8">
+        <div class="feature-card">
+          <div class="feature-icon">📝</div>
+          <h3>Online Quiz System</h3>
+          <p>Take quizzes anytime, anywhere with instant results and detailed feedback.</p>
+          <ul class="feature-list">
+            <li>✓ Real-time scoring</li>
+            <li>✓ Deadline tracking</li>
+            <li>✓ Organized Questions</li>
+          </ul>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">📊</div>
+          <h3>Analytics Dashboard</h3>
+          <p>Track your progress with comprehensive analytics and performance insights.</p>
+          <ul class="feature-list">
+            <li>✓ Performance charts</li>
+            <li>✓ Progress tracking</li>
+            <li>✓ Score history</li>
+          </ul>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🤖</div>
+          <h3>AI Recommendations</h3>
+          <p>Get personalized study recommendations powered by artificial intelligence.</p>
+          <ul class="feature-list">
+            <li>✓ Personalized feedback</li>
+            <li>✓ Suggested topics</li>
+            <li>✓ Study strategies</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="download-app" class="section section-download">
+    <div class="container">
+      <div
+        style="background: linear-gradient(135deg, var(--primary-600), var(--primary-800)); border-radius: 24px; padding: 48px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 40px; box-shadow: var(--shadow-xl);">
+        <div style="flex: 1; min-width: 300px;">
+          <h2
+            style="color: white; font-size: 2.25rem; font-weight: 800; margin-bottom: 16px; font-family: var(--font-heading);">
+            Take Quiz Anywhere, Anytime.</h2>
+          <p
+            style="color: rgba(255,255,255,0.9); font-size: 1.125rem; margin-bottom: 32px; line-height: 1.6; max-width: 500px;">
+            Take your learning journey on the go! Download the official Tagoloan Community College mobile app for
+            students to access quizzes, view scores right from your pocket.
+            <br><br>
+            <strong>Note:</strong> This is a student, teachers, secretary app while the principal use the web version.
+            <br><br>
+            <strong>Disclaimer:</strong> You will be redirected through Google Drive, as this app was published through
+            Free Resources
+          </p>
+          <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+            <a href="https://drive.google.com/file/d/1Jo3tJdPhtlIq3wn_hhLBGu15YBNZmlZn/view" target="_blank"
+              rel="noopener noreferrer" class="btn"
+              style="background: white; color: var(--primary-700); font-weight: 700; display: flex; align-items: center; gap: 8px; padding: 12px 24px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+              Download Mobile App (.apk)
+            </a>
+          </div>
+        </div>
+        <div style="flex: 1; display: flex; justify-content: center; min-width: 300px;">
+          <div
+            style="width: 240px; height: 480px; background: #0f172a; border-radius: 36px; border: 12px solid #334155; position: relative; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
+            <!-- Phone Screen and Notch -->
+            <div
+              style="position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 80px; height: 16px; background: #334155; border-bottom-left-radius: 12px; border-bottom-right-radius: 12px; z-index: 10;">
+            </div>
+
+            <div
+              style="background: linear-gradient(to bottom, #747eed, #32227d); height: 100%; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding: 20px; text-align: center;">
+
+              <div
+                style="background: white; border-radius: 16px; padding: 12px; margin-bottom: 20px; margin-top: 24px; position: relative; z-index: 20; box-shadow: 0 4px 6px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: center;">
+                <img src="assets/images/logo.png" style="width: 50px;" alt="App Logo" />
+              </div>
+
+              <h3
+                style="color: white; font-family: var(--font-heading); font-size: 1.3rem; font-weight: 800; margin-bottom: 4px; letter-spacing: 0.5px;">
+                Welcome Back</h3>
+              <p style="color: rgba(255,255,255,0.75); font-size: 0.75rem; margin-bottom: 24px;">Sign in to access your
+                dashboard</p>
+
+              <div
+                style="width: 100%; background: rgba(255, 255, 255, 0.1); border-radius: 16px; padding: 16px; border: 1px solid rgba(255, 255, 255, 0.15); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);">
+                <div
+                  style="width: 100%; background: rgba(255, 255, 255, 0.08); border-radius: 8px; height: 32px; margin-bottom: 12px;">
+                </div>
+                <div
+                  style="width: 100%; background: rgba(255, 255, 255, 0.08); border-radius: 8px; height: 32px; margin-bottom: 12px;">
+                </div>
+                <div
+                  style="width: 100%; background: rgba(255, 255, 255, 0.08); border-radius: 8px; height: 32px; margin-bottom: 24px;">
+                </div>
+
+                <div
+                  style="width: 100%; background: #333ba3; border-radius: 10px; height: 36px; display: flex; align-items: center; justify-content: center;">
+                  <span style="color: white; font-size: 0.8rem; font-weight: 700;">Sign In</span>
+                </div>
+              </div>
+
+              <p style="color: rgba(255,255,255,0.6); font-size: 0.6rem; margin-top: 24px;">Don't have an account?
+                Contact your school secretary.</p>
+
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="login-section" class="section section-login">
+    <div class="container">
+      <div class="login-wrapper">
+        <div class="card-glass login-card">
+          <img src="assets/images/logo.png" alt="LNHS Logo" class="login-logo">
+          <h2 class="login-title">Access Your Account</h2>
+          <p class="login-description">Sign in to start your learning journey</p>
+
+          <div class="login-buttons">
+            <a href="login.html" class="btn btn-primary btn-lg" style="width: 100%;">
+              Login to Portal
+            </a>
+          </div>
+
+          <p class="login-note">
+            Don't have an account? Contact your school secretary for registration.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-content">
+        <div class="footer-section">
+          <h4>Tagoloan Community College</h4>
+          <p>Excellence in Education Since Establishment</p>
+          <p class="mt-2">Empowering minds, shaping futures.</p>
+        </div>
+
+        <div class="footer-section">
+          <h4>Quick Links</h4>
+          <ul class="footer-links">
+            <li><a href="#about">About Us</a></li>
+            <li><a href="#features">Features</a></li>
+            <li><a href="login.html">Login</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-section">
+          <h4>Contact Us</h4>
+          <p>📧 info@lnhs.edu.ph</p>
+          <p>📞 (088) 856-4352</p>
+          <p>📍 Tagoloan Community College, Cagayan de Oro City</p>
+        </div>
+      </div>
+
+      <div class="footer-bottom">
+        <p>&copy; 2026 Tagoloan Community College. All rights reserved.</p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    let currentSlide = 0;
+    const slides = document.querySelectorAll('.hero-slide');
+    const indicators = document.querySelectorAll('.indicator');
+
+    function showSlide(n) {
+      slides.forEach(slide => slide.classList.remove('active'));
+      indicators.forEach(ind => ind.classList.remove('active'));
+
+      currentSlide = (n + slides.length) % slides.length;
+
+      slides[currentSlide].classList.add('active');
+      indicators[currentSlide].classList.add('active');
+    }
+
+    function changeSlide(direction) {
+      showSlide(currentSlide + direction);
+    }
+
+    function goToSlide(n) {
+      showSlide(n);
+    }
+
+    setInterval(() => {
+      changeSlide(1);
+    }, 5000);
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        e.preventDefault();
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    });
+
+    let lastScrollTop = 0;
+    const navbar = document.querySelector('.navbar');
+    let scrollThreshold = 100;
+
+    window.addEventListener('scroll', function () {
+      const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+
+      if (scrollTop > scrollThreshold) {
+        if (scrollTop > lastScrollTop) {
+          navbar.classList.add('navbar-hidden');
+        } else {
+          navbar.classList.remove('navbar-hidden');
+        }
+      } else {
+        navbar.classList.remove('navbar-hidden');
+      }
+
+      lastScrollTop = scrollTop <= 0 ? 0 : scrollTop;
+    }, false);
+
+    document.querySelectorAll('.nav-buttons a').forEach(link => {
+      link.addEventListener('click', function () {
+        navbar.classList.remove('navbar-hidden');
+      });
+    });
+  </script>
+</body>
+
+</html>

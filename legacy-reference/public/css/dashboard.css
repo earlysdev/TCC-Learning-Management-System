@@ -1,0 +1,4085 @@
+/* ========================================
+   Dashboard Styles
+   ======================================== */
+
+.dashboard-container {
+    display: flex;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background-attachment: fixed;
+}
+
+/* ========================================
+   SIDEBAR
+   ======================================== */
+
+.sidebar {
+    width: 280px;
+    background: rgba(26, 35, 126, 0.95);
+    backdrop-filter: blur(20px);
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    height: 100vh;
+    overflow-y: auto;
+}
+
+.sidebar-header {
+    padding: var(--space-6);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    text-align: center;
+}
+
+.sidebar-logo {
+    width: 80px;
+    height: 80px;
+    object-fit: contain;
+    margin-bottom: var(--space-3);
+}
+
+.sidebar-title {
+    color: white;
+    font-size: 1.5rem;
+    margin: 0;
+}
+
+.sidebar-nav {
+    flex: 1;
+    padding: var(--space-6) 0;
+}
+
+.nav-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-4) var(--space-6);
+    color: rgba(255, 255, 255, 0.8);
+    font-weight: 500;
+    text-decoration: none;
+    transition: all var(--transition-fast);
+    border-left: 3px solid transparent;
+}
+
+.nav-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+.nav-item.active {
+    background: rgba(255, 255, 255, 0.15);
+    color: white;
+    border-left-color: white;
+}
+
+.nav-icon {
+    font-size: 1.5rem;
+}
+
+.nav-label {
+    font-size: 1rem;
+}
+
+.sidebar-footer {
+    padding: var(--space-6);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    position: sticky;
+    bottom: 0;
+    background: rgba(26, 35, 126, 0.98);
+    backdrop-filter: blur(20px);
+    z-index: 2;
+}
+
+.sidebar-footer .btn {
+    width: 100%;
+}
+
+/* ========================================
+   MOBILE NAVIGATION
+   ======================================== */
+.mobile-topbar {
+    display: none;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(26, 35, 126, 0.95);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 0.75rem 1rem;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.hamburger-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 0.5rem;
+}
+
+.hamburger-btn span {
+    display: block;
+    width: 24px;
+    height: 2px;
+    background: white;
+    border-radius: 2px;
+    transition: all 0.3s ease;
+}
+
+.mobile-title {
+    color: white;
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.mobile-avatar {
+    width: 36px !important;
+    height: 36px !important;
+    font-size: 0.75rem !important;
+}
+
+.sidebar-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 199;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.sidebar-overlay.overlay-visible {
+    display: block;
+    opacity: 1;
+}
+
+/* ========================================
+   MAIN CONTENT
+   ======================================== */
+
+.main-content {
+    flex: 1;
+    margin-left: 280px;
+    padding: var(--space-8);
+    overflow-y: auto;
+}
+
+.dashboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-8);
+    padding: var(--space-6);
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-xl);
+    position: relative;
+    z-index: 50;
+}
+
+.dashboard-title {
+    font-size: 2.5rem;
+    color: white;
+    margin: 0;
+}
+
+.dashboard-subtitle {
+    color: rgba(255, 255, 255, 0.85);
+    margin: var(--space-2) 0 0 0;
+    font-size: 1.125rem;
+}
+
+.user-activity {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.875rem;
+    margin-top: 0.5rem;
+}
+
+.header-actions {
+    display: flex;
+    gap: var(--space-4);
+    align-items: center;
+}
+
+.user-avatar {
+    width: 44px;
+    /* Reduced from 60px to align properly with header actions */
+    height: 44px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent-500), var(--accent-600));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 700;
+    font-size: 1.125rem;
+    box-shadow: var(--shadow-lg);
+}
+
+/* Notification Bell Styles */
+.notif-bell-btn {
+    position: relative;
+    font-size: 1.25rem !important;
+    padding: 0.5rem 0.75rem !important;
+    overflow: visible !important;
+    /* Allow badge to overflow */
+}
+
+.notif-bell-btn::before {
+    display: none !important;
+    /* Prevent the white ripple from overlapping */
+}
+
+.notif-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    background: #ef4444;
+    color: #fff;
+    border-radius: 50%;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    /* Flexible width for "9+" */
+    font-size: 0.65rem;
+    font-weight: 700;
+    line-height: 18px;
+    text-align: center;
+    white-space: nowrap;
+    box-sizing: border-box;
+}
+
+/* ========================================
+   CONTENT SECTIONS
+   ======================================== */
+
+.content-section {
+    animation: fadeIn 0.4s ease-out;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-6);
+}
+
+.section-title {
+    font-size: 2rem;
+    color: white;
+    margin: 0 0 var(--space-6) 0;
+}
+
+/* ========================================
+   STAT CARDS
+   ======================================== */
+
+.stat-card {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    padding: var(--space-6);
+}
+
+.stat-icon {
+    width: 70px;
+    height: 70px;
+    border-radius: var(--radius-lg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    box-shadow: var(--shadow-md);
+    flex-shrink: 0;
+}
+
+.stat-content {
+    flex: 1;
+}
+
+.stat-value {
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: white;
+    margin: 0;
+    line-height: 1;
+}
+
+.stat-label {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.95rem;
+    margin: var(--space-2) 0 0 0;
+    font-weight: 500;
+}
+
+/* Stat Card Go-to Navigation Button */
+.stat-card {
+    position: relative;
+}
+
+.stat-card-goto {
+    position: absolute;
+    top: 0.6rem;
+    right: 0.6rem;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.8rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    text-decoration: none;
+    line-height: 1;
+    padding: 0;
+}
+
+.stat-card-goto:hover {
+    background: rgba(255, 255, 255, 0.3);
+    color: white;
+    transform: scale(1.15);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.stat-card-goto:active {
+    transform: scale(1.05);
+}
+
+/* ========================================
+   QUIZ TABS
+   ======================================== */
+
+.quiz-tabs {
+    display: flex;
+    gap: var(--space-3);
+    background: rgba(255, 255, 255, 0.1);
+    padding: var(--space-2);
+    border-radius: var(--radius-lg);
+}
+
+.tab-btn {
+    padding: var(--space-3) var(--space-5);
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.8);
+    font-weight: 600;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.tab-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+.tab-btn.active {
+    background: white;
+    color: var(--primary-700);
+}
+
+/* ========================================
+   QUIZ CARDS
+   ======================================== */
+
+.quizzes-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: var(--space-6);
+}
+
+.quiz-card {
+    background: white;
+    border-radius: var(--radius-xl);
+    padding: var(--space-6);
+    box-shadow: var(--shadow-lg);
+    transition: all var(--transition-base);
+    border-left: 4px solid var(--primary-500);
+}
+
+.quiz-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-xl);
+}
+
+.quiz-card.active {
+    border-left-color: var(--success-500);
+}
+
+.quiz-card.overdue {
+    border-left-color: var(--error-500);
+}
+
+.quiz-card.finished {
+    border-left-color: var(--gray-400);
+}
+
+.quiz-card.scheduled {
+    border-left-color: #667eea;
+}
+
+.quiz-status.scheduled {
+    background: rgba(102, 126, 234, 0.15);
+    color: #a5b4fc;
+}
+
+.quiz-status.draft {
+    background: rgba(255, 193, 7, 0.15);
+    color: #fbbf24;
+}
+
+.quiz-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
+    margin-bottom: var(--space-4);
+}
+
+.quiz-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--gray-900);
+    margin: 0;
+}
+
+.quiz-status {
+    font-size: 0.75rem;
+    padding: var(--space-1) var(--space-3);
+    border-radius: var(--radius-full);
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.quiz-status.active {
+    background: var(--success-100);
+    color: var(--success-700);
+}
+
+.quiz-status.overdue {
+    background: var(--error-100);
+    color: var(--error-700);
+}
+
+.quiz-status.finished {
+    background: var(--gray-200);
+    color: var(--gray-700);
+}
+
+.quiz-description {
+    color: var(--gray-600);
+    margin-bottom: var(--space-4);
+    font-size: 0.95rem;
+    line-height: 1.6;
+}
+
+.quiz-meta {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-bottom: var(--space-4);
+    padding: var(--space-4);
+    background: var(--gray-100);
+    border-radius: var(--radius-md);
+}
+
+.quiz-meta-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    color: var(--gray-700);
+    font-size: 0.875rem;
+}
+
+.quiz-meta-item span:first-child {
+    font-weight: 600;
+}
+
+.quiz-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+}
+
+.quiz-actions .btn {
+    width: 100%;
+    justify-content: center;
+    font-size: 0.8rem;
+    padding: 0.45rem 0.6rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Full-width button when it's the only one or explicitly marked */
+.quiz-actions .btn-full,
+.quiz-actions .btn:only-child {
+    grid-column: 1 / -1;
+}
+
+/* ========================================
+   QUIZ SCROLL NAVIGATION (inside modal)
+   ======================================== */
+
+.quiz-scroll-btn {
+    pointer-events: auto;
+    background: var(--glass-bg);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    color: white;
+    border: 1px solid var(--glass-border);
+    border-radius: 999px;
+    padding: 0.5rem 1.25rem;
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+    letter-spacing: 0.03em;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    opacity: 1;
+}
+
+.quiz-scroll-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+}
+
+.quiz-scroll-btn:active {
+    transform: scale(0.97);
+}
+
+/* Light mode override */
+.light-mode .quiz-scroll-btn {
+    background: rgba(255, 255, 255, 0.92);
+    color: var(--primary-700);
+    border: 1px solid var(--gray-300);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.light-mode .quiz-scroll-btn:hover {
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+}
+
+/* Hidden state — applied by JS while scrolling */
+#quizScrollNav.scrolling .quiz-scroll-btn {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(8px);
+}
+
+/* ========================================
+   SCORE TABLE
+   ======================================== */
+
+.score-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-4);
+    border-bottom: 1px solid var(--gray-200);
+    transition: background var(--transition-fast);
+}
+
+.score-item:hover {
+    background: var(--primary-300);
+}
+
+.score-item:last-child {
+    border-bottom: none;
+}
+
+.score-info h3 {
+    font-size: 1.125rem;
+    color: var(--gray-900);
+    margin: 0 0 var(--space-1) 0;
+}
+
+.score-info p {
+    color: var(--gray-600);
+    font-size: 0.875rem;
+    margin: 0;
+}
+
+.score-value {
+    text-align: right;
+}
+
+.score-percentage {
+    font-size: 2rem;
+    font-weight: 800;
+    color: var(--primary-700);
+    line-height: 1;
+    margin-bottom: var(--space-1);
+}
+
+.score-points {
+    color: var(--gray-600);
+    font-size: 0.875rem;
+}
+
+/* ========================================
+   RECOMMENDATIONS
+   ======================================== */
+
+.recommendation-card {
+    background: white;
+    border-radius: var(--radius-xl);
+    padding: var(--space-6);
+    margin-bottom: var(--space-6);
+    box-shadow: var(--shadow-lg);
+    border-left: 4px solid var(--accent-500);
+}
+
+.recommendation-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+}
+
+.recommendation-icon {
+    width: 50px;
+    height: 50px;
+    background: linear-gradient(135deg, var(--accent-500), var(--accent-600));
+    border-radius: var(--radius-lg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+}
+
+.recommendation-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--gray-900);
+    margin: 0;
+}
+
+.recommendation-content {
+    color: var(--gray-700);
+    line-height: 1.8;
+    white-space: pre-wrap;
+}
+
+.recommendation-topics {
+    margin-top: var(--space-4);
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+.topic-tag {
+    padding: var(--space-2) var(--space-4);
+    background: var(--accent-100);
+    color: var(--accent-700);
+    border-radius: var(--radius-full);
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+/* ========================================
+   EMPTY STATES
+   ======================================== */
+
+.empty-state {
+    grid-column: 1 / -1;
+    /* Span full width in grid */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: var(--space-12);
+    min-height: 400px;
+    /* Give it height to center vertically */
+    color: rgba(255, 255, 255, 0.7);
+    width: 100%;
+}
+
+.empty-state-icon {
+    font-size: 5rem;
+    margin-bottom: var(--space-4);
+    opacity: 0.5;
+}
+
+.empty-state h3 {
+    color: white;
+    font-size: 1.5rem;
+    margin-bottom: var(--space-2);
+}
+
+.empty-state p {
+    color: rgba(255, 255, 255, 0.8);
+    margin: 0;
+}
+
+/* ========================================
+   RESPONSIVE DESIGN — Comprehensive Mobile Support
+   ======================================== */
+
+/* ---- Tablet (≤ 1024px) ---- */
+@media (max-width: 1024px) {
+    .sidebar {
+        width: 240px;
+    }
+
+    .main-content {
+        margin-left: 240px;
+    }
+
+    .grid-3 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .grid-4 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+/* ---- Mobile (≤ 768px) — Drawer Sidebar ---- */
+@media (max-width: 768px) {
+
+    /* Show mobile top-bar */
+    .mobile-topbar {
+        display: flex !important;
+    }
+
+    /* Sidebar becomes a hidden drawer */
+    .sidebar {
+        width: 260px;
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+        z-index: 200;
+        height: 100vh;
+        position: fixed;
+        top: 0;
+        left: 0;
+    }
+
+    .sidebar.sidebar-open {
+        transform: translateX(0);
+    }
+
+    /* Show all labels again (they were hidden at 768px before) */
+    .sidebar-title,
+    .nav-label {
+        display: block !important;
+    }
+
+    .nav-item {
+        justify-content: flex-start;
+    }
+
+    /* Main content takes full width */
+    .main-content {
+        margin-left: 0;
+        padding: 0 1rem 1rem 1rem;
+    }
+
+    /* Dashboard header stack */
+    .dashboard-header {
+        flex-direction: column;
+        gap: var(--space-4);
+        align-items: flex-start;
+        padding: 1rem;
+    }
+
+    .dashboard-title {
+        font-size: 1.6rem;
+    }
+
+    .header-actions {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    /* Grid stacking */
+    .grid-2,
+    .grid-3,
+    .grid-4 {
+        grid-template-columns: 1fr;
+    }
+
+    /* Section headers */
+    .section-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.75rem;
+    }
+
+    .section-title {
+        font-size: 1.5rem;
+    }
+
+    /* Quiz tabs scroll horizontally */
+    .quiz-tabs {
+        overflow-x: auto;
+        flex-direction: row;
+        white-space: nowrap;
+        padding: 0.25rem;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .tab-btn {
+        flex-shrink: 0;
+        font-size: 0.85rem;
+        padding: 0.5rem 0.875rem;
+    }
+
+    /* Quiz card actions: single column on mobile */
+    .quiz-actions {
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
+    }
+
+    /* Quiz grid single column */
+    .quizzes-grid {
+        grid-template-columns: 1fr;
+    }
+
+    /* Stat cards in 2 columns */
+    .principal-stats-row {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    /* Hide less critical table columns */
+    .hide-mobile {
+        display: none !important;
+    }
+
+    /* Table scrollable */
+    .table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* Bento grid single column */
+    .bento-grid {
+        grid-template-columns: 1fr !important;
+    }
+
+    .bento-wide,
+    .bento-tall,
+    .bento-actions {
+        grid-column: auto !important;
+        grid-row: auto !important;
+    }
+
+    /* Forms: single column */
+    .form-grid,
+    .grid.grid-2 {
+        grid-template-columns: 1fr;
+    }
+
+    /* Search filter row stacked */
+    .search-filter-row {
+        flex-direction: column;
+    }
+
+    /* Modal full-screen on mobile */
+    .modal-content,
+    .modal-content.large-modal {
+        max-width: 100%;
+        margin: 0;
+        border-radius: 16px 16px 0 0;
+        max-height: 92vh;
+    }
+
+    .modal {
+        align-items: flex-end;
+        padding: 0;
+    }
+
+    /* Perf metrics grid 2 cols */
+    .perf-metrics-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+
+    /* Quick actions 2 cols */
+    .quick-actions-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+
+    /* Settings grid */
+    .settings-grid-layout {
+        grid-template-columns: 1fr !important;
+    }
+
+    /* Tutorial modal */
+    .tutorial-modal {
+        width: 90vw !important;
+        left: 5vw !important;
+        top: 50% !important;
+        transform: translateY(-50%) !important;
+        max-height: 85vh;
+        overflow-y: auto;
+    }
+}
+
+/* ---- Small Mobile (≤ 480px) ---- */
+@media (max-width: 480px) {
+    .dashboard-title {
+        font-size: 1.35rem;
+    }
+
+    .stat-value {
+        font-size: 1.75rem;
+    }
+
+    .stat-icon {
+        width: 50px;
+        height: 50px;
+        font-size: 1.5rem;
+    }
+
+    /* Stat cards: full-width stack */
+    .principal-stats-row {
+        grid-template-columns: 1fr;
+    }
+
+    /* Quiz card padding tighter */
+    .quiz-card {
+        padding: 1rem;
+    }
+
+    .quiz-title {
+        font-size: 1rem;
+    }
+
+    /* Remove shadow-heavy cards on tiny screens */
+    .quiz-card:hover {
+        transform: none;
+    }
+
+    /* Tutorial help button — repositioned on small screens */
+    .tutorial-help-btn {
+        bottom: 1rem !important;
+        right: 1rem !important;
+        font-size: 0.8rem !important;
+        padding: 0.5rem 0.875rem !important;
+    }
+
+    /* Action tiles full row */
+    .quick-actions-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+
+    /* Table action buttons stacked */
+    .action-btns {
+        flex-direction: column;
+    }
+
+    .table-action-btn {
+        width: 100%;
+        text-align: center;
+    }
+}
+
+
+/* ========================================
+   MOBILE TOUCH ENHANCEMENTS
+   (Student | Teacher | Secretary)
+   ======================================== */
+
+/* Minimum touch target size — 44px — for all interactive elements */
+@media (max-width: 1024px) {
+
+    .btn,
+    .nav-item,
+    .tab-btn,
+    .hamburger-btn,
+    .btn-action,
+    .btn-sm {
+        min-height: 44px;
+    }
+
+    /* Stat cards — 2-column grid on tablet */
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+}
+
+@media (max-width: 768px) {
+
+    /* ── Stat Cards (student / teacher grid) ── */
+    .grid-3.mb-8,
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 0.75rem;
+    }
+
+    /* ── Section Actions (teacher quiz header) ── */
+    .section-actions {
+        width: 100%;
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .section-actions .btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    /* ── Quiz builder form (teacher) ── */
+    .quiz-modal-content,
+    .modal-content {
+        max-height: 92vh;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* ── Quiz list action buttons full width ── */
+    .quiz-actions,
+    .quiz-card .quiz-actions {
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
+    }
+
+    .quiz-card .quiz-actions .btn,
+    .quiz-card .quiz-actions button {
+        width: 100%;
+        justify-content: center;
+    }
+
+    /* ── Table: all tables scroll horizontally ── */
+    .table-container,
+    .data-table-wrapper {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        border-radius: 12px;
+    }
+
+    /* Wider touch cells in tables */
+    .data-table td,
+    .data-table th {
+        white-space: nowrap;
+        padding: 0.75rem 0.625rem;
+    }
+
+    /* ── Activity list items ── */
+    .activity-item {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .log-item {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .log-time {
+        text-align: left;
+    }
+
+    /* ── Report cards single column ── */
+    .reports-grid,
+    .grid-3 {
+        grid-template-columns: 1fr !important;
+    }
+
+    /* ── Score items stack nicely ── */
+    .score-item {
+        flex-direction: row;
+        gap: 1rem;
+        align-items: center;
+    }
+
+    /* ── Settings form stacked ── */
+    .settings-info-grid,
+    .settings-grid {
+        grid-template-columns: 1fr !important;
+    }
+
+    /* ── Header action buttons ── */
+    .header-action-btn {
+        font-size: 0.8rem;
+        padding: 0.5rem 0.75rem;
+    }
+
+    /* ── Question builder in teacher quiz creation ── */
+    .question-card-builder {
+        padding: 1rem;
+    }
+
+    .option-input-group {
+        flex-wrap: wrap;
+    }
+
+    /* ── Student quiz card "Take Quiz" / "View Results" buttons ── */
+    .quiz-card .quiz-actions .btn-primary,
+    .quiz-card .quiz-actions .btn-outline,
+    .quiz-card .quiz-actions .btn-accent {
+        width: 100%;
+        text-align: center;
+    }
+
+    /* ── Mobile chart container ── */
+    .chart-wrapper,
+    canvas {
+        max-width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
+
+    /* ── Stat cards full-width on very small screens ── */
+    .stats-grid,
+    .grid-3.mb-8 {
+        grid-template-columns: 1fr !important;
+    }
+
+    /* ── Main content padding tighter ── */
+    .main-content {
+        padding: 0 0.75rem 1rem 0.75rem;
+    }
+
+    /* ── Dashboard header compress ── */
+    .dashboard-header {
+        padding: 0.75rem;
+    }
+
+    /* ── Section title smaller ── */
+    .section-title {
+        font-size: 1.25rem;
+    }
+
+    /* ── Filter tabs: side-scroll ── */
+    .filter-tabs,
+    .quiz-tabs {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        flex-wrap: nowrap;
+        padding-bottom: 2px;
+    }
+
+    .filter-tabs .tab-btn,
+    .quiz-tabs .tab-btn {
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+
+    /* ── Modals: full bottom sheet ── */
+    .modal-content {
+        border-radius: 20px 20px 0 0;
+        max-height: 95vh;
+        overflow-y: auto;
+    }
+
+    /* ── Quiz creation modal form ── */
+    #quizCreationModal .modal-content {
+        max-height: 95vh;
+    }
+
+    /* ── Form inputs bigger tap area ── */
+    .form-input,
+    .form-select,
+    .form-textarea,
+    .search-input,
+    .filter-select {
+        min-height: 44px;
+        font-size: 16px;
+        /* prevent iOS zoom */
+    }
+
+    /* ── User management action buttons ── */
+    .action-btns {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+    }
+
+    .btn-action {
+        min-width: 44px;
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* ── Table cells tighter padding ── */
+    .data-table td,
+    .data-table th {
+        padding: 0.625rem 0.5rem;
+        font-size: 0.82rem;
+    }
+}
+
+/* ========================================
+   DESKTOP-ONLY BLOCKER
+   (Principal & Developer — shown on mobile)
+   ======================================== */
+
+.desktop-required-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    background: linear-gradient(135deg, #0f0f2e 0%, #1a1a4e 100%);
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    text-align: center;
+    gap: 1.5rem;
+}
+
+.desktop-required-overlay .dro-icon {
+    font-size: 4rem;
+    line-height: 1;
+}
+
+.desktop-required-overlay h2 {
+    color: #fff;
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.desktop-required-overlay p {
+    color: rgba(255, 255, 255, 0.65);
+    font-size: 0.95rem;
+    max-width: 320px;
+    line-height: 1.6;
+    margin: 0;
+}
+
+.desktop-required-overlay .dro-badge {
+    background: rgba(102, 126, 234, 0.2);
+    border: 1px solid rgba(102, 126, 234, 0.4);
+    color: #a5b4fc;
+    padding: 0.5rem 1.25rem;
+    border-radius: 99px;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+@media (max-width: 1024px) {
+    .desktop-required-overlay {
+        display: flex;
+    }
+}
+
+/* ========================================
+   MODAL STYLES
+   ======================================== */
+
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-4);
+}
+
+.modal.hidden {
+    display: none;
+}
+
+.modal-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+    animation: fadeIn 0.3s ease-out;
+}
+
+.modal-content {
+    position: relative;
+    background: white;
+    border-radius: var(--radius-2xl);
+    max-width: 600px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: var(--shadow-2xl);
+    animation: slideInUp 0.4s ease-out;
+}
+
+body:not(.light-mode) .modal-content {
+    background: #1a1a2e;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+.large-modal {
+    max-width: 900px;
+}
+
+@keyframes slideInUp {
+    from {
+        opacity: 0;
+        transform: translateY(40px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-6);
+    border-bottom: 1px solid var(--gray-200);
+}
+
+body:not(.light-mode) .modal-header {
+    border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+.modal-title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--gray-900);
+    margin: 0;
+}
+
+.modal-close {
+    background: transparent;
+    border: none;
+    font-size: 1.75rem;
+    color: var(--gray-500);
+    cursor: pointer;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-md);
+    transition: all var(--transition-fast);
+}
+
+.modal-close:hover {
+    background: var(--gray-100);
+    color: var(--gray-900);
+}
+
+.modal-body {
+    padding: var(--space-6);
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-3);
+    padding: var(--space-6);
+    border-top: 1px solid var(--gray-200);
+    background: var(--gray-50);
+}
+
+/* Form Sections */
+.form-section {
+    margin-bottom: var(--space-8);
+    padding-bottom: var(--space-6);
+    border-bottom: 1px solid var(--gray-200);
+}
+
+.form-section:last-of-type {
+    border-bottom: none;
+}
+
+.form-section-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--gray-900);
+    margin-bottom: var(--space-4);
+}
+
+.form-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-4);
+}
+
+/* Question Card */
+.question-card-builder {
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-lg);
+    padding: var(--space-5);
+    margin-bottom: var(--space-4);
+    position: relative;
+}
+
+.question-card-builder .question-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-4);
+}
+
+.question-number-badge {
+    background: var(--primary-500);
+    color: white;
+    padding: 0.375rem 0.75rem;
+    border-radius: var(--radius-full);
+    font-weight: 600;
+    font-size: 0.875rem;
+}
+
+.question-remove-btn {
+    background: var(--error-500);
+    color: white;
+    border: none;
+    padding: 0.375rem 0.75rem;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    font-size: 0.875rem;
+}
+
+.question-remove-btn:hover {
+    background: var(--error-600);
+}
+
+.option-input-group {
+    display: flex;
+    gap: var(--space-3);
+    margin-bottom: var(--space-3);
+    align-items: center;
+}
+
+.option-input-group input[type="radio"] {
+    flex-shrink: 0;
+}
+
+.option-input-group .form-input {
+    flex: 1;
+}
+
+.option-input-group.correct-answer {
+    background: rgba(102, 187, 106, 0.1);
+    padding: var(--space-2);
+    border-radius: var(--radius-md);
+}
+
+/* Checkbox List */
+.checkbox-list {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-md);
+    padding: var(--space-4);
+}
+
+.checkbox-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--gray-100);
+}
+
+.checkbox-item:last-child {
+    border-bottom: none;
+}
+
+.checkbox-item label {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+}
+
+/* Responsive Modal */
+@media (max-width: 768px) {
+    .modal-content {
+        max-width: 100%;
+        border-radius: var(--radius-xl);
+    }
+
+    .large-modal {
+        max-width: 100%;
+    }
+
+    .grid-2 {
+        grid-template-columns: 1fr;
+    }
+
+    .modal-footer {
+        flex-direction: column;
+    }
+
+    .modal-footer .btn {
+        width: 100%;
+    }
+}
+
+/* ========================================
+   ENHANCED TABLE STYLES
+   ======================================== */
+
+.enhanced-table thead {
+    background: linear-gradient(135deg, var(--gray-100) 0%, var(--gray-50) 100%);
+    border-bottom: 2px solid var(--primary-500);
+}
+
+.enhanced-table th {
+    padding: 1.25rem 1rem !important;
+    font-weight: 700;
+    color: var(--gray-800);
+    font-size: 0.813rem;
+    text-transform: uppercase;
+    letter-spacing: 0.075em;
+}
+
+.enhanced-table .th-content {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.enhanced-table td {
+    padding: 1.125rem 1rem !important;
+    vertical-align: middle;
+}
+
+.enhanced-table tbody tr {
+    transition: all var(--transition-fast);
+    border-bottom: 1px solid var(--gray-100);
+}
+
+.enhanced-table tbody tr:hover {
+    background: linear-gradient(90deg, rgba(102, 126, 234, 0.03) 0%, transparent 100%);
+    transform: translateX(2px);
+    box-shadow: -3px 0 0 0 var(--primary-500);
+}
+
+.enhanced-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+/* Action buttons in table */
+.table-action-btn {
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius-md);
+    font-size: 0.813rem;
+    font-weight: 500;
+    border: 1px solid;
+    background: white;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    margin-right: 0.375rem;
+}
+
+.table-action-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
+}
+
+.table-action-btn.edit {
+    color: var(--primary-600);
+    border-color: var(--primary-200);
+}
+
+.table-action-btn.edit:hover {
+    background: var(--primary-50);
+    border-color: var(--primary-500);
+}
+
+.table-action-btn.delete {
+    color: var(--error-600);
+    border-color: var(--error-200);
+}
+
+.table-action-btn.delete:hover {
+    background: var(--error-50);
+    border-color: var(--error-500);
+}
+
+.table-action-btn.deactivate {
+    color: var(--warning-700);
+    border-color: var(--warning-200);
+}
+
+.table-action-btn.deactivate:hover {
+    background: var(--warning-50);
+    border-color: var(--warning-500);
+}
+
+.table-action-btn.activate {
+    color: var(--success-700);
+    border-color: var(--success-200);
+}
+
+.table-action-btn.activate:hover {
+    background: var(--success-50);
+    border-color: var(--success-500);
+}
+
+/* Table Container Improvements */
+.table-container {
+    overflow-x: auto;
+    border-radius: var(--radius-lg);
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+    -webkit-overflow-scrolling: touch;
+}
+
+
+/* ========================================
+   RESPONSIVE DESIGN - ALL DASHBOARDS
+   ======================================== */
+
+/* === Laptop / Small Desktop (≤1200px) === */
+@media (max-width: 1200px) {
+    .grid-4 {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+
+    .grid-3 {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+
+    .analytics-grid,
+    .settings-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* === Tablet (≤1024px) === */
+@media (max-width: 1024px) {
+
+    /* Sidebar becomes off-canvas */
+    .sidebar {
+        position: fixed;
+        left: -280px;
+        z-index: 200;
+        transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .sidebar.sidebar-open {
+        left: 0;
+    }
+
+    .main-content {
+        margin-left: 0 !important;
+        padding: var(--space-4) !important;
+    }
+
+    .mobile-topbar {
+        display: flex !important;
+    }
+
+    .dashboard-header {
+        margin-bottom: var(--space-4);
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+
+    .dashboard-title {
+        font-size: 1.75rem;
+    }
+
+    .header-actions {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    /* Grid adjustments */
+    .grid-4 {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+
+    .grid-3 {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+
+    .grid-2 {
+        grid-template-columns: 1fr !important;
+    }
+
+    /* Section header stacks */
+    .section-header {
+        flex-direction: column;
+        align-items: flex-start !important;
+        gap: 1rem;
+    }
+
+    .section-header .btn {
+        width: 100%;
+    }
+
+    .section-title {
+        font-size: 1.5rem;
+    }
+
+    /* Stat cards */
+    .stat-card {
+        padding: var(--space-4);
+    }
+
+    .stat-icon {
+        width: 50px;
+        height: 50px;
+        font-size: 1.5rem;
+    }
+
+    .stat-value {
+        font-size: 1.75rem;
+    }
+}
+
+/* === Mobile (≤768px) === */
+@media (max-width: 768px) {
+    .main-content {
+        padding: var(--space-3) !important;
+    }
+
+    .dashboard-header {
+        padding: var(--space-4);
+        border-radius: var(--radius-lg);
+    }
+
+    .dashboard-title {
+        font-size: 1.5rem;
+    }
+
+    .dashboard-subtitle {
+        font-size: 0.95rem;
+    }
+
+    /* User avatar in header hides on mobile (mobile topbar has one) */
+    .dashboard-header .user-avatar {
+        width: 45px;
+        height: 45px;
+        font-size: 1rem;
+    }
+
+    /* Grids collapse */
+    .grid-4,
+    .grid-3 {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 0.75rem !important;
+    }
+
+    .grid-2 {
+        grid-template-columns: 1fr !important;
+    }
+
+    /* Cards */
+    .card {
+        border-radius: 12px;
+    }
+
+    .card-header,
+    .card-body {
+        padding: 1rem;
+    }
+
+    /* Tabs scroll horizontally */
+    .quiz-tabs {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        flex-wrap: nowrap;
+        gap: 0.25rem;
+    }
+
+    .tab-btn {
+        white-space: nowrap;
+        flex-shrink: 0;
+        font-size: 0.85rem;
+        padding: 0.5rem 0.75rem;
+    }
+
+    /* Table responsive */
+    .hide-mobile {
+        display: none !important;
+    }
+
+    .data-table {
+        font-size: 0.85rem;
+    }
+
+    .data-table th,
+    .data-table td {
+        padding: 0.6rem 0.5rem;
+    }
+
+    /* Buttons */
+    .btn {
+        font-size: 0.85rem;
+        padding: 0.5rem 1rem;
+    }
+
+    .btn-sm {
+        padding: 0.4rem 0.75rem;
+        font-size: 0.75rem;
+    }
+
+    /* Security stats */
+    .security-stats {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    /* Form groups in a row */
+    .gap-4 {
+        gap: 0.75rem !important;
+    }
+
+    /* Search filter */
+    .search-filter-row {
+        flex-direction: column;
+    }
+}
+
+/* === Small Mobile (≤640px) === */
+@media (max-width: 640px) {
+    .main-content {
+        padding: var(--space-2) !important;
+    }
+
+    .dashboard-header {
+        padding: 1rem;
+        border-radius: 12px;
+    }
+
+    .dashboard-title {
+        font-size: 1.25rem;
+    }
+
+    .dashboard-subtitle {
+        font-size: 0.85rem;
+    }
+
+    /* All grids become stacked or 2-col */
+    .grid-4,
+    .grid-3 {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 0.5rem !important;
+    }
+
+    .stat-card {
+        padding: 0.75rem;
+        gap: 0.5rem;
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .stat-icon {
+        width: 40px;
+        height: 40px;
+        font-size: 1.25rem;
+    }
+
+    .stat-value {
+        font-size: 1.3rem;
+    }
+
+    .stat-label {
+        font-size: 0.75rem;
+    }
+
+    .section-title {
+        font-size: 1.25rem;
+    }
+
+    /* Table actions on small screens */
+    .table-action-btn {
+        padding: 0.3rem 0.4rem;
+        font-size: 0.75rem;
+    }
+
+    /* Quizzes Grid */
+    .quizzes-grid {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+/* === Very Small Mobile (≤400px) === */
+@media (max-width: 400px) {
+
+    .grid-4,
+    .grid-3 {
+        grid-template-columns: 1fr 1fr !important;
+        gap: 0.4rem !important;
+    }
+
+    .dashboard-header {
+        padding: 0.75rem;
+    }
+
+    .dashboard-title {
+        font-size: 1.1rem;
+    }
+
+    .card-header,
+    .card-body {
+        padding: 0.75rem;
+    }
+
+    .btn {
+        font-size: 0.8rem;
+        padding: 0.4rem 0.75rem;
+    }
+
+    .tab-btn {
+        font-size: 0.75rem;
+        padding: 0.4rem 0.6rem;
+    }
+
+    .form-input {
+        font-size: 0.85rem;
+        padding: 0.5rem;
+    }
+}
+
+/* ========================================
+   UTILITY: SMOOTH TRANSITIONS FOR RESIZE
+   ======================================== */
+.sidebar,
+.main-content,
+.grid-4,
+.grid-3,
+.grid-2 {
+    transition: all 0.3s ease;
+}
+
+/* ========================================
+   SIDEBAR ROLE BADGES
+   ======================================== */
+
+.sidebar-badge {
+    display: inline-block;
+    padding: 0.3rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    margin-top: 0.5rem;
+    text-transform: uppercase;
+}
+
+.student-badge {
+    background: linear-gradient(135deg, rgba(63, 81, 181, 0.3), rgba(92, 107, 192, 0.3));
+    color: #90caf9;
+    border: 1px solid rgba(63, 81, 181, 0.4);
+}
+
+.teacher-badge {
+    background: linear-gradient(135deg, rgba(67, 160, 71, 0.3), rgba(102, 187, 106, 0.3));
+    color: #a5d6a7;
+    border: 1px solid rgba(67, 160, 71, 0.4);
+}
+
+.secretary-badge {
+    background: linear-gradient(135deg, rgba(251, 140, 0, 0.3), rgba(255, 167, 38, 0.3));
+    color: #ffcc80;
+    border: 1px solid rgba(251, 140, 0, 0.4);
+}
+
+.developer-badge {
+    background: linear-gradient(135deg, rgba(0, 230, 118, 0.2), rgba(29, 233, 182, 0.2));
+    color: #69f0ae;
+    border: 1px solid rgba(0, 230, 118, 0.3);
+}
+
+.principal-badge {
+    background: linear-gradient(135deg, rgba(183, 28, 28, 0.3), rgba(229, 57, 53, 0.3));
+    color: #ef9a9a;
+    border: 1px solid rgba(183, 28, 28, 0.4);
+}
+
+
+/* ========================================
+   HEADER ACTION BUTTONS
+   ======================================== */
+
+.header-action-btn {
+    background: rgba(255, 255, 255, 0.1) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    color: rgba(255, 255, 255, 0.85) !important;
+    padding: 0.4rem 0.85rem !important;
+    font-size: 0.8rem !important;
+    border-radius: 8px !important;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    backdrop-filter: blur(8px);
+    white-space: nowrap;
+}
+
+.header-action-btn:hover {
+    background: rgba(255, 255, 255, 0.2) !important;
+    border-color: rgba(255, 255, 255, 0.35) !important;
+    color: white !important;
+    transform: translateY(-1px);
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+
+/* ========================================
+   SETTINGS MODAL STYLES
+   ======================================== */
+
+.settings-section {
+    padding: 1.25rem 0;
+    border-bottom: 1px solid var(--gray-200);
+}
+
+.settings-section:last-child {
+    border-bottom: none;
+}
+
+.settings-section-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--gray-800);
+    margin: 0 0 1rem 0;
+}
+
+.settings-info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+}
+
+.settings-info-item {
+    background: var(--gray-50);
+    padding: 0.75rem;
+    border-radius: 10px;
+    border: 1px solid var(--gray-100);
+}
+
+body:not(.light-mode) .settings-info-item {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+}
+
+.settings-info-label {
+    display: block;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--gray-500);
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+.settings-info-value {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--gray-800);
+}
+
+.settings-toggle-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0;
+}
+
+.settings-toggle-label {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--gray-800);
+}
+
+.settings-toggle-desc {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--gray-500);
+    margin-top: 0.15rem;
+}
+
+/* Toggle Switch */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 48px;
+    height: 26px;
+    flex-shrink: 0;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--gray-300);
+    border-radius: 26px;
+    transition: 0.3s;
+}
+
+.toggle-slider::before {
+    content: "";
+    position: absolute;
+    height: 20px;
+    width: 20px;
+    left: 3px;
+    bottom: 3px;
+    background: white;
+    border-radius: 50%;
+    transition: 0.3s;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.toggle-switch input:checked+.toggle-slider {
+    background: var(--primary-500);
+}
+
+.toggle-switch input:checked+.toggle-slider::before {
+    transform: translateX(22px);
+}
+
+/* Toggle slider visibility in dark mode */
+body:not(.light-mode) .toggle-slider {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+body:not(.light-mode) .toggle-slider::before {
+    background: rgba(255, 255, 255, 0.9);
+}
+
+
+/* ========================================
+   LIGHT MODE THEME
+   ======================================== */
+
+body.light-mode .dashboard-container {
+    background: linear-gradient(135deg, #f0f2ff 0%, #e8eaf6 100%);
+}
+
+body.light-mode .sidebar {
+    background: rgba(255, 255, 255, 0.95);
+    border-right: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+body.light-mode .sidebar-title {
+    color: var(--gray-800);
+}
+
+body.light-mode .sidebar-badge {
+    color: var(--gray-600);
+}
+
+body.light-mode .nav-item {
+    color: var(--gray-600);
+}
+
+body.light-mode .nav-item:hover {
+    background: rgba(102, 126, 234, 0.08);
+    color: var(--primary);
+}
+
+body.light-mode .nav-item.active {
+    background: rgba(102, 126, 234, 0.12);
+    color: var(--primary);
+    border-right-color: var(--primary);
+}
+
+body.light-mode .dashboard-header {
+    background: white;
+    border: 1px solid var(--gray-200);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+body.light-mode .dashboard-title {
+    color: var(--gray-900);
+}
+
+body.light-mode .dashboard-subtitle {
+    color: var(--gray-600);
+}
+
+body.light-mode .user-activity {
+    color: var(--gray-500) !important;
+}
+
+body.light-mode .header-action-btn {
+    background: var(--gray-100) !important;
+    border: 1px solid var(--gray-200) !important;
+    color: var(--gray-700) !important;
+}
+
+body.light-mode .header-action-btn:hover {
+    background: var(--gray-200) !important;
+    border-color: var(--gray-300) !important;
+    color: var(--gray-900) !important;
+}
+
+body.light-mode .card,
+body.light-mode .card-glass,
+body.light-mode .stat-card {
+    background: white !important;
+    border: 1px solid rgba(0, 0, 0, 0.08) !important;
+    color: var(--gray-800) !important;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.02) !important;
+}
+
+body.light-mode .card .card-title,
+body.light-mode .section-title,
+body.light-mode .modal-title,
+body.light-mode .card-header h2 {
+    color: var(--gray-900) !important;
+}
+
+body.light-mode .card-body,
+body.light-mode .section-header p,
+body.light-mode .card p {
+    color: var(--gray-700) !important;
+}
+
+body.light-mode .tab-btn {
+    color: var(--gray-600) !important;
+    background: transparent !important;
+}
+
+body.light-mode .tab-btn:hover {
+    background: rgba(0, 0, 0, 0.05) !important;
+    color: var(--gray-900) !important;
+}
+
+body.light-mode .tab-btn.active {
+    background: white !important;
+    color: var(--primary-700) !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+}
+
+body.light-mode .quiz-tabs {
+    background: var(--gray-100) !important;
+    border: 1px solid var(--gray-100) !important;
+    padding: 4px !important;
+}
+
+body.light-mode .modal-content {
+    background: white !important;
+    color: var(--gray-800) !important;
+}
+
+body.light-mode .modal-header {
+    border-bottom: 1px solid var(--gray-100) !important;
+}
+
+body.light-mode .tab-btn.active {
+    background: var(--primary);
+    color: white;
+}
+
+body.light-mode .form-input {
+    background: white;
+    color: var(--gray-800);
+    border-color: var(--gray-200);
+}
+
+body.light-mode .quiz-card {
+    background: white;
+    border: 1px solid var(--gray-100);
+}
+
+/* Modal stays the same in light mode (already white) */
+
+@media (max-width: 480px) {
+    .settings-info-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .header-action-btn {
+        padding: 0.3rem 0.5rem !important;
+        font-size: 0.7rem !important;
+    }
+}
+
+/* ========================================
+   ACTIVITY LOGS SECTION STYLES
+   ======================================== */
+
+.activity-logs {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.activity-log-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1rem 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    transition: background var(--transition-fast);
+}
+
+.activity-log-item:last-child {
+    border-bottom: none;
+}
+
+.activity-log-item:hover {
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: var(--radius-md);
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+}
+
+.activity-log-icon {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-md);
+    flex-shrink: 0;
+}
+
+.activity-log-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.activity-log-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.25rem;
+}
+
+.activity-log-user {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: white;
+}
+
+.activity-log-badge {
+    padding: 0.15rem 0.5rem;
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    background: rgba(102, 126, 234, 0.2);
+    color: #90caf9;
+    letter-spacing: 0.02em;
+}
+
+.activity-log-desc {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.6);
+    margin-bottom: 0.2rem;
+    line-height: 1.4;
+}
+
+.activity-log-time {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.35);
+    font-weight: 500;
+}
+
+/* Light mode overrides for activity logs */
+body.light-mode .activity-log-item {
+    border-bottom-color: var(--gray-100);
+}
+
+body.light-mode .activity-log-item:hover {
+    background: var(--gray-50);
+}
+
+body.light-mode .activity-log-icon {
+    background: var(--gray-100);
+}
+
+body.light-mode .activity-log-user {
+    color: var(--gray-800);
+}
+
+body.light-mode .activity-log-badge {
+    background: var(--primary-100);
+    color: var(--primary-700);
+}
+
+body.light-mode .activity-log-desc {
+    color: var(--gray-600);
+}
+
+body.light-mode .activity-log-time {
+    color: var(--gray-400);
+}
+
+/* ========================================
+   REFRESH BUTTON - LARGER SIZE
+   ======================================== */
+
+.refresh-btn-lg {
+    padding: 0.6rem 1.25rem !important;
+    font-size: 0.95rem !important;
+    font-weight: 600 !important;
+    border-radius: 10px !important;
+    min-width: 120px;
+}
+
+.refresh-btn-lg:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 4px 12px rgba(255, 255, 255, 0.15) !important;
+}
+
+/* ========================================
+   SCROLLBAR REMOVAL - CLEAN SYSTEM LOOK
+   ======================================== */
+
+/* Hide native scrollbars system-wide */
+::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;
+}
+
+/* Firefox scrollbar hide */
+* {
+    scrollbar-width: none;
+}
+
+/* Keep scrolling functional */
+.main-content,
+.sidebar,
+.modal-content,
+.bento-scroll,
+.checkbox-list,
+.table-container {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.main-content::-webkit-scrollbar,
+.sidebar::-webkit-scrollbar,
+.modal-content::-webkit-scrollbar,
+.bento-scroll::-webkit-scrollbar,
+.checkbox-list::-webkit-scrollbar,
+.table-container::-webkit-scrollbar {
+    display: none;
+    width: 0;
+}
+
+/* ========================================
+   STUDENT SCORES - DARK MODE FIX
+   ======================================== */
+
+/* Ensure empty state text is visible in dark mode */
+.empty-state h3 {
+    color: white;
+    font-size: 1.5rem;
+    margin-bottom: var(--space-2);
+}
+
+.empty-state p {
+    color: rgba(255, 255, 255, 0.8);
+    margin: 0;
+}
+
+/* Light mode empty state */
+body.light-mode .empty-state h3 {
+    color: var(--gray-800);
+}
+
+body.light-mode .empty-state p {
+    color: var(--gray-500);
+}
+
+/* Score item text in dark mode */
+.score-info h3 {
+    color: white;
+}
+
+.score-info p {
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.score-percentage {
+    color: #90caf9;
+}
+
+.score-points {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.score-item {
+    border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+.score-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+/* Score light mode */
+body.light-mode .score-info h3 {
+    color: var(--gray-900);
+}
+
+body.light-mode .score-info p {
+    color: var(--gray-600);
+}
+
+body.light-mode .score-percentage {
+    color: var(--primary-700);
+}
+
+body.light-mode .score-points {
+    color: var(--gray-600);
+}
+
+body.light-mode .score-item {
+    border-bottom-color: var(--gray-300);
+}
+
+body.light-mode .score-item:hover {
+    background: var(--gray-200) !important;
+}
+
+/* ========================================
+   CARD TEXT VISIBILITY - DARK MODE
+   ======================================== */
+
+.card-title {
+    color: white;
+}
+
+.card-body {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+body.light-mode .card-title {
+    color: var(--gray-900);
+}
+
+body.light-mode .card-body {
+    color: var(--gray-700);
+}
+
+/* Activity Item removed */
+
+/* ========================================
+   FILTER SELECT DARK MODE
+   ======================================== */
+
+.filter-select {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    appearance: auto;
+}
+
+.filter-select option {
+    background: #1a1a2e;
+    color: white;
+}
+
+body.light-mode .filter-select {
+    background: white;
+    color: var(--gray-800);
+    border-color: var(--gray-200);
+}
+
+body.light-mode .filter-select option {
+    background: white;
+    color: var(--gray-800);
+}
+
+/* ========================================
+   DARK MODE: QUIZ CARD TEXT VISIBILITY
+   ======================================== */
+
+.quiz-card {
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--shadow-lg);
+}
+
+.quiz-title {
+    color: white;
+}
+
+.quiz-description {
+    color: rgba(255, 255, 255, 0.75);
+}
+
+.quiz-meta {
+    background: rgba(255, 255, 255, 0.07);
+}
+
+.quiz-meta-item {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.quiz-status.active {
+    background: rgba(34, 197, 94, 0.2);
+    color: #86efac;
+}
+
+.quiz-status.overdue {
+    background: rgba(239, 68, 68, 0.2);
+    color: #fca5a5;
+}
+
+.quiz-status.finished {
+    background: rgba(148, 163, 184, 0.15);
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.quiz-status.draft {
+    background: rgba(148, 163, 184, 0.15);
+    color: rgba(255, 255, 255, 0.55);
+}
+
+.quiz-status.scheduled {
+    background: rgba(96, 165, 250, 0.18);
+    color: #93c5fd;
+}
+
+.quiz-status.archived {
+    background: rgba(148, 163, 184, 0.12);
+    color: rgba(255, 255, 255, 0.45);
+}
+
+body.light-mode .quiz-card {
+    background: white;
+    border: 1px solid var(--gray-100);
+    box-shadow: var(--shadow-lg);
+}
+
+body.light-mode .quiz-title {
+    color: var(--gray-900);
+}
+
+body.light-mode .quiz-description {
+    color: var(--gray-600);
+}
+
+body.light-mode .quiz-meta {
+    background: var(--gray-100);
+}
+
+body.light-mode .quiz-meta-item {
+    color: var(--gray-700);
+}
+
+body.light-mode .quiz-status.active {
+    background: var(--success-100);
+    color: var(--success-700);
+}
+
+body.light-mode .quiz-status.overdue {
+    background: var(--error-100);
+    color: var(--error-700);
+}
+
+body.light-mode .quiz-status.finished {
+    background: var(--gray-200);
+    color: var(--gray-700);
+}
+
+body.light-mode .quiz-status.draft {
+    background: var(--gray-100);
+    color: var(--gray-600);
+}
+
+body.light-mode .quiz-status.scheduled {
+    background: var(--primary-50);
+    color: var(--primary-700);
+}
+
+body.light-mode .quiz-status.archived {
+    background: var(--gray-200);
+    color: var(--gray-500);
+}
+
+/* ========================================
+   DARK MODE: RECOMMENDATION CARDS TEXT
+   ======================================== */
+.recommendation-card {
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--shadow-lg);
+}
+
+.recommendation-title {
+    color: white;
+}
+
+.recommendation-content {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.topic-tag {
+    background: rgba(102, 126, 234, 0.25);
+    color: #93c5fd;
+    padding: 0.3rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+}
+
+body.light-mode .recommendation-card {
+    background: white;
+    border: 1px solid var(--gray-100);
+}
+
+body.light-mode .recommendation-title {
+    color: var(--gray-900);
+}
+
+body.light-mode .recommendation-content {
+    color: var(--gray-700);
+}
+
+body.light-mode .topic-tag {
+    background: rgba(142, 36, 170, 0.1);
+    color: #6a1b9a;
+}
+
+.focus-topics-label {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.65);
+    margin-right: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+body.light-mode .focus-topics-label {
+    color: var(--gray-600);
+}
+
+/* ========================================
+   DARK MODE: FORM INPUTS & LABELS
+   ======================================== */
+.form-input {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: white;
+    border-radius: var(--radius-md);
+    padding: var(--space-3) var(--space-4);
+    font-size: 0.95rem;
+    width: 100%;
+    transition: border-color var(--transition-fast);
+    font-family: inherit;
+}
+
+.form-input::placeholder {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.form-input:focus {
+    outline: none;
+    border-color: rgba(255, 255, 255, 0.4);
+    background: rgba(255, 255, 255, 0.12);
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08);
+}
+
+.form-label {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.875rem;
+    font-weight: 600;
+    display: block;
+    margin-bottom: var(--space-2);
+}
+
+body.light-mode .form-input {
+    background: white;
+    border-color: var(--gray-200);
+    color: var(--gray-800);
+}
+
+body.light-mode .form-input::placeholder {
+    color: var(--gray-400);
+}
+
+body.light-mode .form-input:focus {
+    border-color: var(--primary-500);
+    background: white;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+body.light-mode .form-label {
+    color: var(--gray-700);
+}
+
+/* ========================================
+   DARK MODE: DATA TABLE TEXT
+   ======================================== */
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-table th {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+    padding: 1rem 1.25rem;
+    text-align: left;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.data-table td {
+    color: rgba(255, 255, 255, 0.85);
+    padding: 0.9rem 1.25rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    font-size: 0.9rem;
+}
+
+.data-table tbody tr:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+body.light-mode .data-table th {
+    background: var(--gray-50);
+    color: var(--gray-600);
+    border-bottom-color: var(--gray-200);
+}
+
+body.light-mode .data-table td {
+    color: var(--gray-800);
+    border-bottom-color: var(--gray-100);
+}
+
+body.light-mode .data-table tbody tr:hover {
+    background: var(--gray-50);
+}
+
+body.light-mode .enhanced-table th {
+    color: var(--gray-800);
+}
+
+/* ========================================
+   DARK MODE: CARD GLASS & STAT CARDS
+   ======================================== */
+.card,
+.card-glass,
+.stat-card {
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+}
+
+body:not(.light-mode) .card:not(.light-mode-forced),
+body:not(.light-mode) .card-glass,
+body:not(.light-mode) .stat-card {
+    color: white !important;
+}
+
+body:not(.light-mode) .card .card-title,
+body:not(.light-mode) .card .section-title {
+    color: white !important;
+}
+
+body:not(.light-mode) .card .card-body {
+    color: rgba(255, 255, 255, 0.8) !important;
+}
+
+.card-glass .stat-value {
+    color: white;
+}
+
+.card-glass .stat-label {
+    color: rgba(255, 255, 255, 0.75);
+}
+
+body.light-mode .card-glass {
+    background: white;
+    border: 1px solid var(--gray-100);
+}
+
+body.light-mode .card-glass .stat-value {
+    color: var(--gray-800);
+}
+
+body.light-mode .card-glass .stat-label {
+    color: var(--gray-500);
+}
+
+/* ========================================
+   DARK MODE: ROLE/STATUS BADGES
+   ======================================== */
+.role-badge {
+    padding: 0.25rem 0.65rem;
+    border-radius: 20px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.role-badge.student {
+    background: rgba(63, 81, 181, 0.2);
+    color: #90caf9;
+}
+
+.role-badge.teacher {
+    background: rgba(67, 160, 71, 0.2);
+    color: #a5d6a7;
+}
+
+.role-badge.secretary {
+    background: rgba(251, 140, 0, 0.2);
+    color: #ffcc80;
+}
+
+.role-badge.principal {
+    background: rgba(183, 28, 28, 0.2);
+    color: #ef9a9a;
+}
+
+.role-badge.developer {
+    background: rgba(0, 200, 83, 0.2);
+    color: #69f0ae;
+}
+
+.status-badge {
+    padding: 0.25rem 0.65rem;
+    border-radius: 20px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.status-badge.active {
+    background: rgba(34, 197, 94, 0.18);
+    color: #86efac;
+}
+
+.status-badge.inactive {
+    background: rgba(239, 68, 68, 0.18);
+    color: #fca5a5;
+}
+
+body.light-mode .role-badge.student {
+    background: #e3f2fd;
+    color: #1565c0;
+}
+
+body.light-mode .role-badge.teacher {
+    background: #e8f5e9;
+    color: #2e7d32;
+}
+
+body.light-mode .role-badge.secretary {
+    background: #fff3e0;
+    color: #e65100;
+}
+
+body.light-mode .role-badge.principal {
+    background: #fce4ec;
+    color: #c62828;
+}
+
+body.light-mode .role-badge.developer {
+    background: #e8f5e9;
+    color: #1b5e20;
+}
+
+body.light-mode .status-badge.active {
+    background: var(--success-100);
+    color: var(--success-700);
+}
+
+body.light-mode .status-badge.inactive {
+    background: var(--error-100);
+    color: var(--error-700);
+}
+
+/* ========================================
+   DARK MODE: GENERAL CARD BODY TEXT
+   ======================================== */
+body:not(.light-mode) .card p,
+body:not(.light-mode) .card span:not(.nav-icon):not(.nav-label):not(.stat-value):not([class*="badge"]):not([class*="btn"]) {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+body:not(.light-mode) .card h1,
+body:not(.light-mode) .card h2,
+body:not(.light-mode) .card h3,
+body:not(.light-mode) .card h4 {
+    color: white;
+}
+
+body.light-mode .card p,
+body.light-mode .card span:not(.nav-icon):not(.nav-label):not(.stat-value):not([class*="badge"]):not([class*="btn"]) {
+    color: var(--gray-700);
+}
+
+body.light-mode .card h1,
+body.light-mode .card h2,
+body.light-mode .card h3,
+body.light-mode .card h4 {
+    color: var(--gray-900);
+}
+
+.section-header p {
+    color: rgba(255, 255, 255, 0.65);
+}
+
+body.light-mode .section-header p {
+    color: var(--gray-500);
+}
+
+/* ========================================
+   DARK MODE: SETTINGS TOGGLE & PASSWORD
+   ======================================== */
+.settings-toggle-label {
+    color: white !important;
+}
+
+.settings-toggle-desc {
+    color: rgba(255, 255, 255, 0.5) !important;
+}
+
+#currentPassword,
+#newPassword,
+#confirmPassword,
+.form-input {
+    color: white !important;
+}
+
+body.light-mode #currentPassword,
+body.light-mode #newPassword,
+body.light-mode #confirmPassword,
+body.light-mode .form-input {
+    color: var(--gray-800) !important;
+    background: white !important;
+    border-color: var(--gray-300) !important;
+}
+
+body:not(.light-mode) .form-label {
+    color: rgba(255, 255, 255, 0.9) !important;
+}
+
+#currentPassword::placeholder,
+#newPassword::placeholder,
+#confirmPassword::placeholder {
+    color: rgba(255, 255, 255, 0.45) !important;
+}
+
+body.light-mode #currentPassword::placeholder,
+body.light-mode #newPassword::placeholder,
+body.light-mode #confirmPassword::placeholder {
+    color: var(--gray-400) !important;
+}
+
+body.light-mode .settings-toggle-label {
+    color: var(--gray-800) !important;
+}
+
+body.light-mode .settings-toggle-desc {
+    color: var(--gray-500) !important;
+}
+
+body:not(.light-mode) .settings-toggle-label {
+    color: white !important;
+}
+
+body:not(.light-mode) .settings-toggle-desc {
+    color: rgba(255, 255, 255, 0.6) !important;
+}
+
+/* Text visibility cleanup */
+body:not(.light-mode) .settings-section-title {
+    color: white !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+body:not(.light-mode) .settings-info-label {
+    color: rgba(255, 255, 255, 0.5) !important;
+    font-size: 0.75rem;
+}
+
+body:not(.light-mode) .settings-info-value {
+    color: white !important;
+    font-weight: 600;
+}
+
+body.light-mode .settings-section-title {
+    color: var(--gray-900) !important;
+    border-bottom: 1px solid var(--gray-100);
+    padding-bottom: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+body.light-mode .settings-info-label {
+    color: var(--gray-500) !important;
+}
+
+body.light-mode .settings-info-value {
+    color: var(--gray-800) !important;
+}
+
+body.light-mode .settings-info-item {
+    background: var(--gray-50) !important;
+    border: 1px solid var(--gray-700) !important;
+}
+
+/* Activity log styles removed */
+
+/* ========================================
+   DARK/LIGHT MODE: SELECT & OPTION DROPDOWNS
+   Fixes dropdown option text visibility in
+   Teacher dashboard grade/section filters
+   ======================================== */
+
+select {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    font-family: inherit;
+    cursor: pointer;
+    appearance: auto;
+}
+
+select option {
+    background: #1a1a3e;
+    color: white;
+}
+
+body.light-mode select {
+    background: white;
+    color: #1f2937;
+    border-color: #d1d5db;
+}
+
+body.light-mode select option {
+    background: white;
+    color: #1f2937;
+}
+
+/* ========================================
+   LIGHT MODE: STAT CARDS
+   Make stat cards match secretary/student
+   theme — white cards, dark text
+   ======================================== */
+
+body.light-mode .stat-card {
+    background: white !important;
+    border: 1px solid #e5e7eb !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 4px 16px rgba(0, 0, 0, 0.04) !important;
+    color: #1f2937 !important;
+}
+
+body.light-mode .stat-card .stat-value,
+body.light-mode .stat-card .stat-number {
+    color: #1a237e !important;
+}
+
+body.light-mode .stat-card .stat-label,
+body.light-mode .stat-card .stat-subtitle {
+    color: #6b7280 !important;
+}
+
+body.light-mode .stat-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(102, 126, 234, 0.15) !important;
+    border-color: #c7d2fe !important;
+}
+
+/* ========================================
+   LIGHT MODE: QUIZ STATUS BADGE CONSISTENT
+   "Active" badge should not turn green in
+   dark mode vs light mode — same definition
+   ======================================== */
+
+body.light-mode .quiz-status.active,
+body.light-mode .status-badge.active,
+body.light-mode .badge-active {
+    background: #dcfce7 !important;
+    color: #166534 !important;
+}
+
+/* Dark mode keeps its own subtle active style (defined above) */
+
+/* ========================================
+   LIGHT MODE: SECTION HEADER & MISC TEXT
+   ======================================== */
+
+body.light-mode .section-header h2,
+body.light-mode .section-header .section-title {
+    color: #1f2937 !important;
+}
+
+body.light-mode .card-section-title,
+body.light-mode .panel-title {
+    color: #1f2937 !important;
+}
+
+/* Last activity text in light mode */
+body.light-mode .last-activity,
+body.light-mode [id*="lastActivity"],
+body.light-mode .user-last-active {
+    color: #6b7280 !important;
+}
+
+/* ========================================
+   DARK MODE: QUIZ CARDS
+   ======================================== */
+
+body:not(.light-mode) .quiz-card {
+    background: rgba(26, 35, 126, 0.6) !important;
+    border-color: rgba(255, 255, 255, 0.15) !important;
+    color: #f1f5f9 !important;
+}
+
+body:not(.light-mode) .quiz-title {
+    color: #e2e8f0 !important;
+}
+
+body:not(.light-mode) .quiz-description {
+    color: #94a3b8 !important;
+}
+
+body:not(.light-mode) .quiz-meta {
+    background: rgba(255, 255, 255, 0.06) !important;
+}
+
+body:not(.light-mode) .quiz-meta-item {
+    color: #cbd5e0 !important;
+}
+
+body:not(.light-mode) .quiz-status.active {
+    background: rgba(34, 197, 94, 0.15) !important;
+    color: #86efac !important;
+}
+
+body:not(.light-mode) .quiz-status.overdue {
+    background: rgba(239, 68, 68, 0.15) !important;
+    color: #fca5a5 !important;
+}
+
+body:not(.light-mode) .quiz-status.draft {
+    background: rgba(156, 163, 175, 0.15) !important;
+    color: #9ca3af !important;
+}
+
+/* ========================================
+   DARK MODE: DATA TABLES
+   ======================================== */
+
+body:not(.light-mode) .data-table {
+    color: #e2e8f0 !important;
+}
+
+body:not(.light-mode) .data-table thead th {
+    background: rgba(15, 23, 42, 0.8) !important;
+    color: #94a3b8 !important;
+    border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+body:not(.light-mode) .data-table tbody tr {
+    border-bottom-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+body:not(.light-mode) .data-table tbody tr:hover {
+    background: rgba(255, 255, 255, 0.04) !important;
+}
+
+body:not(.light-mode) .data-table tbody td {
+    color: #e2e8f0 !important;
+}
+
+/* ========================================
+   DARK MODE: CARDS & CARD BODIES
+   ======================================== */
+
+body:not(.light-mode) .card {
+    background: rgba(26, 35, 126, 0.5) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    color: #e2e8f0 !important;
+}
+
+body:not(.light-mode) .card-title {
+    color: #e2e8f0 !important;
+}
+
+body:not(.light-mode) .card-body {
+    color: #cbd5e0 !important;
+}
+
+body:not(.light-mode) .card-header {
+    border-bottom-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+body:not(.light-mode) .score-info h3 {
+    color: #e2e8f0 !important;
+}
+
+body:not(.light-mode) .score-info p {
+    color: #94a3b8 !important;
+}
+
+body:not(.light-mode) .score-item {
+    border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+body:not(.light-mode) .score-item:hover {
+    background: rgba(255, 255, 255, 0.04) !important;
+}
+
+/* ========================================
+   DARK MODE: MODAL TITLE & FOOTER
+   ======================================== */
+
+body:not(.light-mode) .modal-title {
+    color: #e2e8f0 !important;
+}
+
+body:not(.light-mode) .modal-footer {
+    background: rgba(15, 23, 42, 0.6) !important;
+    border-top-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+body:not(.light-mode) .form-section-title {
+    color: #e2e8f0 !important;
+}
+
+body:not(.light-mode) .form-section {
+    border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* ========================================
+   DARK MODE: FORM INPUTS (inside cards/modals)
+   ======================================== */
+
+body:not(.light-mode) .form-input,
+body:not(.light-mode) .form-select,
+body:not(.light-mode) .form-textarea {
+    background: rgba(15, 23, 42, 0.7) !important;
+    border-color: rgba(255, 255, 255, 0.15) !important;
+    color: #e2e8f0 !important;
+}
+
+body:not(.light-mode) .form-label {
+    color: #94a3b8 !important;
+}
+
+body:not(.light-mode) .form-help {
+    color: #64748b !important;
+}
+
+/* ========================================
+   DARK MODE: BADGES
+   ======================================== */
+
+body:not(.light-mode) .badge-success {
+    background: rgba(34, 197, 94, 0.15) !important;
+    color: #86efac !important;
+}
+
+body:not(.light-mode) .badge-warning {
+    background: rgba(245, 158, 11, 0.15) !important;
+    color: #fbbf24 !important;
+}
+
+body:not(.light-mode) .badge-error {
+    background: rgba(239, 68, 68, 0.15) !important;
+    color: #fca5a5 !important;
+}
+
+body:not(.light-mode) .badge-primary {
+    background: rgba(99, 102, 241, 0.15) !important;
+    color: #a5b4fc !important;
+}
+
+/* ========================================
+   DARK MODE: QUESTION BUILDER
+   ======================================== */
+
+body:not(.light-mode) .question-card-builder {
+    background: rgba(15, 23, 42, 0.6) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+body:not(.light-mode) .question-number-badge {
+    background: rgba(99, 102, 241, 0.25) !important;
+    color: #a5b4fc !important;
+}
+
+/* ========================================
+   LIGHT MODE: DATA TABLES
+   ======================================== */
+
+body.light-mode .data-table {
+    color: #1f2937 !important;
+}
+
+body.light-mode .data-table thead th {
+    background: #f9fafb !important;
+    color: #374151 !important;
+    border-bottom-color: #e5e7eb !important;
+}
+
+body.light-mode .data-table tbody tr {
+    border-bottom-color: #f3f4f6 !important;
+}
+
+body.light-mode .data-table tbody tr:hover {
+    background: #f9fafb !important;
+}
+
+body.light-mode .data-table tbody td {
+    color: #374151 !important;
+}
+
+/* ========================================
+   LIGHT MODE: CARDS
+   ======================================== */
+
+body.light-mode .card {
+    background: white !important;
+    border: 1px solid #e5e7eb !important;
+    color: #1f2937 !important;
+}
+
+body.light-mode .card-title {
+    color: #1f2937 !important;
+}
+
+body.light-mode .card-body {
+    color: #374151 !important;
+}
+
+body.light-mode .card-header {
+    border-bottom-color: #e5e7eb !important;
+}
+
+body.light-mode .score-info h3 {
+    color: #111827 !important;
+}
+
+body.light-mode .score-info p {
+    color: #6b7280 !important;
+}
+
+body.light-mode .quiz-card {
+    background: white !important;
+    color: #1f2937 !important;
+}
+
+body.light-mode .quiz-title {
+    color: #1f2937 !important;
+}
+
+body.light-mode .quiz-description {
+    color: #6b7280 !important;
+}
+
+body.light-mode .quiz-meta {
+    background: #f9fafb !important;
+}
+
+body.light-mode .quiz-meta-item {
+    color: #374151 !important;
+}
+
+body.light-mode .modal-title {
+    color: #111827 !important;
+}
+
+body.light-mode .modal-footer {
+    background: #f9fafb !important;
+    border-top-color: #e5e7eb !important;
+}
+
+body.light-mode .form-section-title {
+    color: #111827 !important;
+}
+
+body.light-mode .form-input,
+body.light-mode .form-select,
+body.light-mode .form-textarea {
+    background: white !important;
+    border-color: #d1d5db !important;
+    color: #111827 !important;
+}
+
+body.light-mode .form-label {
+    color: #374151 !important;
+}
+
+/* ========================================
+   MOBILE: QUIZ ACTIONS WRAP
+   ======================================== */
+
+@media (max-width: 640px) {
+    .quiz-actions {
+        flex-wrap: wrap;
+    }
+
+    .quiz-actions .btn {
+        flex: 1 1 calc(50% - 0.375rem);
+        min-width: 100px;
+        font-size: 0.8rem;
+        padding: 0.45rem 0.6rem;
+    }
+
+    .section-header {
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
+
+    .section-actions {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        width: 100%;
+    }
+
+    .filter-tabs {
+        flex-wrap: wrap;
+    }
+
+    .large-modal {
+        max-width: 98vw !important;
+    }
+}
+
+/* ========================================
+   PASSWORD TOGGLE (matches login page)
+   ======================================== */
+
+.password-toggle-btn {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    border: none;
+    color: var(--gray-400, rgba(255, 255, 255, 0.5));
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    border-radius: 6px;
+    z-index: 2;
+}
+
+.password-toggle-btn:hover {
+    color: var(--gray-100, white);
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.password-toggle-btn:active {
+    transform: translateY(-50%) scale(0.95);
+}
+
+.password-toggle-btn svg {
+    width: 18px;
+    height: 18px;
+}
+
+.light-mode .password-toggle-btn {
+    color: var(--gray-500, #6b7280);
+}
+
+.light-mode .password-toggle-btn:hover {
+    color: var(--gray-800, #1f2937);
+    background: rgba(0, 0, 0, 0.06);
+}
+
+/* ========================================
+   NOTIFICATION PANEL
+   ======================================== */
+
+.notification-panel {
+    position: absolute;
+    top: 110%;
+    right: 0;
+    width: 360px;
+    max-height: 420px;
+    overflow-y: auto;
+    background: var(--card-bg, #1e293b);
+    border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.1));
+    border-radius: 14px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+    z-index: 1000;
+    padding: 0;
+}
+
+.notification-panel-header {
+    padding: 1rem 1.15rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.notification-panel-header span {
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--gray-100, #f1f5f9);
+}
+
+.notification-panel-header button {
+    background: none;
+    border: none;
+    color: var(--primary-400, #667eea);
+    font-size: 0.75rem;
+    cursor: pointer;
+    font-weight: 600;
+    transition: opacity 0.2s;
+}
+
+.notification-panel-header button:hover {
+    opacity: 0.8;
+}
+
+.notification-item {
+    padding: 0.75rem 1rem;
+    border-radius: 10px;
+    margin: 0.25rem 0.5rem;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.notification-item:hover {
+    background: rgba(102, 126, 234, 0.08);
+}
+
+.notification-item.unread {
+    background: rgba(102, 126, 234, 0.06);
+}
+
+.notification-item .notif-title {
+    font-weight: 600;
+    font-size: 0.82rem;
+    margin-bottom: 0.15rem;
+    color: var(--gray-100, #f1f5f9);
+}
+
+.notification-item .notif-message {
+    font-size: 0.78rem;
+    color: var(--gray-400, #9ca3af);
+    line-height: 1.4;
+}
+
+.notification-item .notif-time {
+    font-size: 0.7rem;
+    color: var(--gray-500, #6b7280);
+    margin-top: 0.3rem;
+}
+
+.notification-empty {
+    text-align: center;
+    padding: 1.5rem;
+    color: var(--gray-500, #6b7280);
+    font-size: 0.85rem;
+}
+
+/* Light mode notification overrides */
+.light-mode .notification-panel {
+    background: #ffffff;
+    border-color: rgba(0, 0, 0, 0.1);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+}
+
+.light-mode .notification-panel-header {
+    border-bottom-color: rgba(0, 0, 0, 0.08);
+}
+
+.light-mode .notification-panel-header span {
+    color: #1e293b;
+}
+
+.light-mode .notification-item .notif-title {
+    color: #1e293b;
+}
+
+.light-mode .notification-item .notif-message {
+    color: #64748b;
+}
+
+.light-mode .notification-item .notif-time {
+    color: #94a3b8;
+}
+
+.light-mode .notification-item:hover {
+    background: rgba(102, 126, 234, 0.06);
+}
+
+.light-mode .notification-item.unread {
+    background: rgba(102, 126, 234, 0.04);
+}
+
+.light-mode .notification-empty {
+    color: #94a3b8;
+}
+
+/* ========================================
+   Password Input UI (Eye Toggle + Strength Bar)
+   ======================================== */
+.password-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.password-input-wrapper .form-input {
+    flex: 1;
+    padding-right: 3rem;
+}
+
+.pw-eye-btn {
+    position: absolute;
+    right: 0.65rem;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1.05rem;
+    line-height: 1;
+    padding: 0.25rem;
+    color: var(--gray-400, #9ca3af);
+    transition: color 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+}
+
+.pw-eye-btn:hover {
+    color: var(--primary-400, #818cf8);
+}
+
+.pw-strength-bar-wrap {
+    height: 6px;
+    background: var(--primary-300);
+    border-radius: 4px;
+    margin-top: 0.5rem;
+    overflow: hidden !important;
+}
+
+.pw-strength-bar {
+    height: 100%;
+    border-radius: 4px;
+    width: 0%;
+    transition: width 0.3s ease, background-color 0.3s ease;
+}
+
+.pw-strength-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-top: 0.3rem;
+    display: block;
+}
+
+.pw-match-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-top: 0.3rem;
+    display: block;
+}
+
+/* ========================================
+   Option Remove Button (Quiz Builder)
+   ======================================== */
+.btn-icon-remove {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--gray-500, #6b7280);
+    font-size: 1rem;
+    padding: 0.2rem 0.4rem;
+    border-radius: 6px;
+    line-height: 1;
+    flex-shrink: 0;
+    transition: color 0.15s, background 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-icon-remove:hover {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.option-input-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.4rem;
+}
+
+/* ========================================
+   LIGHT MODE OVERRIDES — Dashboard Core
+   ======================================== */
+
+/* Background */
+body.light-mode .dashboard-container {
+    background: linear-gradient(135deg, #f0f4ff 0%, #f5f0ff 100%);
+}
+
+/* Sidebar in Light Mode */
+body.light-mode .sidebar {
+    background: rgba(255, 255, 255, 0.95);
+    border-right: 1px solid var(--gray-200);
+}
+
+body.light-mode .sidebar-header {
+    border-bottom: 1px solid var(--gray-200);
+}
+
+body.light-mode .sidebar-title {
+    color: var(--gray-900);
+}
+
+body.light-mode .nav-item {
+    color: var(--gray-600);
+    border-left-color: transparent;
+}
+
+body.light-mode .nav-item:hover {
+    background: var(--gray-100);
+    color: var(--gray-900);
+}
+
+body.light-mode .nav-item.active {
+    background: rgba(63, 81, 181, 0.08);
+    color: var(--primary-700);
+    border-left-color: var(--primary-600);
+}
+
+body.light-mode .sidebar-footer {
+    border-top: 1px solid var(--gray-200);
+    background: rgba(255, 255, 255, 0.98);
+}
+
+body.light-mode .sidebar-badge {
+    background: rgba(63, 81, 181, 0.1);
+    color: var(--primary-700);
+    border-color: rgba(63, 81, 181, 0.2);
+}
+
+/* Dashboard Header */
+body.light-mode .dashboard-header {
+    background: white;
+    border: 1px solid var(--gray-200);
+    box-shadow: var(--shadow-sm);
+}
+
+body.light-mode .dashboard-title {
+    color: var(--gray-900);
+}
+
+body.light-mode .dashboard-subtitle {
+    color: var(--gray-600);
+}
+
+body.light-mode .user-activity {
+    color: var(--gray-500);
+}
+
+/* Section Titles */
+body.light-mode .section-title {
+    color: var(--gray-900);
+}
+
+/* Stat Cards */
+body.light-mode .stat-card.card-glass {
+    background: white;
+    border: 1px solid var(--gray-200);
+    box-shadow: var(--shadow-md);
+}
+
+body.light-mode .stat-card.card-glass:hover {
+    border-color: var(--gray-300);
+    box-shadow: var(--shadow-lg);
+}
+
+body.light-mode .stat-value {
+    color: var(--gray-900);
+}
+
+body.light-mode .stat-label {
+    color: var(--gray-600);
+}
+
+/* Stat Card Goto Button — Light Mode */
+body.light-mode .stat-card-goto {
+    background: var(--gray-100);
+    border: 1px solid var(--gray-300);
+    color: var(--gray-500);
+}
+
+body.light-mode .stat-card-goto:hover {
+    background: var(--gray-200);
+    color: var(--gray-800);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Glass Cards in Light Mode */
+body.light-mode .card-glass {
+    background: white;
+    border: 1px solid var(--gray-200);
+    box-shadow: var(--shadow-md);
+}
+
+/* Card Title / Card Header */
+body.light-mode .card-header {
+    border-bottom-color: var(--gray-200);
+}
+
+body.light-mode .card-title {
+    color: var(--gray-900);
+}
+
+body.light-mode .card-body {
+    color: var(--gray-700);
+}
+
+/* Empty State */
+body.light-mode .empty-state {
+    color: var(--gray-500);
+}
+
+body.light-mode .empty-state h3 {
+    color: var(--gray-800);
+}
+
+body.light-mode .empty-state p {
+    color: var(--gray-600);
+}
+
+/* User Table Text Utilities */
+.user-name-text {
+    color: var(--gray-100);
+}
+
+.user-email-text {
+    color: var(--gray-300);
+}
+
+.user-meta-text {
+    color: var(--gray-400);
+}
+
+body.light-mode .user-name-text {
+    color: var(--gray-900) !important;
+}
+
+body.light-mode .user-email-text {
+    color: var(--gray-700) !important;
+}
+
+body.light-mode .user-meta-text {
+    color: var(--gray-600) !important;
+}
+
+/* Header pills */
+body.light-mode .header-pill {
+    background: rgba(63, 81, 181, 0.06);
+    border-color: var(--gray-200);
+}
+
+body.light-mode .pill-value {
+    color: var(--gray-900);
+}
+
+body.light-mode .pill-label {
+    color: var(--gray-500);
+}
+
+/* Mobile Topbar in Light Mode */
+body.light-mode .mobile-topbar {
+    background: rgba(255, 255, 255, 0.95);
+    border-bottom: 1px solid var(--gray-200);
+}
+
+body.light-mode .hamburger-btn span {
+    background: var(--gray-800);
+}
+
+body.light-mode .mobile-title {
+    color: var(--gray-900);
+}
+
+/* Quiz Tabs in Light Mode */
+body.light-mode .quiz-tabs {
+    background: var(--gray-100);
+}
+
+body.light-mode .tab-btn {
+    color: var(--gray-600);
+}
+
+body.light-mode .tab-btn:hover {
+    color: var(--gray-900);
+}
+
+body.light-mode .tab-btn.active {
+    background: white;
+    color: var(--primary-700);
+}
+
+/* Status Indicator — ensure green Operational text in light mode */
+body.light-mode .status-indicator.status-good {
+    background: #dcfce7;
+    color: #166534;
+}
+
+/* Health Details / Session / Storage text in light mode */
+body.light-mode .health-details p,
+body.light-mode .session-stats p,
+body.light-mode .storage-info p {
+    color: var(--gray-700);
+    border-bottom-color: var(--gray-200);
+}
+
+/* Greeting label */
+body.light-mode .greeting-label {
+    color: var(--gray-500);
+}
+
+body.light-mode .header-timestamp {
+    color: var(--gray-400);
+}
