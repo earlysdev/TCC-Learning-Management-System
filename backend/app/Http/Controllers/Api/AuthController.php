@@ -62,6 +62,26 @@ class AuthController extends Controller
             ]);
         }
 
+        if ($user->status === 'inactive') {
+            \App\Models\SecurityLog::create([
+                'user_id' => $user->id,
+                'event_type' => 'inactive_account_login_blocked',
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+            ]);
+            throw ValidationException::withMessages([
+                'identifier' => ['This account has been deactivated. Please contact the College Secretary or Dean.'],
+            ]);
+        }
+
+        $maintenanceMode = \App\Models\SystemSetting::get('maintenance_mode', false);
+        $normalizedRole = ($user->role === 'principal') ? 'dean' : ($user->role ?? 'student');
+        if ($maintenanceMode && $normalizedRole !== 'dean') {
+            throw ValidationException::withMessages([
+                'identifier' => ['The portal is currently in Maintenance Mode. Only the College Dean may sign in at this time.'],
+            ]);
+        }
+
         \App\Models\ActivityLog::create([
             'user_id' => $user->id,
             'action' => 'login',

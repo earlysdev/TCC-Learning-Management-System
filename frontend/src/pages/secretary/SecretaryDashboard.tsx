@@ -225,7 +225,7 @@ export default function SecretaryDashboard() {
             Welcome, {user?.name || 'Secretary'}!
           </h1>
           <p style={{ color: 'var(--neutral-300)', marginTop: '0.25rem' }}>
-            School registrar operations, learner accounts, and institutional enrollment records.
+            School Secretary operations, learner accounts, and institutional enrollment records.
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
@@ -708,7 +708,7 @@ export default function SecretaryDashboard() {
           Official College Reports
         </h1>
         <p style={{ color: 'var(--neutral-300)' }}>
-          Generate printable enrollment rosters and official TCC registrar compliance records.
+          Generate printable enrollment rosters and official TCC Secretary compliance records.
         </p>
       </div>
 
@@ -805,7 +805,7 @@ export default function SecretaryDashboard() {
           Secretary Profile
         </h1>
         <p style={{ color: 'var(--neutral-300)' }}>
-          Registrar and administrative credentials at Tagoloan Community College.
+          Secretary and administrative credentials at Tagoloan Community College.
         </p>
       </div>
 
@@ -817,7 +817,7 @@ export default function SecretaryDashboard() {
           <div>
             <h2 style={{ fontSize: '1.3rem', fontWeight: 700, color: 'white' }}>{user?.name || 'School Secretary'}</h2>
             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
-              <Badge variant="warning">School Registrar</Badge>
+              <Badge variant="warning">School Secretary</Badge>
               <Badge variant="success">Active</Badge>
             </div>
           </div>
@@ -833,7 +833,7 @@ export default function SecretaryDashboard() {
           <div>
             <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', textTransform: 'uppercase', fontWeight: 600 }}>Office</div>
             <div style={{ color: 'white', fontWeight: 600, marginTop: '0.2rem' }}>
-              Registrar & Student Records Office
+              Secretary & Student Records Office
             </div>
           </div>
           <div>

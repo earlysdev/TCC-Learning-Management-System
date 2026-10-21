@@ -49,7 +49,7 @@ Use these checklists when performing complex setups. Copy the relevant checklist
 ```
 - [ ] Create the domain (`domain:create --json -n`)
 - [ ] Get DNS records to configure (`domain:get --json -n`)
-- [ ] Tell the user to add the DNS records at their registrar
+- [ ] Tell the user to add the DNS records at their Secretary
 - [ ] Verify the domain (`domain:verify -n`)
 - [ ] Confirm verification passed
 ```

@@ -63,9 +63,23 @@ class UserController extends Controller
             'school_year' => 'nullable|string|max:9',
         ]);
 
+        if (!empty($validated['section']) && preg_match('/Block\s*-\s*([1-4])[A-E]/i', $validated['section'], $matches)) {
+            $yearMap = ['1' => '1st Year', '2' => '2nd Year', '3' => '3rd Year', '4' => '4th Year'];
+            $validated['grade'] = $yearMap[$matches[1]] ?? ($validated['grade'] ?? null);
+        }
+
         $validated['password'] = Hash::make($validated['password']);
+        $validated['status'] = $validated['status'] ?? 'active';
 
         $user = User::create($validated);
+
+        \App\Models\ActivityLog::create([
+            'user_id' => $request->user()?->id,
+            'action' => 'create_user',
+            'description' => "Created {$user->role} account for {$user->name}" . ($user->section ? " ({$user->section})" : ''),
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
 
         return response()->json([
             'status' => 'success',
@@ -96,6 +110,11 @@ class UserController extends Controller
             'section' => 'nullable|string|max:64',
         ]);
 
+        if (!empty($validated['section']) && preg_match('/Block\s*-\s*([1-4])[A-E]/i', $validated['section'], $matches)) {
+            $yearMap = ['1' => '1st Year', '2' => '2nd Year', '3' => '3rd Year', '4' => '4th Year'];
+            $validated['grade'] = $yearMap[$matches[1]] ?? ($validated['grade'] ?? null);
+        }
+
         if (isset($validated['password'])) {
             $validated['password'] = Hash::make($validated['password']);
         } else {
@@ -118,6 +137,14 @@ class UserController extends Controller
         ]);
 
         $user->update(['status' => $validated['status']]);
+
+        \App\Models\ActivityLog::create([
+            'user_id' => $request->user()?->id,
+            'action' => 'update_user_status',
+            'description' => "Changed {$user->name}'s status to {$validated['status']}",
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
 
         return response()->json([
             'status' => 'success',

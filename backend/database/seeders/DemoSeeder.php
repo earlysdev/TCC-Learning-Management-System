@@ -63,9 +63,9 @@ class DemoSeeder extends Seeder
                 'school_year' => null,
             ],
             [
-                'name' => 'TCC Registrar',
+                'name' => 'TCC Secretary',
                 'first_name' => 'TCC',
-                'last_name' => 'Registrar',
+                'last_name' => 'Secretary',
                 'email' => 'secretary@tcc.edu.ph',
                 'lrn' => null,
                 'role' => 'secretary',

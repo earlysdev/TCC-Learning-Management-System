@@ -195,9 +195,12 @@ export default function PrincipalDashboard() {
   };
 
   const filteredUsers = usersList.filter(u => {
+    const q = userSearch.toLowerCase();
     const matchesSearch = !userSearch || 
-      u.name.toLowerCase().includes(userSearch.toLowerCase()) || 
-      u.email.toLowerCase().includes(userSearch.toLowerCase());
+      u.name.toLowerCase().includes(q) || 
+      u.email.toLowerCase().includes(q) ||
+      (u.lrn || '').toLowerCase().includes(q) ||
+      (u.section || '').toLowerCase().includes(q);
     const matchesRole = !roleFilter || u.role === roleFilter;
     return matchesSearch && matchesRole;
   });
@@ -296,7 +299,7 @@ export default function PrincipalDashboard() {
       <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: '240px' }}>
           <Input 
-            placeholder="Search by name or email..."
+            placeholder="Search by name, email, ID (e.g. 20273710), or Block..."
             value={userSearch}
             onChange={e => setUserSearch(e.target.value)}
           />
@@ -323,7 +326,8 @@ export default function PrincipalDashboard() {
             <tr style={{ background: 'rgba(255,255,255,0.06)', borderBottom: '1px solid var(--glass-border)' }}>
               <th style={{ padding: '0.85rem 1.25rem' }}>Name</th>
               <th style={{ padding: '0.85rem 1.25rem' }}>Role</th>
-              <th style={{ padding: '0.85rem 1.25rem' }}>Email / Identifier</th>
+              <th style={{ padding: '0.85rem 1.25rem' }}>Email / ID</th>
+              <th style={{ padding: '0.85rem 1.25rem' }}>Block</th>
               <th style={{ padding: '0.85rem 1.25rem' }}>Status</th>
               <th style={{ padding: '0.85rem 1.25rem', textAlign: 'right' }}>Actions</th>
             </tr>
@@ -331,7 +335,7 @@ export default function PrincipalDashboard() {
           <tbody>
             {filteredUsers.length === 0 ? (
               <tr>
-                <td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: 'var(--neutral-400)' }}>
+                <td colSpan={6} style={{ padding: '2rem', textAlign: 'center', color: 'var(--neutral-400)' }}>
                   No users found matching your filters.
                 </td>
               </tr>
@@ -344,7 +348,13 @@ export default function PrincipalDashboard() {
                       {u.role.toUpperCase()}
                     </Badge>
                   </td>
-                  <td style={{ padding: '0.85rem 1.25rem', color: 'var(--neutral-300)' }}>{u.email}</td>
+                  <td style={{ padding: '0.85rem 1.25rem', color: 'var(--neutral-300)' }}>
+                    <div>{u.email}</div>
+                    {u.lrn && <div style={{ fontSize: '0.78rem', color: 'var(--neutral-400)', fontFamily: 'monospace' }}>ID: {u.lrn}</div>}
+                  </td>
+                  <td style={{ padding: '0.85rem 1.25rem', color: 'var(--neutral-300)' }}>
+                    {u.section ? `${u.section}${u.grade ? ` (${u.grade})` : ''}` : '—'}
+                  </td>
                   <td style={{ padding: '0.85rem 1.25rem' }}>
                     <Badge variant={u.status === 'inactive' ? 'warning' : 'success'}>
                       {u.status || 'Active'}
