@@ -21,7 +21,7 @@ DirectoryIndex index.html index.php
     RewriteRule ^ %1 [L,R=301]
 
     # Send API Requests to Laravel Front Controller...
-    RewriteCond %{REQUEST_URI} ^/api [NC]
+    RewriteCond %{REQUEST_URI} api [NC]
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteRule ^ index.php [L]
