@@ -7,9 +7,9 @@
     "license": "MIT",
     "require": {
         "php": "^8.3",
-        "laravel/framework": "^13.17",
-        "laravel/sanctum": "^4.3",
-        "laravel/tinker": "^3.0"
+        "laravel/framework": "^12.0",
+        "laravel/sanctum": "^4.0",
+        "laravel/tinker": "^2.10"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
@@ -75,6 +75,9 @@
         }
     },
     "config": {
+        "platform": {
+            "php": "8.3.35"
+        },
         "platform-check": false,
         "optimize-autoloader": false,
         "preferred-install": "dist",
