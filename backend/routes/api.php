@@ -15,21 +15,6 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/health', fn () => response()->json(['status' => 'ok', 'app' => 'LNHS LMS API']));
 
-Route::get('/setup/migrate', function () {
-    try {
-        \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true, '--seed' => true]);
-        return response()->json([
-            'status' => 'success',
-            'output' => \Illuminate\Support\Facades\Artisan::output(),
-        ]);
-    } catch (\Throwable $e) {
-        return response()->json([
-            'status' => 'error',
-            'message' => $e->getMessage(),
-        ], 500);
-    }
-});
-
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
 Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:6,1');
 Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:6,1');
