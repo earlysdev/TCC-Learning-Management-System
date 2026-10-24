@@ -156,28 +156,11 @@ cd frontend
 npm run build
 ```
 
----
 
-## 📂 Project Structure
-
-```text
-TCC-Learning-Management-System/
-├── backend/                  # Laravel 12 REST API & Sanctum Authentication
-│   ├── app/
-│   │   ├── Http/Controllers/ # Auth, Quiz, User, Subject, Section, Analytics, Audit & Security Controllers
-│   │   ├── Http/Middleware/  # EnsureRole RBAC middleware
-│   │   ├── Models/           # User, Quiz, QuizAttempt, Subject, Section, ActivityLog, SecurityLog
-│   │   └── Services/         # LmsAiService (Student study diagnostics & curated references)
-│   ├── database/
-│   │   ├── migrations/       # Database schema definitions
-│   │   └── seeders/          # DemoSeeder (TCC roles, 20 College Blocks, 43 BSIT courses)
-│   └── routes/api.php        # Protected & public REST API routes
-├── frontend/                 # React 19 + TypeScript + Vite SPA
-│   ├── public/images/        # Official TCC seal & institutional campus photography
-│   └── src/
-│       ├── components/       # GlassCard, Modal, Topbar, Sidebar, DashboardLayout, ProfileUpdateCard
-│       ├── hooks/            # useIdleTimeout (client-side inactivity watchdog)
-│       ├── lib/              # BSIT constants, TypeScript interfaces, and utilities
-│       └── pages/            # LandingPage, LoginPage, Student, Teacher, Secretary, and Dean portals
-└── render.yaml               # Cloud deployment blueprint for Render + PostgreSQL
+### Frontend Type-Check & Production Bundle
+```powershell
+cd frontend
+npm run build
 ```
+
+

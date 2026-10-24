@@ -1,4 +1,4 @@
-export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api'
+export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? 'http://localhost:8000/api' : '/api')
 
 export function getLmsToken(): string | null {
   return localStorage.getItem('lms-token') ?? sessionStorage.getItem('lms-token')
