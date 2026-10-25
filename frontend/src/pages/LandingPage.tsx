@@ -447,7 +447,7 @@ export default function LandingPage() {
                   userSelect: 'none',
                 }}
               >
-                <Download size={18} /> Mobile App Not Currently Available — We&apos;re still developing the web, stay tuned for mobile updates
+                <Download size={18} /> Mobile App is Not Currently Available — We&apos;re still developing the web, stay tuned for mobile updates
               </button>
             </div>
 
