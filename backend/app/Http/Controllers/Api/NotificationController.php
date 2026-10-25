@@ -43,7 +43,10 @@ class NotificationController extends Controller
 
     public function markAllRead(Request $request)
     {
-        LmsNotification::where('user_id', $request->user()->id)
+        LmsNotification::where(function ($q) use ($request) {
+                $q->where('user_id', $request->user()->id)
+                  ->orWhere('recipient_role', $request->user()->role);
+            })
             ->where('is_read', false)
             ->update([
                 'is_read' => true,

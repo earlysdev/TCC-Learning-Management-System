@@ -421,8 +421,8 @@ html {
 .values-badge-column {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  margin-top: auto;
+  gap: 1.5rem;
+  margin-top: center;
   padding-top: 0.65rem;
 }
 

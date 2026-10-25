@@ -169,7 +169,34 @@ class QuizController extends Controller
             'shuffle_questions' => ['sometimes', 'boolean'],
         ]);
         
+        $wasPublished = (bool) $quiz->is_published;
         $quiz->update($input);
+
+        if (!$wasPublished && $quiz->is_published) {
+            \App\Models\ActivityLog::create([
+                'user_id' => $request->user()->id,
+                'action' => 'publish_quiz',
+                'description' => "Published quiz \"{$quiz->title}\" ({$quiz->subject})",
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+            ]);
+
+            $students = User::where('role', 'student')->get();
+            foreach ($students as $student) {
+                if ($this->isStudentEligible($student, $quiz)) {
+                    \App\Models\LmsNotification::create([
+                        'user_id' => $student->id,
+                        'recipient_role' => 'student',
+                        'type' => 'quiz_published',
+                        'title' => "New Quiz: {$quiz->title}",
+                        'message' => "{$quiz->subject} ({$quiz->topic}) is now open for taking.",
+                        'data' => ['quiz_id' => $quiz->id],
+                        'is_read' => false,
+                    ]);
+                }
+            }
+        }
+
         return response()->json(['quiz' => $this->teacherQuizPayload($quiz->fresh()->loadCount('attempts'))]);
     }
 

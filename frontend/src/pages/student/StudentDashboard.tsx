@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../components/layout/DashboardLayout';
-import { lmsFetch, getLmsUser } from '../../lmsApi';
+import { lmsFetch, getLmsUser, extractCollection } from '../../lmsApi';
 import type { Quiz, Recommendation, Announcement } from '../../lib/types';
 import { getYearLevelFromBlock } from '../../lib/constants';
 import { 
@@ -53,12 +53,8 @@ export default function StudentDashboard() {
 
   const fetchAnnouncements = async () => {
     try {
-      const data = await lmsFetch<Announcement[] | { data: Announcement[] }>('/announcements');
-      if (Array.isArray(data)) {
-        setAnnouncements(data);
-      } else if (data && Array.isArray(data.data)) {
-        setAnnouncements(data.data);
-      }
+      const data = await lmsFetch<unknown>('/announcements');
+      setAnnouncements(extractCollection<Announcement>(data));
     } catch {
       // Announcements may be empty or optional
     }

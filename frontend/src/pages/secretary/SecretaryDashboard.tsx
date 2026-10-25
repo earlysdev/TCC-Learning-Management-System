@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../components/layout/DashboardLayout';
-import { lmsFetch, getLmsUser } from '../../lmsApi';
+import { lmsFetch, getLmsUser, extractCollection } from '../../lmsApi';
 import type { User, ActivityLog, PaginatedResponse } from '../../lib/types';
 import { YEAR_LEVEL_BLOCKS, ALL_BLOCKS, getYearLevelFromBlock } from '../../lib/constants';
 import { 
@@ -119,12 +119,8 @@ export default function SecretaryDashboard() {
 
   const loadActivityLogs = async () => {
     try {
-      const logsData = await lmsFetch<PaginatedResponse<ActivityLog> | ActivityLog[]>('/activity-logs').catch(() => []);
-      if (Array.isArray(logsData)) {
-        setActivityLogs(logsData);
-      } else if (logsData && Array.isArray(logsData.data)) {
-        setActivityLogs(logsData.data);
-      }
+      const logsData = await lmsFetch<unknown>('/activity-logs').catch(() => []);
+      setActivityLogs(extractCollection<ActivityLog>(logsData));
     } catch {
       // Optional logs
     }

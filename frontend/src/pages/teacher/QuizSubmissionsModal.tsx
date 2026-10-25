@@ -274,7 +274,7 @@ export default function QuizSubmissionsModal({ quiz, isOpen, onClose }: QuizSubm
                             }}
                           >
                             <ShieldCheck size={15} />
-                            <span>✓ Clean Exam</span>
+                            <span>✓ Clean Test</span>
                           </div>
                         )}
                       </div>

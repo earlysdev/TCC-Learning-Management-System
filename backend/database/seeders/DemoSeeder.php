@@ -187,5 +187,36 @@ class DemoSeeder extends Seeder
 
         SystemSetting::where('key', 'maintenance_mode')->delete();
         SystemSetting::set('school_year', '2025-2026', 'string', 'Current school year');
+
+        $deanUser = User::where('email', 'dean@tcc.edu.ph')->first();
+        $studentUser = User::where('email', 'student@tcc.edu.ph')->first();
+
+        if ($deanUser) {
+            $welcomeAnnouncement = Announcement::create([
+                'user_id' => $deanUser->id,
+                'title' => 'Welcome to Tagoloan Community College (TCC) Online Assessment Portal',
+                'content' => 'All BSIT 1st Year to 4th Year students are reminded to observe strict academic integrity during online assessments. Full-screen proctoring and AI study diagnostics are active for SY 2025-2026.',
+                'target_role' => null,
+                'is_pinned' => true,
+            ]);
+
+            LmsNotification::create([
+                'user_id' => $studentUser?->id,
+                'recipient_role' => 'student',
+                'type' => 'announcement',
+                'title' => 'TCC Academic Portal Notice',
+                'message' => $welcomeAnnouncement->title,
+                'data' => ['announcement_id' => $welcomeAnnouncement->id],
+                'is_read' => false,
+            ]);
+
+            ActivityLog::create([
+                'user_id' => $deanUser->id,
+                'action' => 'system_initialized',
+                'description' => 'Initialized TCC BSIT Curriculum (43 Courses, 20 College Blocks) for SY 2025-2026',
+                'ip_address' => '127.0.0.1',
+                'user_agent' => 'TCC-System-Seeder',
+            ]);
+        }
     }
 }

@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../components/layout/DashboardLayout';
-import { lmsFetch, getLmsUser } from '../../lmsApi';
-import type { User, Quiz, SecurityLog, ActivityLog, PaginatedResponse } from '../../lib/types';
+import { lmsFetch, getLmsUser, extractCollection } from '../../lmsApi';
+import type { User, Quiz, SecurityLog, ActivityLog, PaginatedResponse, Announcement } from '../../lib/types';
 import { 
   Users, ShieldCheck, AlertTriangle, TrendingUp, 
   CheckCircle2, AlertCircle, 
-  Check, Activity
+  Check, Activity, Send
 } from 'lucide-react';
 import GlassCard from '../../components/ui/GlassCard';
 import StatCard from '../../components/ui/StatCard';
@@ -64,6 +64,9 @@ export default function PrincipalDashboard() {
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [securityLogs, setSecurityLogs] = useState<SecurityLog[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [announcementTitle, setAnnouncementTitle] = useState('');
+  const [announcementContent, setAnnouncementContent] = useState('');
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -87,30 +90,16 @@ export default function PrincipalDashboard() {
       });
 
       const allUsers = await lmsFetch<PaginatedResponse<User> | { data?: { data?: User[] } | User[] } | User[]>('/users').catch(() => []);
-      if (Array.isArray(allUsers)) {
-        setUsersList(allUsers);
-      } else if (allUsers && 'data' in allUsers) {
-        const inner = allUsers.data;
-        if (Array.isArray(inner)) {
-          setUsersList(inner);
-        } else if (inner && 'data' in inner && Array.isArray(inner.data)) {
-          setUsersList(inner.data);
-        }
-      }
+      setUsersList(extractCollection<User>(allUsers));
 
-      const secLogs = await lmsFetch<PaginatedResponse<SecurityLog> | SecurityLog[]>('/dean/security-logs').catch(() => []);
-      if (Array.isArray(secLogs)) {
-        setSecurityLogs(secLogs);
-      } else if (secLogs && Array.isArray(secLogs.data)) {
-        setSecurityLogs(secLogs.data);
-      }
+      const secLogs = await lmsFetch<unknown>('/dean/security-logs').catch(() => []);
+      setSecurityLogs(extractCollection<SecurityLog>(secLogs));
 
-      const actLogs = await lmsFetch<PaginatedResponse<ActivityLog> | ActivityLog[]>('/activity-logs').catch(() => []);
-      if (Array.isArray(actLogs)) {
-        setActivityLogs(actLogs);
-      } else if (actLogs && Array.isArray(actLogs.data)) {
-        setActivityLogs(actLogs.data);
-      }
+      const actLogs = await lmsFetch<unknown>('/activity-logs').catch(() => []);
+      setActivityLogs(extractCollection<ActivityLog>(actLogs));
+
+      const annData = await lmsFetch<unknown>('/announcements').catch(() => []);
+      setAnnouncements(extractCollection<Announcement>(annData));
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load dean dashboard data');
     } finally {
@@ -164,6 +153,33 @@ export default function PrincipalDashboard() {
       await loadDeanData();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Could not update user status');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleCreateAnnouncement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!announcementTitle.trim() || !announcementContent.trim()) return;
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await lmsFetch('/announcements', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: announcementTitle.trim(),
+          content: announcementContent.trim(),
+          target_role: null,
+          is_pinned: true,
+        }),
+      });
+      setAnnouncementTitle('');
+      setAnnouncementContent('');
+      setNotice('Campus-wide announcement broadcasted to all portals and notification bells.');
+      await loadDeanData();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Could not broadcast announcement');
     } finally {
       setBusy(false);
     }
@@ -227,6 +243,58 @@ export default function PrincipalDashboard() {
           detail={securityLogs.filter(l => !l.is_resolved).length > 0 ? 'Requires review' : 'All clear'} 
         />
       </div>
+
+      {/* Campus-Wide Announcement Broadcasting (LMSWO-00038) */}
+      <GlassCard>
+        <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'white', marginBottom: '0.25rem' }}>
+          Campus-Wide Announcement Broadcast
+        </h3>
+        <p style={{ color: 'var(--neutral-300)', fontSize: '0.85rem', marginBottom: '1rem' }}>
+          Publish an official TCC announcement to student and faculty dashboards and trigger real-time notification bells.
+        </p>
+        <form onSubmit={handleCreateAnnouncement} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+          <Input
+            label="Announcement Title"
+            placeholder="e.g., Midterm BSIT Online Examination Schedule"
+            value={announcementTitle}
+            onChange={(e) => setAnnouncementTitle(e.target.value)}
+            required
+          />
+          <div>
+            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--neutral-200)', marginBottom: '0.4rem' }}>
+              Announcement Message
+            </label>
+            <textarea
+              className="form-input"
+              rows={3}
+              placeholder="Write the official campus announcement message..."
+              value={announcementContent}
+              onChange={(e) => setAnnouncementContent(e.target.value)}
+              style={{ width: '100%', resize: 'vertical' }}
+              required
+            />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <Button type="submit" variant="primary" disabled={busy}>
+              <Send size={15} /> {busy ? 'Broadcasting...' : 'Broadcast Announcement'}
+            </Button>
+          </div>
+        </form>
+
+        {announcements.length > 0 && (
+          <div style={{ marginTop: '1.25rem', borderTop: '1px solid var(--glass-border)', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+            <div style={{ fontSize: '0.78rem', color: 'var(--neutral-400)', textTransform: 'uppercase', fontWeight: 700 }}>
+              Recent Campus Announcements ({announcements.length})
+            </div>
+            {announcements.slice(0, 3).map((ann) => (
+              <div key={ann.id} style={{ background: 'rgba(255,255,255,0.04)', padding: '0.75rem 1rem', borderRadius: 'var(--radius-md)', borderLeft: '3px solid var(--primary-400)' }}>
+                <div style={{ fontWeight: 600, color: 'white', fontSize: '0.9rem' }}>{ann.title}</div>
+                <div style={{ color: 'var(--neutral-300)', fontSize: '0.82rem', marginTop: '0.2rem' }}>{ann.content}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </GlassCard>
     </div>
   );
 

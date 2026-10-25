@@ -45,10 +45,28 @@ class AnnouncementController extends Controller
 
         $announcement = $request->user()->announcements()->create($validated);
 
+        \App\Models\ActivityLog::create([
+            'user_id' => $request->user()->id,
+            'action' => 'create_announcement',
+            'description' => "Broadcasted announcement \"{$announcement->title}\"",
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
+
+        \App\Models\LmsNotification::create([
+            'user_id' => null,
+            'recipient_role' => $announcement->target_role ?? 'student',
+            'type' => 'announcement',
+            'title' => "Announcement: {$announcement->title}",
+            'message' => $announcement->content,
+            'data' => ['announcement_id' => $announcement->id],
+            'is_read' => false,
+        ]);
+
         return response()->json([
             'status' => 'success',
             'message' => 'Announcement created successfully',
-            'data' => $announcement
+            'data' => $announcement->load('author:id,name')
         ], 201);
     }
 

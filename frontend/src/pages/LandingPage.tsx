@@ -271,11 +271,8 @@ export default function LandingPage() {
                 <Eye size={28} />
               </div>
               <h3>Vision</h3>
-              <p style={{ flex: 1, fontSize: '0.98rem', fontWeight: 500, color: '#2d3748' }}>
-                "A premier community-based institution forming holistic individuals."
-              </p>
-              <p style={{ fontSize: '0.82rem', marginTop: '1rem', color: '#718096', borderTop: '1px solid #e2e8f0', paddingTop: '0.75rem' }}>
-                Fostering an inclusive and motivating collegiate learning atmosphere that elevates student potential and community service.
+              <p style={{ flex: 1, fontSize: '1.3rem', marginTop: '2rem', fontWeight: 500, color: '#2d3748' }}>
+                To be a premiere community based institution by <b>2030</b> producing globally competent graduates.
               </p>
             </div>
 
@@ -285,15 +282,9 @@ export default function LandingPage() {
                 <Target size={28} />
               </div>
               <h3>Mission</h3>
-              <p style={{ fontSize: '0.9rem', marginBottom: '0.75rem', fontWeight: 500, color: '#2d3748' }}>
-                "Tagoloan Community College provides quality instruction, research and extension for a competitive and contented global workforce preferably as entrepreneurs with passion and commitment to serve."
+              <p style={{ fontSize: '1.25rem', marginBottom: '0.75rem',marginTop: '2rem', fontWeight: 500, color: '#2d3748' }}>
+                Tagoloan Community College is committed to produce competent graduates fully equipped with knowledge and skills driven by values conforming to global standards.
               </p>
-              <ul className="mission-bullets">
-                <li>Quality, accredited tertiary instruction across disciplines</li>
-                <li>Research and community-based extension programs</li>
-                <li>Forming ethical, competitive, and globally-ready professionals</li>
-                <li>Fostering entrepreneurial spirit and dedication to service</li>
-              </ul>
             </div>
 
             {/* Philosophy & Core Values Card */}
@@ -302,9 +293,6 @@ export default function LandingPage() {
                 <Heart size={28} />
               </div>
               <h3>Philosophy & Core Values</h3>
-              <p style={{ fontSize: '0.84rem', color: '#4a5568', marginBottom: '0.85rem', fontStyle: 'italic' }}>
-                "Education is a success if and when the people live a decent and prosperous life through adherence to standards of morality, employment in enterprises and competent practice of entrepreneurial skills."
-              </p>
               <div className="values-badge-column">
                 <span className="value-badge badge-diyos">Transformational</span>
                 <span className="value-badge badge-tao">Community-Based</span>
@@ -434,7 +422,7 @@ export default function LandingPage() {
                 <Smartphone size={15} /> MOBILE LEARNING SPACE
               </span>
               <h2 className="download-title">
-                Learn Anywhere, Anytime with TCC Mobile.
+                Learn Anywhere, Anytime with TCC LMS Mobile.
               </h2>
               <p className="download-desc">
                 Take quizzes, check study recommendations, and review class grades straight from your smartphone. Download the official Tagoloan Community College mobile app for Android devices.
@@ -444,15 +432,23 @@ export default function LandingPage() {
                   <strong>Note:</strong> Students, faculty members, and academic secretaries can access both mobile and web portals. Executive leadership (Dean) utilizes the desktop web version for institutional surveillance and administrative reporting.
                 </p>
               </div>
-              <a 
-                href="https://drive.google.com/file/d/1Jo3tJdPhtlIq3wn_hhLBGu15YBNZmlZn/view" 
-                target="_blank" 
-                rel="noopener noreferrer"
+              <button
+                type="button"
+                disabled
+                aria-disabled="true"
                 className="btn btn-accent btn-md"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  opacity: 0.65,
+                  cursor: 'not-allowed',
+                  pointerEvents: 'none',
+                  userSelect: 'none',
+                }}
               >
-                <Download size={18} /> Download Mobile App (.apk)
-              </a>
+                <Download size={18} /> Mobile App Not Currently Available — We&apos;re still developing the web, stay tuned for mobile updates
+              </button>
             </div>
 
             {/* Smartphone Mockup */}

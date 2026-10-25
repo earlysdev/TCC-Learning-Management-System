@@ -30,11 +30,17 @@ class AnalyticsController extends Controller
     public function principalDashboard()
     {
         $activeUsers = User::active()->count();
+        $totalStudents = max(1, User::students()->count());
         $totalQuizzes = Quiz::count();
+        $publishedQuizzes = Quiz::where('is_published', true)->count();
         $totalAttempts = QuizAttempt::count();
         $securityAlerts = SecurityLog::where('is_resolved', false)->count();
 
-        $averageScore = QuizAttempt::avg('percentage');
+        $averageScore = (float) (QuizAttempt::avg('percentage') ?? 0);
+        $expectedAttempts = max(1, $publishedQuizzes * $totalStudents);
+        $quizCompletion = $publishedQuizzes > 0
+            ? min(100, round(($totalAttempts / $expectedAttempts) * 100, 1))
+            : 0;
 
         return response()->json([
             'status' => 'success',
@@ -42,6 +48,7 @@ class AnalyticsController extends Controller
                 'active_users' => $activeUsers,
                 'total_quizzes' => $totalQuizzes,
                 'total_attempts' => $totalAttempts,
+                'quiz_completion' => $quizCompletion,
                 'average_score_percentage' => round($averageScore, 2),
                 'unresolved_security_alerts' => $securityAlerts
             ]
@@ -59,7 +66,7 @@ class AnalyticsController extends Controller
 
         $attempts = $student->quizAttempts()->with('quiz:id,title,subject')->get();
         
-        $averagePercentage = $attempts->avg('percentage');
+        $averagePercentage = (float) ($attempts->avg('percentage') ?? 0);
         $totalQuizzesTaken = $attempts->count();
 
         return response()->json([
