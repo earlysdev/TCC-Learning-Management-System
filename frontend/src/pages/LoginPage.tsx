@@ -188,7 +188,7 @@ export default function LoginPage() {
             disabled={busy || !captchaVerified}
             style={{ width: '100%', marginTop: '0.5rem' }}
           >
-            {busy ? 'Authenticating...' : 'Sign In to Workspace'} <ArrowRight size={18} />
+            {busy ? 'Authenticating...' : 'Sign In'} <ArrowRight size={18} />
           </Button>
         </form>
       </div>
