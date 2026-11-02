@@ -27,6 +27,7 @@ export interface Quiz {
   question_count: number;
   time_limit_minutes?: number;
   shuffle_questions?: boolean;
+  quiz_type?: 'formative' | 'summative';
   is_published?: boolean;
   allow_review?: boolean;
   target_type?: QuizAudienceType;
@@ -60,6 +61,16 @@ export interface Question {
   correct_index?: number;
   skill?: string;
   points?: number;
+}
+
+export interface ReviewQuestion {
+  prompt: string;
+  options: string[];
+  points: number;
+  skill?: string;
+  correct_index: number;
+  student_answer: number;
+  is_correct: boolean;
 }
 
 export interface StudyReference {

@@ -258,6 +258,87 @@ class LmsAiService
         return false;
     }
 
+    /**
+     * Detect whether a multi-question quiz has every single correct answer stuck on Option A (index 0).
+     *
+     * @param array<int, mixed> $questions
+     */
+    public function hasAllAnswersStuckOnFirstOption(array $questions): bool
+    {
+        if (count($questions) < 2) {
+            return false;
+        }
+        foreach ($questions as $q) {
+            if (! is_array($q)) {
+                return false;
+            }
+            if ((int) ($q['correct_index'] ?? 0) !== 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Shuffle the 4 options of each question while keeping the exact real answer as `correct_index`,
+     * ensuring the correct answers do not stick to Option A.
+     *
+     * @param array<int, array<string, mixed>> $questions
+     * @return array<int, array<string, mixed>>
+     */
+    public function randomizeOptionsPreservingCorrectAnswer(array $questions): array
+    {
+        $randomized = [];
+        $usedPositions = [];
+
+        foreach (array_values($questions) as $idx => $q) {
+            if (! is_array($q) || empty($q['options']) || ! is_array($q['options'])) {
+                $randomized[] = $q;
+                continue;
+            }
+
+            $options = array_values($q['options']);
+            $optCount = count($options);
+            if ($optCount < 2) {
+                $randomized[] = $q;
+                continue;
+            }
+
+            $currentCorrectIdx = isset($q['correct_index']) && is_numeric($q['correct_index'])
+                ? max(0, min($optCount - 1, (int) $q['correct_index']))
+                : 0;
+            $realAnswerText = $options[$currentCorrectIdx];
+
+            // Remove the real answer, shuffle the distractors, and place the real answer at a random index
+            $distractors = [];
+            foreach ($options as $i => $opt) {
+                if ($i !== $currentCorrectIdx) {
+                    $distractors[] = $opt;
+                }
+            }
+            shuffle($distractors);
+
+            $targetPos = random_int(0, $optCount - 1);
+            // Avoid repeating the same option letter on consecutive questions or sticking to A
+            if ($idx > 0 && isset($usedPositions[$idx - 1]) && $targetPos === $usedPositions[$idx - 1]) {
+                $targetPos = ($targetPos + random_int(1, $optCount - 1)) % $optCount;
+            }
+            if ($idx === 1 && ($usedPositions[0] ?? -1) === 0 && $targetPos === 0) {
+                $targetPos = random_int(1, $optCount - 1);
+            }
+
+            array_splice($distractors, $targetPos, 0, [$realAnswerText]);
+            $newCorrectIdx = array_search($realAnswerText, $distractors, true);
+
+            $q['options'] = array_values($distractors);
+            $q['correct_index'] = $newCorrectIdx !== false ? (int) $newCorrectIdx : $targetPos;
+            $usedPositions[$idx] = $q['correct_index'];
+            $randomized[] = $q;
+        }
+
+        return $randomized;
+    }
+
     /** @return array{questions: array<int, array{prompt: string, options: array<int, string>, correct_index: int, skill: string}>, source: string} */
     public function generateQuiz(
         string $subject,
@@ -603,7 +684,7 @@ class LmsAiService
             }
         }
 
-        return array_slice($generated, 0, $targetCount);
+        return $this->randomizeOptionsPreservingCorrectAnswer(array_slice($generated, 0, $targetCount));
     }
 
     /** @return array<int, string> */
@@ -682,7 +763,7 @@ class LmsAiService
             throw new \UnexpectedValueException('Could not parse any valid questions from AI response.');
         }
 
-        return $clean;
+        return $this->randomizeOptionsPreservingCorrectAnswer($clean);
     }
 
     /** @return array<int, array{prompt: string, options: array<int, string>, correct_index: int, skill: string}> */
@@ -734,7 +815,7 @@ class LmsAiService
                 for ($i = 0; $i < $targetCount; $i++) {
                     $results[] = $mapped[$i % count($mapped)];
                 }
-                return $results;
+                return $this->randomizeOptionsPreservingCorrectAnswer($results);
             }
         }
 
@@ -760,6 +841,6 @@ class LmsAiService
             $results[] = $mappedTemplates[$i % count($mappedTemplates)];
         }
 
-        return $results;
+        return $this->randomizeOptionsPreservingCorrectAnswer($results);
     }
 }

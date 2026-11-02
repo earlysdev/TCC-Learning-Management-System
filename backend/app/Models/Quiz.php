@@ -13,6 +13,7 @@ class Quiz extends Model
         'title',
         'subject',
         'topic',
+        'quiz_type',
         'instructions',
         'reference_pdf_name',
         'reference_pdf_text',

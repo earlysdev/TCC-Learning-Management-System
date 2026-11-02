@@ -40,6 +40,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/teacher/quizzes/{quiz}', [QuizController::class, 'update']);
     Route::patch('/teacher/quizzes/{quiz}/publish', [QuizController::class, 'publish']);
     Route::get('/teacher/quizzes/{quiz}/submissions', [QuizController::class, 'submissions']);
+    Route::get('/teacher/quizzes/{quiz}/live', [QuizController::class, 'liveMonitor']);
 
     // Curriculum Subjects
     Route::get('/subjects', [SubjectController::class, 'index']);
@@ -53,6 +54,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/student/quizzes/{quiz}', [QuizController::class, 'showForStudent']);
     Route::get('/student/quizzes/{quiz}/pdf', [QuizController::class, 'showPdf']);
     Route::get('/quizzes/{quiz}/pdf', [QuizController::class, 'showPdf']);
+    Route::post('/student/quizzes/{quiz}/progress', [QuizController::class, 'updateLiveProgress'])->middleware('throttle:120,1');
     Route::post('/student/quizzes/{quiz}/violation', [QuizController::class, 'logViolation'])->middleware('throttle:60,1');
     Route::post('/student/quizzes/{quiz}/integrity-events', [QuizController::class, 'logViolation'])->middleware('throttle:60,1');
     Route::post('/student/quizzes/{quiz}/submit', [QuizController::class, 'submit'])->middleware('throttle:20,1');

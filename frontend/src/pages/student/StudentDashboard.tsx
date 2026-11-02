@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import { lmsFetch, getLmsUser, extractCollection } from '../../lmsApi';
-import type { Quiz, Recommendation, Announcement } from '../../lib/types';
+import type { Quiz, Recommendation, Announcement, ReviewQuestion } from '../../lib/types';
 import { getYearLevelFromBlock } from '../../lib/constants';
 import { 
   BookOpen, CheckCircle2, Award, Sparkles, Send, 
@@ -38,6 +38,9 @@ export default function StudentDashboard() {
     max_score: number;
     percentage: number | string;
     recommendation: Recommendation;
+    allow_review?: boolean;
+    answers?: number[];
+    review_questions?: ReviewQuestion[];
   } | null>(null);
 
   const fetchQuizzes = async () => {
@@ -397,6 +400,104 @@ export default function StudentDashboard() {
             </div>
           </GlassCard>
 
+          {(selectedQuiz.allow_review || quizResult.allow_review) && Array.isArray(quizResult.review_questions) && quizResult.review_questions.length > 0 && (
+            <GlassCard style={{ borderLeft: '4px solid var(--success)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+                <div style={{ background: 'rgba(76, 175, 80, 0.25)', padding: '0.5rem', borderRadius: 'var(--radius-md)', color: '#a5d6a7' }}>
+                  <CheckCircle2 size={20} />
+                </div>
+                <div>
+                  <span style={{ fontSize: '0.75rem', color: '#a5d6a7', fontWeight: 700, textTransform: 'uppercase' }}>
+                    ANSWER KEY & ITEM REVIEW
+                  </span>
+                  <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'white', margin: 0 }}>
+                    Review Your Questions & Answers ({quizResult.review_questions.length})
+                  </h3>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+                {quizResult.review_questions.map((item, idx) => {
+                  const unanswered = item.student_answer < 0;
+                  return (
+                    <div
+                      key={idx}
+                      style={{
+                        padding: '1rem 1.1rem',
+                        borderRadius: '10px',
+                        background: 'rgba(255, 255, 255, 0.03)',
+                        border: item.is_correct
+                          ? '1px solid rgba(76, 175, 80, 0.4)'
+                          : '1px solid rgba(239, 83, 80, 0.35)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.6rem',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem', flexWrap: 'wrap' }}>
+                        <div style={{ fontWeight: 700, color: 'white', fontSize: '0.95rem', flex: 1 }}>
+                          {idx + 1}. {item.prompt}
+                        </div>
+                        <Badge variant={item.is_correct ? 'success' : 'warning'}>
+                          {item.is_correct ? `✓ Correct (+${item.points} pt)` : unanswered ? 'Unanswered (0 pt)' : '✗ Incorrect (0 pt)'}
+                        </Badge>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                        {item.options.map((opt, optIdx) => {
+                          const isCorrectChoice = optIdx === item.correct_index;
+                          const isStudentChoice = optIdx === item.student_answer;
+                          return (
+                            <div
+                              key={optIdx}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: '0.75rem',
+                                padding: '0.55rem 0.8rem',
+                                borderRadius: '8px',
+                                fontSize: '0.88rem',
+                                background: isCorrectChoice
+                                  ? 'rgba(76, 175, 80, 0.18)'
+                                  : isStudentChoice
+                                    ? 'rgba(239, 83, 80, 0.18)'
+                                    : 'rgba(255, 255, 255, 0.03)',
+                                border: isCorrectChoice
+                                  ? '1px solid rgba(76, 175, 80, 0.5)'
+                                  : isStudentChoice
+                                    ? '1px solid rgba(239, 83, 80, 0.5)'
+                                    : '1px solid rgba(255, 255, 255, 0.07)',
+                                color: isCorrectChoice ? '#c8e6c9' : isStudentChoice ? '#ffcdd2' : 'var(--neutral-200)',
+                                fontWeight: isCorrectChoice || isStudentChoice ? 600 : 400,
+                              }}
+                            >
+                              <span>
+                                <strong>{String.fromCharCode(65 + optIdx)}.</strong> {opt}
+                              </span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0, fontSize: '0.75rem' }}>
+                                {isStudentChoice && (
+                                  <span style={{ padding: '0.1rem 0.45rem', borderRadius: '999px', background: 'rgba(255,255,255,0.12)', color: 'white' }}>
+                                    Your Answer
+                                  </span>
+                                )}
+                                {isCorrectChoice && (
+                                  <span style={{ padding: '0.1rem 0.45rem', borderRadius: '999px', background: 'rgba(76, 175, 80, 0.3)', color: '#a5d6a7' }}>
+                                    ✓ Correct Answer
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </GlassCard>
+          )}
+
           {quizResult.recommendation && (
             <GlassCard style={{ borderLeft: '4px solid var(--accent-purple-light)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
@@ -737,7 +838,7 @@ export default function StudentDashboard() {
                     {!quiz.attempted && takingQuizId === quiz.id ? (
                       <><Loader2 size={16} className="spin-icon" /> Opening...</>
                     ) : (
-                      <>{quiz.attempted ? 'View Result' : 'Start Quiz'} <ArrowRight size={16} /></>
+                      <>{quiz.attempted ? (quiz.allow_review ? 'View Result & Review' : 'View Result') : 'Start Quiz'} <ArrowRight size={16} /></>
                     )}
                   </Button>
                 </div>

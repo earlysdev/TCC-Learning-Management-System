@@ -116,6 +116,9 @@ export default function TeacherDashboard() {
   const [subject, setSubject] = useState(BSIT_SUBJECT_OPTIONS[2]?.value || 'IT 101 - Introduction To Computing');
   const [topic, setTopic] = useState('');
   const [count, setCount] = useState(5);
+  const [timeLimitMinutes, setTimeLimitMinutes] = useState(15);
+  const [quizType, setQuizType] = useState<'formative' | 'summative'>('formative');
+  const [allowReview, setAllowReview] = useState(true);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [selectedTargetSection, setSelectedTargetSection] = useState('');
   const [uploadedPdf, setUploadedPdf] = useState<ParsedPdfPayload | null>(null);
@@ -232,6 +235,9 @@ export default function TeacherDashboard() {
           subject: finalSubject,
           topic: cleanTopic,
           count: questionCount,
+          time_limit_minutes: Math.max(1, Math.min(300, Number(timeLimitMinutes) || 15)),
+          quiz_type: quizType,
+          allow_review: allowReview,
           generate_with_ai: generateWithAi,
           difficulty: aiDifficulty,
           pdf_name: uploadedPdf?.name || null,
@@ -302,6 +308,7 @@ export default function TeacherDashboard() {
           reference_pdf_name: draft.reference_pdf_name ?? null,
           reference_pdf_text: draft.reference_pdf_text ?? null,
           pdf_base64: draft.pdf_base64 ?? null,
+          quiz_type: draft.quiz_type || 'formative',
           allow_review: draft.allow_review,
           time_limit_minutes: draft.time_limit_minutes,
           shuffle_questions: draft.questions.length >= 3 ? Boolean(draft.shuffle_questions) : false,
@@ -334,7 +341,8 @@ export default function TeacherDashboard() {
         method: 'PATCH',
         body: JSON.stringify({
           is_published: true,
-          allow_review: Boolean(publishingQuiz.allow_review),
+          quiz_type: audience.quiz_type ?? publishingQuiz.quiz_type ?? 'formative',
+          allow_review: audience.allow_review ?? Boolean(publishingQuiz.allow_review),
           target_type: audience.type,
           audience_type: audience.type,
           target_sections: audience.section_ids,
@@ -348,6 +356,8 @@ export default function TeacherDashboard() {
       const fallback: Quiz = {
         ...publishingQuiz,
         is_published: true,
+        quiz_type: audience.quiz_type ?? publishingQuiz.quiz_type ?? 'formative',
+        allow_review: audience.allow_review ?? Boolean(publishingQuiz.allow_review),
         time_limit_minutes: audience.time_limit_minutes,
         shuffle_questions: audience.shuffle_questions,
         audience_type: audience.type,
@@ -582,8 +592,8 @@ export default function TeacherDashboard() {
             />
           </div>
 
-          {/* Row 2: Custom Question Count & Block Targeting */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem', alignItems: 'start' }}>
+          {/* Row 2: Custom Question Count, Time Limit, Quiz Type & Block Targeting */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem', alignItems: 'start' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
               <Input
                 label="Number of Questions (1–50)"
@@ -626,6 +636,58 @@ export default function TeacherDashboard() {
               </div>
             </div>
 
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+              <Input
+                label="Time Limit (Minutes — Auto-Submit)"
+                type="number"
+                min={1}
+                max={300}
+                value={String(timeLimitMinutes)}
+                onChange={(e) => {
+                  const parsed = parseInt(e.target.value, 10);
+                  if (Number.isNaN(parsed)) {
+                    setTimeLimitMinutes(15);
+                  } else {
+                    setTimeLimitMinutes(Math.max(1, Math.min(300, parsed)));
+                  }
+                }}
+                required
+              />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', marginRight: '0.15rem' }}>Presets:</span>
+                {[5, 10, 15, 30, 45, 60].map((mins) => (
+                  <button
+                    key={mins}
+                    type="button"
+                    onClick={() => setTimeLimitMinutes(mins)}
+                    style={{
+                      padding: '0.18rem 0.55rem',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      borderRadius: '999px',
+                      cursor: 'pointer',
+                      border: timeLimitMinutes === mins ? '1px solid #fbbf24' : '1px solid rgba(255,255,255,0.12)',
+                      background: timeLimitMinutes === mins ? 'rgba(251, 191, 36, 0.22)' : 'rgba(255,255,255,0.04)',
+                      color: timeLimitMinutes === mins ? '#fbbf24' : 'var(--neutral-300)',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {mins}m
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <Select
+              label="Quiz Type (Formative / Summative)"
+              value={quizType}
+              onChange={(val) => setQuizType(val === 'summative' ? 'summative' : 'formative')}
+              options={[
+                { value: 'formative', label: 'Formative — Live Student Monitoring' },
+                { value: 'summative', label: 'Summative — Final Submission Only' },
+              ]}
+            />
+
             <Select
               label="Target Block (Optional)"
               value={selectedTargetSection}
@@ -639,6 +701,41 @@ export default function TeacherDashboard() {
               ]}
             />
           </div>
+
+          {/* Row 2.2: Allow Answer Review Checkbox */}
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '0.85rem',
+              padding: '0.75rem 1.1rem',
+              borderRadius: 'var(--radius-md)',
+              cursor: 'pointer',
+              background: allowReview ? 'rgba(67, 160, 71, 0.1)' : 'rgba(255, 255, 255, 0.03)',
+              border: allowReview ? '1px solid rgba(67, 160, 71, 0.35)' : '1px solid rgba(255, 255, 255, 0.08)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem' }}>
+              <input
+                type="checkbox"
+                checked={allowReview}
+                onChange={(e) => setAllowReview(e.target.checked)}
+                style={{ width: '17px', height: '17px', accentColor: 'var(--success)', cursor: 'pointer', flexShrink: 0 }}
+              />
+              <div>
+                <div style={{ fontWeight: 700, color: 'white', fontSize: '0.9rem' }}>
+                  Allow Answer Review for Completed Quizzes
+                </div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--neutral-300)' }}>
+                  When checked, students will be able to review the quiz questions along with their selected answers and the correct answer key after submitting.
+                </div>
+              </div>
+            </div>
+            <Badge variant={allowReview ? 'success' : 'warning'}>
+              {allowReview ? 'Answer Review Enabled' : 'Review Disabled'}
+            </Badge>
+          </label>
 
           {/* Row 2.5: PDF Upload for Quiz Instructions, AI Question Generation & Post-Quiz Study Feedback */}
           <div
@@ -796,6 +893,39 @@ export default function TeacherDashboard() {
                   <Badge variant={quiz.is_published ? 'success' : 'warning'}>
                     {quiz.is_published ? 'Published' : 'Draft'}
                   </Badge>
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.25rem',
+                      fontSize: '0.74rem',
+                      fontWeight: 600,
+                      color: quiz.quiz_type === 'summative' ? '#fbbf24' : '#a5d6a7',
+                      background: quiz.quiz_type === 'summative' ? 'rgba(245, 158, 11, 0.14)' : 'rgba(67, 160, 71, 0.16)',
+                      border: quiz.quiz_type === 'summative' ? '1px solid rgba(245, 158, 11, 0.35)' : '1px solid rgba(67, 160, 71, 0.35)',
+                      padding: '0.15rem 0.55rem',
+                      borderRadius: '999px',
+                    }}
+                  >
+                    {quiz.quiz_type === 'summative' ? 'Summative Exam' : 'Formative • Live View'}
+                  </span>
+                  {quiz.allow_review && (
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.25rem',
+                        fontSize: '0.74rem',
+                        color: '#93c5fd',
+                        background: 'rgba(59, 130, 246, 0.14)',
+                        border: '1px solid rgba(59, 130, 246, 0.3)',
+                        padding: '0.15rem 0.55rem',
+                        borderRadius: '999px',
+                      }}
+                    >
+                      <CheckCircle2 size={12} /> Answer Review Allowed
+                    </span>
+                  )}
                 </div>
                 <h3 style={{ fontSize: '1.35rem', fontWeight: 700, color: 'white' }}>{quiz.title}</h3>
                 <p style={{ color: 'var(--neutral-300)', fontSize: '0.85rem', marginTop: '0.2rem' }}>
@@ -841,7 +971,10 @@ export default function TeacherDashboard() {
                   size="sm"
                   onClick={() => setSubmissionsQuiz(quiz)}
                 >
-                  <ShieldAlert size={14} /> Submissions & Proctoring ({quiz.attempts_count || 0})
+                  <ShieldAlert size={14} />{' '}
+                  {quiz.quiz_type === 'summative'
+                    ? `Submissions & Proctoring (${quiz.attempts_count || 0})`
+                    : `Live Monitor & Submissions (${quiz.attempts_count || 0})`}
                 </Button>
               </div>
             </div>

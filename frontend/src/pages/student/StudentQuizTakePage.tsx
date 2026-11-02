@@ -20,7 +20,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { lmsFetch } from '../../lmsApi';
-import type { Quiz, Recommendation } from '../../lib/types';
+import type { Quiz, Recommendation, ReviewQuestion } from '../../lib/types';
 import Button from '../../components/ui/Button';
 import QuizDetailsPdfModal from '../../components/ui/QuizDetailsPdfModal';
 
@@ -30,6 +30,9 @@ type QuizResult = {
   percentage: number | string;
   cheating_attempts_count?: number;
   recommendation?: Recommendation | null;
+  allow_review?: boolean;
+  answers?: number[];
+  review_questions?: ReviewQuestion[];
 };
 
 type IntegrityEventType =
@@ -140,6 +143,8 @@ export default function StudentQuizTakePage() {
   const [integrityIncidentCount, setIntegrityIncidentCount] = useState(0);
   const [violationsList, setViolationsList] = useState<Array<{ type: string; label: string; timestamp: string }>>([]);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  const [autoSubmittedByTimer, setAutoSubmittedByTimer] = useState(false);
+  const [currentQuestionNum, setCurrentQuestionNum] = useState(1);
   const [showPdfModal, setShowPdfModal] = useState(false);
   const showPdfModalRef = useRef(false);
   const startTimeRef = useRef<string>(new Date().toISOString());
@@ -243,8 +248,9 @@ export default function StudentQuizTakePage() {
     if (timeLeft <= 0) {
       if (!quiz || !quizId) return;
       setSubmitting(true);
+      setAutoSubmittedByTimer(true);
       const qCount = quiz.questions?.length ?? 0;
-      const paddedAnswers = Array.from({ length: qCount }, (_, idx) => answers[idx] ?? 0);
+      const paddedAnswers = Array.from({ length: qCount }, (_, idx) => (answers[idx] !== undefined ? answers[idx] : -1));
       void lmsFetch<{ attempt: QuizResult }>(`/student/quizzes/${quizId}/submit`, {
         method: 'POST',
         body: JSON.stringify({
@@ -265,6 +271,29 @@ export default function StudentQuizTakePage() {
     }, 1000);
     return () => window.clearInterval(timer);
   }, [isAssessmentActive, timeLeft, submitting, quiz, quizId, answers, integrityIncidentCount, violationsList]);
+
+  // Send real-time progress heartbeats so teachers can monitor Formative quizzes live
+  useEffect(() => {
+    if (!isAssessmentActive || !quizId || !quiz) return;
+
+    const sendHeartbeat = () => {
+      const qCount = quiz.questions?.length ?? 0;
+      const normalizedAnswers = Array.from({ length: qCount }, (_, idx) => (answers[idx] !== undefined ? answers[idx] : -1));
+      void lmsFetch(`/student/quizzes/${quizId}/progress`, {
+        method: 'POST',
+        body: JSON.stringify({
+          answers: normalizedAnswers,
+          current_question: currentQuestionNum,
+          time_remaining_seconds: timeLeft,
+          cheating_attempts_count: integrityIncidentCount,
+        }),
+      }).catch(() => undefined);
+    };
+
+    sendHeartbeat();
+    const interval = window.setInterval(sendHeartbeat, 5000);
+    return () => window.clearInterval(interval);
+  }, [isAssessmentActive, quizId, quiz, answers, currentQuestionNum, integrityIncidentCount]);
 
   useEffect(() => {
     if (!isAssessmentActive) return;
@@ -358,7 +387,8 @@ export default function StudentQuizTakePage() {
     };
   }, [isAssessmentActive, isBlocked, reportIntegrityEvent]);
 
-  const handleAnswer = (questionIndex: number, optionIndex: number) => {
+  const handleAnswer = (questionIndex: number, optionIndex: number, displayQuestionNum = questionIndex + 1) => {
+    setCurrentQuestionNum(displayQuestionNum);
     setAnswers((current) => {
       const next = [...current];
       next[questionIndex] = optionIndex;
@@ -454,8 +484,26 @@ export default function StudentQuizTakePage() {
         <section className="quiz-result-wrap">
           <div className="quiz-result-card">
             <CheckCircle2 size={42} aria-hidden="true" />
-            <p className="quiz-result-eyebrow">Assessment submitted</p>
+            <p className="quiz-result-eyebrow">
+              {autoSubmittedByTimer ? 'Time Limit Reached • Auto-Submitted' : 'Assessment submitted'}
+            </p>
             <h1>{quiz.title}</h1>
+            {autoSubmittedByTimer && (
+              <div
+                style={{
+                  margin: '0.6rem auto 0.9rem',
+                  padding: '0.55rem 0.95rem',
+                  borderRadius: '8px',
+                  background: 'rgba(245, 158, 11, 0.16)',
+                  border: '1px solid rgba(245, 158, 11, 0.4)',
+                  color: '#fde68a',
+                  fontSize: '0.84rem',
+                  maxWidth: '460px',
+                }}
+              >
+                ⏰ The countdown timer reached zero. Your answered questions were automatically submitted and recorded.
+              </div>
+            )}
             <div className="quiz-result-score">
               <strong>{result.score}</strong>
               <span>/ {result.max_score}</span>
@@ -508,6 +556,122 @@ export default function StudentQuizTakePage() {
               </div>
             )}
           </div>
+
+          {(quiz.allow_review || result.allow_review) && Array.isArray(result.review_questions) && result.review_questions.length > 0 && (
+            <section
+              className="quiz-recommendation-card"
+              style={{ marginTop: '1.25rem' }}
+            >
+              <div className="quiz-recommendation-heading">
+                <CheckCircle2 size={22} />
+                <div>
+                  <span>Answer Key & Item Review</span>
+                  <h2>Review Your Quiz Questions & Answers ({result.review_questions.length})</h2>
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '0.75rem' }}>
+                {result.review_questions.map((item, idx) => {
+                  const unanswered = item.student_answer < 0;
+                  return (
+                    <div
+                      key={idx}
+                      style={{
+                        padding: '1rem 1.15rem',
+                        borderRadius: '10px',
+                        background: 'rgba(255, 255, 255, 0.04)',
+                        border: item.is_correct
+                          ? '1px solid rgba(76, 175, 80, 0.4)'
+                          : '1px solid rgba(239, 83, 80, 0.35)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.65rem',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem', flexWrap: 'wrap' }}>
+                        <div style={{ fontWeight: 700, color: 'white', fontSize: '0.96rem', flex: 1 }}>
+                          {idx + 1}. {item.prompt}
+                        </div>
+                        <span
+                          style={{
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            padding: '0.2rem 0.6rem',
+                            borderRadius: '999px',
+                            background: item.is_correct
+                              ? 'rgba(76, 175, 80, 0.2)'
+                              : unanswered
+                                ? 'rgba(245, 158, 11, 0.2)'
+                                : 'rgba(239, 83, 80, 0.2)',
+                            color: item.is_correct
+                              ? '#a5d6a7'
+                              : unanswered
+                                ? '#fde68a'
+                                : '#ff8a80',
+                            border: item.is_correct
+                              ? '1px solid rgba(76, 175, 80, 0.45)'
+                              : unanswered
+                                ? '1px solid rgba(245, 158, 11, 0.45)'
+                                : '1px solid rgba(239, 83, 80, 0.45)',
+                          }}
+                        >
+                          {item.is_correct ? `✓ Correct (+${item.points} pt)` : unanswered ? 'Unanswered (0 pt)' : '✗ Incorrect (0 pt)'}
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                        {item.options.map((opt, optIdx) => {
+                          const isCorrectChoice = optIdx === item.correct_index;
+                          const isStudentChoice = optIdx === item.student_answer;
+                          return (
+                            <div
+                              key={optIdx}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: '0.75rem',
+                                padding: '0.55rem 0.8rem',
+                                borderRadius: '8px',
+                                fontSize: '0.88rem',
+                                background: isCorrectChoice
+                                  ? 'rgba(76, 175, 80, 0.18)'
+                                  : isStudentChoice
+                                    ? 'rgba(239, 83, 80, 0.18)'
+                                    : 'rgba(255, 255, 255, 0.03)',
+                                border: isCorrectChoice
+                                  ? '1px solid rgba(76, 175, 80, 0.5)'
+                                  : isStudentChoice
+                                    ? '1px solid rgba(239, 83, 80, 0.5)'
+                                    : '1px solid rgba(255, 255, 255, 0.07)',
+                                color: isCorrectChoice ? '#c8e6c9' : isStudentChoice ? '#ffcdd2' : 'var(--neutral-200)',
+                                fontWeight: isCorrectChoice || isStudentChoice ? 600 : 400,
+                              }}
+                            >
+                              <span>
+                                <strong>{String.fromCharCode(65 + optIdx)}.</strong> {opt}
+                              </span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0, fontSize: '0.75rem' }}>
+                                {isStudentChoice && (
+                                  <span style={{ padding: '0.1rem 0.45rem', borderRadius: '999px', background: 'rgba(255,255,255,0.12)', color: 'white' }}>
+                                    Your Answer
+                                  </span>
+                                )}
+                                {isCorrectChoice && (
+                                  <span style={{ padding: '0.1rem 0.45rem', borderRadius: '999px', background: 'rgba(76, 175, 80, 0.3)', color: '#a5d6a7' }}>
+                                    ✓ Correct Answer
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
 
           {result.recommendation && (
             <section className="quiz-recommendation-card">
@@ -747,7 +911,7 @@ export default function StudentQuizTakePage() {
                             type="radio"
                             name={`question-${originalIndex}`}
                             checked={selected}
-                            onChange={() => handleAnswer(originalIndex, optionIndex)}
+                            onChange={() => handleAnswer(originalIndex, optionIndex, displayIndex + 1)}
                           />
                           <span className="quiz-option-letter">{String.fromCharCode(65 + optionIndex)}</span>
                           <span>{option}</span>

@@ -18,6 +18,8 @@ export interface PublishAudience {
   student_ids: number[];
   time_limit_minutes: number;
   shuffle_questions: boolean;
+  quiz_type: 'formative' | 'summative';
+  allow_review: boolean;
 }
 
 interface PublishQuizModalProps {
@@ -44,6 +46,8 @@ export default function PublishQuizModal({ quiz, isOpen, students, sections, bus
   const [studentIds, setStudentIds] = useState<number[]>([]);
   const [timeLimitMinutes, setTimeLimitMinutes] = useState<number>(15);
   const [shuffleQuestions, setShuffleQuestions] = useState<boolean>(false);
+  const [quizType, setQuizType] = useState<'formative' | 'summative'>('formative');
+  const [allowReview, setAllowReview] = useState<boolean>(true);
   const [search, setSearch] = useState('');
 
   const questionCount = quiz ? (quiz.questions?.length ?? quiz.question_count ?? 0) : 0;
@@ -57,6 +61,8 @@ export default function PublishQuizModal({ quiz, isOpen, students, sections, bus
       setTimeLimitMinutes(Number(quiz.time_limit_minutes) > 0 ? Number(quiz.time_limit_minutes) : 15);
       const qCount = quiz.questions?.length ?? quiz.question_count ?? 0;
       setShuffleQuestions(qCount >= 3 ? Boolean(quiz.shuffle_questions ?? true) : false);
+      setQuizType(quiz.quiz_type === 'summative' ? 'summative' : 'formative');
+      setAllowReview(quiz.allow_review ?? true);
       setSearch('');
     }
   }, [isOpen, quiz]);
@@ -109,6 +115,8 @@ export default function PublishQuizModal({ quiz, isOpen, students, sections, bus
               student_ids: studentIds,
               time_limit_minutes: Math.max(1, Math.min(300, timeLimitMinutes || 15)),
               shuffle_questions: canShuffle ? shuffleQuestions : false,
+              quiz_type: quizType,
+              allow_review: allowReview,
             })}
           >
             Publish to {audienceSummary}
@@ -118,8 +126,58 @@ export default function PublishQuizModal({ quiz, isOpen, students, sections, bus
     >
       <div style={{ maxHeight: '68vh', overflowY: 'auto', paddingRight: '0.35rem', display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
         <p style={{ margin: 0, color: 'var(--neutral-300)', fontSize: '0.9rem' }}>
-          Choose the target student audience, set the countdown time limit{canShuffle ? ', and configure question shuffling' : ''}.
+          Choose the target student audience, assessment mode (Formative or Summative), countdown timer, and answer review settings.
         </p>
+
+        {/* Quiz Type Selector (Formative vs Summative) */}
+        <div>
+          <strong style={{ display: 'block', color: 'white', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
+            Quiz Type (Assessment Mode)
+          </strong>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
+            <button
+              type="button"
+              onClick={() => setQuizType('formative')}
+              style={{
+                textAlign: 'left',
+                color: 'white',
+                cursor: 'pointer',
+                border: `1px solid ${quizType === 'formative' ? 'var(--success)' : 'var(--glass-border)'}`,
+                background: quizType === 'formative' ? 'rgba(67,160,71,0.18)' : 'rgba(255,255,255,0.035)',
+                borderRadius: 'var(--radius-md)',
+                padding: '0.8rem 0.9rem',
+              }}
+            >
+              <strong style={{ display: 'block', fontSize: '0.9rem', color: quizType === 'formative' ? '#a5d6a7' : 'white' }}>
+                Formative — Live Student View
+              </strong>
+              <span style={{ display: 'block', color: 'var(--neutral-300)', fontSize: '0.78rem', lineHeight: 1.4, marginTop: '0.25rem' }}>
+                Watch a live real-time view of students currently taking the quiz.
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setQuizType('summative')}
+              style={{
+                textAlign: 'left',
+                color: 'white',
+                cursor: 'pointer',
+                border: `1px solid ${quizType === 'summative' ? '#fbbf24' : 'var(--glass-border)'}`,
+                background: quizType === 'summative' ? 'rgba(245,158,11,0.16)' : 'rgba(255,255,255,0.035)',
+                borderRadius: 'var(--radius-md)',
+                padding: '0.8rem 0.9rem',
+              }}
+            >
+              <strong style={{ display: 'block', fontSize: '0.9rem', color: quizType === 'summative' ? '#fbbf24' : 'white' }}>
+                Summative — Wait Until Submitted
+              </strong>
+              <span style={{ display: 'block', color: 'var(--neutral-300)', fontSize: '0.78rem', lineHeight: 1.4, marginTop: '0.25rem' }}>
+                Formal exam mode — results appear only after students finish and submit.
+              </span>
+            </button>
+          </div>
+        </div>
 
         {/* Target Audience Cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '0.75rem' }}>
@@ -237,6 +295,43 @@ export default function PublishQuizModal({ quiz, isOpen, students, sections, bus
               );
             })}
           </div>
+        </div>
+
+        {/* Allow Answer Review Checkbox */}
+        <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: '1rem' }}>
+          <label
+            style={{
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '0.85rem',
+              padding: '0.8rem 0.95rem',
+              borderRadius: 'var(--radius-md)',
+              border: `1px solid ${allowReview ? 'rgba(67,160,71,0.45)' : 'var(--glass-border)'}`,
+              background: allowReview ? 'rgba(67,160,71,0.14)' : 'rgba(255,255,255,0.03)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <div style={{ background: allowReview ? 'rgba(67, 160, 71, 0.25)' : 'rgba(255,255,255,0.06)', padding: '0.5rem', borderRadius: '8px', color: allowReview ? '#a5d6a7' : 'var(--neutral-400)' }}>
+                <Check size={18} />
+              </div>
+              <div>
+                <strong style={{ display: 'block', color: 'white', fontSize: '0.92rem' }}>
+                  Allow Answer Review After Submission
+                </strong>
+                <span style={{ display: 'block', color: 'var(--neutral-300)', fontSize: '0.78rem', marginTop: '0.15rem' }}>
+                  When checked, students can review the quiz questions, their selected answers, and the correct answer key after submitting.
+                </span>
+              </div>
+            </div>
+            <input
+              type="checkbox"
+              checked={allowReview}
+              onChange={(event) => setAllowReview(event.target.checked)}
+              style={{ width: '18px', height: '18px', accentColor: 'var(--success)', cursor: 'pointer' }}
+            />
+          </label>
         </div>
 
         {/* Shuffle Questions Toggle — Visible only when the quiz has 3 or more questions */}

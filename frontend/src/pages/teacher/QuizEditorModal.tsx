@@ -20,6 +20,7 @@ export interface QuizEditorValues {
   reference_pdf_name?: string | null;
   reference_pdf_text?: string | null;
   pdf_base64?: string | null;
+  quiz_type: 'formative' | 'summative';
   allow_review: boolean;
   time_limit_minutes: number;
   shuffle_questions: boolean;
@@ -54,6 +55,7 @@ function toEditorValues(quiz: Quiz): QuizEditorValues {
     reference_pdf_name: quiz.reference_pdf_name || null,
     reference_pdf_text: quiz.reference_pdf_text || null,
     pdf_base64: null,
+    quiz_type: quiz.quiz_type === 'summative' ? 'summative' : 'formative',
     allow_review: Boolean(quiz.allow_review),
     time_limit_minutes: Number(quiz.time_limit_minutes) > 0 ? Number(quiz.time_limit_minutes) : 15,
     shuffle_questions: qList.length >= 3 ? Boolean(quiz.shuffle_questions ?? true) : false,
@@ -197,6 +199,40 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
       }
       return { ...current, questions: shuffled };
     });
+  };
+
+  // Randomize option positions (A, B, C, D) for all questions while preserving the real answer
+  const randomizeAnswerChoices = () => {
+    if (!draft || draft.questions.length === 0) return;
+    setDraft((current) => {
+      if (!current) return current;
+      let prevIdx = -1;
+      const updatedQuestions = current.questions.map((q) => {
+        const opts = [...q.options];
+        const currentCorrectIdx = Math.max(0, Math.min(opts.length - 1, q.correct_index || 0));
+        const realAnswerText = opts[currentCorrectIdx];
+        const distractors = opts.filter((_, i) => i !== currentCorrectIdx);
+        for (let i = distractors.length - 1; i > 0; i -= 1) {
+          const j = Math.floor(Math.random() * (i + 1));
+          const tmp = distractors[i];
+          distractors[i] = distractors[j];
+          distractors[j] = tmp;
+        }
+        let targetPos = Math.floor(Math.random() * opts.length);
+        if (targetPos === prevIdx && opts.length > 1) {
+          targetPos = (targetPos + 1 + Math.floor(Math.random() * (opts.length - 1))) % opts.length;
+        }
+        distractors.splice(targetPos, 0, realAnswerText);
+        prevIdx = targetPos;
+        return {
+          ...q,
+          options: distractors,
+          correct_index: targetPos,
+        };
+      });
+      return { ...current, questions: updatedQuestions };
+    });
+    setAiNotice('Answer choices (A–D) have been randomized across all questions while preserving each true answer.');
   };
 
   const setQuestionCount = (nextCount: number) => {
@@ -435,8 +471,8 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
             </div>
           </div>
 
-          {/* Metadata Row 2: Topic / Unit + Time Limit (Minutes) */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', alignItems: 'end' }}>
+          {/* Metadata Row 2: Topic / Unit + Quiz Type (Formative / Summative) + Time Limit (Minutes) */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', alignItems: 'end' }}>
             <label className="form-group" style={{ margin: 0 }}>
               <span className="form-label" style={{ display: 'flex', alignItems: 'center', minHeight: '22px', marginBottom: '0.45rem' }}>
                 Topic / Unit
@@ -448,6 +484,21 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
                 onChange={(event) => setDraft({ ...draft, topic: event.target.value })}
               />
             </label>
+
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span className="form-label" style={{ display: 'flex', alignItems: 'center', minHeight: '22px', marginBottom: '0.45rem' }}>
+                Quiz Type (Assessment Mode)
+              </span>
+              <Select
+                value={draft.quiz_type || 'formative'}
+                onChange={(val) => setDraft({ ...draft, quiz_type: (val === 'summative' ? 'summative' : 'formative') })}
+                style={{ margin: 0 }}
+                options={[
+                  { value: 'formative', label: 'Formative — Live Student Monitoring' },
+                  { value: 'summative', label: 'Summative — Final Submission Only' },
+                ]}
+              />
+            </div>
 
             <label className="form-group" style={{ margin: 0 }}>
               <span className="form-label" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', minHeight: '22px', marginBottom: '0.45rem' }}>
@@ -645,6 +696,16 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
                 }}
               />
             </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={randomizeAnswerChoices}
+              title="Randomize Option Positions (A–D) while keeping each question's real answer"
+              style={{ gap: '0.35rem', borderColor: 'rgba(76, 175, 80, 0.4)', color: '#a5d6a7' }}
+            >
+              <Shuffle size={14} /> Randomize Answers (A–D)
+            </Button>
             {draft.questions.length >= 3 && (
               <Button
                 type="button"

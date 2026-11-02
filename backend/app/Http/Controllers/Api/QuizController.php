@@ -53,6 +53,8 @@ class QuizController extends Controller
             'title' => ['nullable', 'string', 'max:200'],
             'subject' => ['required', 'string', 'max:100'],
             'topic' => ['required', 'string', 'max:120'],
+            'quiz_type' => ['sometimes', 'in:formative,summative'],
+            'allow_review' => ['sometimes', 'boolean'],
             'count' => ['nullable', 'integer', 'between:1,50'],
             'instructions' => ['nullable', 'string'],
             'time_limit_minutes' => ['nullable', 'integer', 'between:1,300'],
@@ -113,6 +115,7 @@ class QuizController extends Controller
             'topic' => $cleanTopic,
             'instructions' => !empty(trim((string) ($input['instructions'] ?? ''))) ? trim((string) $input['instructions']) : $defaultInstructions,
             'questions' => $questions,
+            'allow_review' => (bool) ($input['allow_review'] ?? true),
             'generated_by_ai' => $generatedByAi,
             'target_type' => $input['target_type'] ?? 'all',
             'target_sections' => $input['target_sections'] ?? null,
@@ -120,6 +123,7 @@ class QuizController extends Controller
         ];
 
         if ($this->ensurePdfColumns()) {
+            $createAttributes['quiz_type'] = $input['quiz_type'] ?? 'formative';
             $createAttributes['reference_pdf_name'] = $pdf['name'];
             $createAttributes['reference_pdf_text'] = $pdf['text'];
             if (!empty($pdf['base64']) && strlen($pdf['base64']) <= 12_000_000) {
@@ -148,6 +152,9 @@ class QuizController extends Controller
             'title' => ['nullable', 'string', 'max:200'],
             'subject' => ['required', 'string', 'max:100'],
             'topic' => ['required', 'string', 'max:120'],
+            'quiz_type' => ['sometimes', 'in:formative,summative'],
+            'allow_review' => ['sometimes', 'boolean'],
+            'time_limit_minutes' => ['sometimes', 'nullable', 'integer', 'between:1,300'],
             'count' => ['required', 'integer', 'between:1,50'],
             'difficulty' => ['sometimes', 'in:easy,medium,challenging'],
             'instructions' => ['sometimes', 'nullable', 'string'],
@@ -197,13 +204,15 @@ class QuizController extends Controller
             'topic' => $cleanTopic,
             'instructions' => !empty(trim((string) ($input['instructions'] ?? ''))) ? trim((string) $input['instructions']) : $defaultInstructions,
             'questions' => $generated['questions'],
+            'allow_review' => (bool) ($input['allow_review'] ?? true),
             'generated_by_ai' => true,
             'target_type' => $input['target_type'] ?? 'all',
             'target_sections' => $input['target_sections'] ?? null,
-            'time_limit_minutes' => 15,
+            'time_limit_minutes' => $input['time_limit_minutes'] ?? 15,
         ];
 
         if ($this->ensurePdfColumns()) {
+            $createAttributes['quiz_type'] = $input['quiz_type'] ?? 'formative';
             $createAttributes['reference_pdf_name'] = $pdf['name'];
             $createAttributes['reference_pdf_text'] = $pdf['text'];
             if (!empty($pdf['base64']) && strlen($pdf['base64']) <= 12_000_000) {
@@ -225,6 +234,7 @@ class QuizController extends Controller
             'title' => ['sometimes', 'string', 'max:200'],
             'subject' => ['sometimes', 'string', 'max:100'],
             'topic' => ['sometimes', 'string', 'max:120'],
+            'quiz_type' => ['sometimes', 'in:formative,summative'],
             'instructions' => ['sometimes', 'string'],
             'allow_review' => ['sometimes', 'boolean'],
             'time_limit_minutes' => ['sometimes', 'nullable', 'integer', 'between:1,300'],
@@ -259,7 +269,7 @@ class QuizController extends Controller
                 $input['reference_pdf_data'] = $pdf['base64'];
             }
         } else {
-            unset($input['reference_pdf_name'], $input['reference_pdf_text']);
+            unset($input['reference_pdf_name'], $input['reference_pdf_text'], $input['quiz_type']);
         }
 
         $quiz->update($input);
@@ -277,6 +287,7 @@ class QuizController extends Controller
         
         $input = $request->validate([
             'is_published' => ['required', 'boolean'],
+            'quiz_type' => ['sometimes', 'in:formative,summative'],
             'allow_review' => ['sometimes', 'boolean'],
             'target_type' => ['sometimes', 'in:all,section,individual'],
             'target_sections' => ['sometimes', 'nullable', 'array'],
@@ -284,6 +295,10 @@ class QuizController extends Controller
             'time_limit_minutes' => ['sometimes', 'nullable', 'integer', 'between:1,300'],
             'shuffle_questions' => ['sometimes', 'boolean'],
         ]);
+
+        if (! $this->ensurePdfColumns()) {
+            unset($input['quiz_type']);
+        }
         
         $wasPublished = (bool) $quiz->is_published;
         $quiz->update($input);
@@ -323,13 +338,18 @@ class QuizController extends Controller
     {
         $user = $request->user();
         $isTeacher = $user->role === 'teacher' && $quiz->teacher_id === $user->id;
-        $isAdmin = in_array($user->role, ['principal', 'dean', 'secretary']);
+        $isAdmin = in_array($user->role, ['principal', 'dean', 'secretary', 'developer'], true);
         abort_unless($isTeacher || $isAdmin, 403, 'Unauthorized to view submissions.');
+
+        $this->ensurePdfColumns();
 
         $attempts = QuizAttempt::where('quiz_id', $quiz->id)
             ->with(['student' => fn ($query) => $query->select('id', 'name', 'lrn', 'grade', 'section', 'email')])
             ->latest()
             ->get();
+
+        $quizType = ($quiz->quiz_type ?? 'formative') === 'summative' ? 'summative' : 'formative';
+        $liveSessions = $quizType === 'formative' ? $this->buildLiveSessionsList($quiz) : [];
 
         return response()->json([
             'quiz' => [
@@ -337,10 +357,13 @@ class QuizController extends Controller
                 'title' => $quiz->title,
                 'subject' => $quiz->subject,
                 'topic' => $quiz->topic,
+                'quiz_type' => $quizType,
+                'allow_review' => (bool) $quiz->allow_review,
                 'question_count' => count($quiz->questions ?? []),
                 'target_type' => $quiz->target_type,
                 'time_limit_minutes' => $quiz->time_limit_minutes,
             ],
+            'live_sessions' => $liveSessions,
             'submissions' => $attempts->map(fn (QuizAttempt $attempt) => [
                 'id' => $attempt->id,
                 'student' => $attempt->student,
@@ -354,6 +377,11 @@ class QuizController extends Controller
                 'completed_at' => $attempt->completed_at ?? $attempt->created_at,
             ]),
         ]);
+    }
+
+    public function liveMonitor(Request $request, Quiz $quiz): JsonResponse
+    {
+        return $this->submissions($request, $quiz);
     }
 
     public function studentQuizzes(Request $request): JsonResponse
@@ -388,6 +416,8 @@ class QuizController extends Controller
                 'question_count' => count($quiz->questions ?? []),
                 'time_limit_minutes' => $quiz->time_limit_minutes ?? 15,
                 'shuffle_questions' => (bool) ($quiz->shuffle_questions ?? false),
+                'quiz_type' => ($quiz->quiz_type ?? 'formative') === 'summative' ? 'summative' : 'formative',
+                'allow_review' => (bool) $quiz->allow_review,
                 'target_type' => $quiz->target_type,
                 'attempted' => (bool) $attempt,
                 'score' => $attempt?->score,
@@ -414,6 +444,52 @@ class QuizController extends Controller
             ? implode(' ', $this->ai->extractCleanSentences((string) $quiz->reference_pdf_text))
             : null;
 
+        if (! $attempt) {
+            try {
+                if (Schema::hasTable('quiz_live_sessions')) {
+                    $questions = $quiz->questions ?? [];
+                    $maxScore = 0;
+                    foreach ($questions as $q) {
+                        $maxScore += isset($q['points']) && is_numeric($q['points']) ? max(1, (int) $q['points']) : 1;
+                    }
+                    $existing = DB::table('quiz_live_sessions')
+                        ->where('quiz_id', $quiz->id)
+                        ->where('student_id', $student->id)
+                        ->first();
+                    if (! $existing) {
+                        DB::table('quiz_live_sessions')->insert([
+                            'quiz_id' => $quiz->id,
+                            'student_id' => $student->id,
+                            'status' => 'in_progress',
+                            'current_question' => 1,
+                            'answered_count' => 0,
+                            'total_questions' => count($questions),
+                            'current_score' => 0,
+                            'max_score' => max(1, $maxScore),
+                            'answers' => json_encode([]),
+                            'cheating_attempts_count' => 0,
+                            'time_remaining_seconds' => ($quiz->time_limit_minutes ?? 15) * 60,
+                            'started_at' => Carbon::now(),
+                            'last_active_at' => Carbon::now(),
+                            'created_at' => Carbon::now(),
+                            'updated_at' => Carbon::now(),
+                        ]);
+                    } else {
+                        DB::table('quiz_live_sessions')
+                            ->where('id', $existing->id)
+                            ->update([
+                                'status' => 'in_progress',
+                                'total_questions' => count($questions),
+                                'last_active_at' => Carbon::now(),
+                                'updated_at' => Carbon::now(),
+                            ]);
+                    }
+                }
+            } catch (\Throwable) {
+                // Non-blocking
+            }
+        }
+
         return response()->json([
             'quiz' => [
                 'id' => $quiz->id,
@@ -426,6 +502,8 @@ class QuizController extends Controller
                 'has_pdf_data' => !empty($quiz->reference_pdf_data),
                 'time_limit_minutes' => $quiz->time_limit_minutes ?? 15,
                 'shuffle_questions' => (bool) ($quiz->shuffle_questions ?? false),
+                'quiz_type' => ($quiz->quiz_type ?? 'formative') === 'summative' ? 'summative' : 'formative',
+                'allow_review' => (bool) $quiz->allow_review,
                 'questions' => collect($quiz->questions ?? [])->map(fn (array $question) => [
                     'prompt' => $question['prompt'],
                     'options' => $question['options'],
@@ -439,8 +517,84 @@ class QuizController extends Controller
                 'cheating_attempts_count' => $attempt->cheating_attempts_count ?? 0,
                 'violations' => $attempt->violations ?? [],
                 'recommendation' => $attempt->recommendation,
+                'allow_review' => (bool) $quiz->allow_review,
+                'answers' => $attempt->answers ?? [],
+                'review_questions' => $quiz->allow_review
+                    ? $this->buildReviewQuestions($quiz->questions ?? [], $attempt->answers ?? [])
+                    : [],
             ] : null,
         ]);
+    }
+
+    public function updateLiveProgress(Request $request, Quiz $quiz): JsonResponse
+    {
+        $this->requireRole($request, 'student');
+        $student = $request->user();
+        $this->ensurePdfColumns();
+
+        $input = $request->validate([
+            'answers' => ['nullable', 'array'],
+            'current_question' => ['nullable', 'integer', 'min:1'],
+            'time_remaining_seconds' => ['nullable', 'integer', 'min:0'],
+            'cheating_attempts_count' => ['nullable', 'integer', 'min:0'],
+        ]);
+
+        try {
+            if (Schema::hasTable('quiz_live_sessions')) {
+                $questions = $quiz->questions ?? [];
+                $rawAnswers = is_array($input['answers'] ?? null) ? $input['answers'] : [];
+                $answeredCount = 0;
+                $currentScore = 0;
+                $maxScore = 0;
+
+                foreach ($questions as $idx => $question) {
+                    $pts = isset($question['points']) && is_numeric($question['points']) ? max(1, (int) $question['points']) : 1;
+                    $maxScore += $pts;
+                    $ans = $rawAnswers[$idx] ?? $rawAnswers[(string) $idx] ?? null;
+                    if ($ans !== null && is_numeric($ans) && (int) $ans >= 0) {
+                        $answeredCount++;
+                        if ((int) $ans === (int) ($question['correct_index'] ?? -99)) {
+                            $currentScore += $pts;
+                        }
+                    }
+                }
+
+                $existing = DB::table('quiz_live_sessions')
+                    ->where('quiz_id', $quiz->id)
+                    ->where('student_id', $student->id)
+                    ->first();
+
+                $payload = [
+                    'status' => 'in_progress',
+                    'current_question' => (int) ($input['current_question'] ?? max(1, $answeredCount)),
+                    'answered_count' => $answeredCount,
+                    'total_questions' => count($questions),
+                    'current_score' => $currentScore,
+                    'max_score' => max(1, $maxScore),
+                    'answers' => json_encode($rawAnswers),
+                    'cheating_attempts_count' => (int) ($input['cheating_attempts_count'] ?? 0),
+                    'time_remaining_seconds' => isset($input['time_remaining_seconds']) ? (int) $input['time_remaining_seconds'] : null,
+                    'last_active_at' => Carbon::now(),
+                    'updated_at' => Carbon::now(),
+                ];
+
+                if ($existing) {
+                    if ($existing->status !== 'submitted') {
+                        DB::table('quiz_live_sessions')->where('id', $existing->id)->update($payload);
+                    }
+                } else {
+                    $payload['quiz_id'] = $quiz->id;
+                    $payload['student_id'] = $student->id;
+                    $payload['started_at'] = Carbon::now();
+                    $payload['created_at'] = Carbon::now();
+                    DB::table('quiz_live_sessions')->insert($payload);
+                }
+            }
+        } catch (\Throwable) {
+            // Non-blocking
+        }
+
+        return response()->json(['status' => 'ok']);
     }
 
     public function showPdf(Request $request, Quiz $quiz): JsonResponse
@@ -509,10 +663,12 @@ class QuizController extends Controller
         $student = $request->user();
         abort_unless($this->isStudentEligible($student, $quiz), 403, 'This quiz is not assigned to your section or account.');
 
+        $this->repairQuizQuestionsIfNeeded($quiz);
+
         $questions = $quiz->questions ?? [];
         $validated = $request->validate([
             'answers' => ['required', 'array', 'size:'.count($questions)],
-            'answers.*' => ['required', 'integer', 'between:0,5'],
+            'answers.*' => ['nullable', 'integer', 'between:-1,5'],
             'cheating_attempts_count' => ['sometimes', 'nullable', 'integer', 'min:0'],
             'violations' => ['sometimes', 'nullable', 'array'],
             'started_at' => ['sometimes', 'nullable', 'string'],
@@ -526,14 +682,22 @@ class QuizController extends Controller
             return response()->json(['message' => 'This quiz has already been submitted.'], 409);
         }
 
-        $answers = array_values($validated['answers']);
+        $answers = array_map(
+            fn ($ans) => $ans !== null && is_numeric($ans) ? (int) $ans : -1,
+            array_values($validated['answers'])
+        );
         $score = 0;
         $maxScore = 0;
+        $answeredCount = 0;
         foreach ($questions as $index => $question) {
             $pts = isset($question['points']) && is_numeric($question['points']) ? max(1, (int) $question['points']) : 1;
             $maxScore += $pts;
-            if ($answers[$index] === $question['correct_index']) {
-                $score += $pts;
+            $studentAns = $answers[$index] ?? -1;
+            if ($studentAns >= 0) {
+                $answeredCount++;
+                if ($studentAns === (int) $question['correct_index']) {
+                    $score += $pts;
+                }
             }
         }
         $maxScore = max(1, $maxScore);
@@ -574,6 +738,29 @@ class QuizController extends Controller
             throw $error;
         }
 
+        try {
+            if (Schema::hasTable('quiz_live_sessions')) {
+                DB::table('quiz_live_sessions')->updateOrInsert(
+                    ['quiz_id' => $quiz->id, 'student_id' => $student->id],
+                    [
+                        'status' => 'submitted',
+                        'answered_count' => $answeredCount,
+                        'total_questions' => count($questions),
+                        'current_score' => $score,
+                        'max_score' => $maxScore,
+                        'answers' => json_encode($answers),
+                        'cheating_attempts_count' => $cheatingCount,
+                        'time_remaining_seconds' => 0,
+                        'completed_at' => Carbon::now(),
+                        'last_active_at' => Carbon::now(),
+                        'updated_at' => Carbon::now(),
+                    ]
+                );
+            }
+        } catch (\Throwable) {
+            // Non-blocking
+        }
+
         // If cheating was detected, also generate a high-priority SecurityLog
         if ($cheatingCount > 0) {
             SecurityLog::create([
@@ -599,8 +786,104 @@ class QuizController extends Controller
                 'percentage' => $attempt->percentage,
                 'cheating_attempts_count' => $attempt->cheating_attempts_count,
                 'recommendation' => $attempt->recommendation,
+                'allow_review' => (bool) $quiz->allow_review,
+                'answers' => $answers,
+                'review_questions' => $quiz->allow_review
+                    ? $this->buildReviewQuestions($questions, $answers)
+                    : [],
             ]
         ], 201);
+    }
+
+    /**
+     * Build detailed question review payload when allow_review is enabled.
+     *
+     * @param array<int, array<string, mixed>> $questions
+     * @param array<int, int|null> $answers
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildReviewQuestions(array $questions, array $answers): array
+    {
+        $review = [];
+        foreach (array_values($questions) as $idx => $question) {
+            $studentAns = isset($answers[$idx]) && is_numeric($answers[$idx]) ? (int) $answers[$idx] : -1;
+            $correctIdx = (int) ($question['correct_index'] ?? 0);
+            $options = array_values(is_array($question['options'] ?? null) ? $question['options'] : []);
+            $review[] = [
+                'prompt' => (string) ($question['prompt'] ?? ''),
+                'options' => $options,
+                'points' => isset($question['points']) && is_numeric($question['points']) ? max(1, (int) $question['points']) : 1,
+                'skill' => (string) ($question['skill'] ?? 'Core Concepts'),
+                'correct_index' => $correctIdx,
+                'student_answer' => $studentAns,
+                'is_correct' => $studentAns >= 0 && $studentAns === $correctIdx,
+            ];
+        }
+        return $review;
+    }
+
+    /**
+     * Build active live sessions list for Formative quizzes.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildLiveSessionsList(Quiz $quiz): array
+    {
+        try {
+            $this->ensurePdfColumns();
+            if (! Schema::hasTable('quiz_live_sessions')) {
+                return [];
+            }
+
+            $submittedIds = QuizAttempt::where('quiz_id', $quiz->id)->pluck('student_id')->map(fn ($id) => (int) $id)->all();
+
+            $rows = DB::table('quiz_live_sessions')
+                ->join('users', 'quiz_live_sessions.student_id', '=', 'users.id')
+                ->where('quiz_live_sessions.quiz_id', $quiz->id)
+                ->where('quiz_live_sessions.status', 'in_progress')
+                ->orderByDesc('quiz_live_sessions.last_active_at')
+                ->select([
+                    'quiz_live_sessions.*',
+                    'users.name as student_name',
+                    'users.email as student_email',
+                    'users.section as student_section',
+                    'users.grade as student_grade',
+                ])
+                ->get();
+
+            $result = [];
+            foreach ($rows as $row) {
+                if (in_array((int) $row->student_id, $submittedIds, true)) {
+                    continue;
+                }
+                $totalQ = max(1, (int) ($row->total_questions ?: count($quiz->questions ?? [])));
+                $answered = max(0, (int) $row->answered_count);
+                $progressPct = round(($answered / $totalQ) * 100);
+                $result[] = [
+                    'id' => (int) $row->id,
+                    'student_id' => (int) $row->student_id,
+                    'student_name' => $row->student_name ?? 'Unknown Student',
+                    'student_email' => $row->student_email ?? '',
+                    'student_section' => $row->student_section ?? 'N/A',
+                    'student_grade' => $row->student_grade ?? '',
+                    'status' => 'in_progress',
+                    'current_question' => max(1, (int) $row->current_question),
+                    'answered_count' => $answered,
+                    'total_questions' => $totalQ,
+                    'progress_percentage' => $progressPct,
+                    'current_score' => (int) $row->current_score,
+                    'max_score' => max(1, (int) $row->max_score),
+                    'cheating_attempts_count' => (int) ($row->cheating_attempts_count ?? 0),
+                    'time_remaining_seconds' => $row->time_remaining_seconds !== null ? (int) $row->time_remaining_seconds : null,
+                    'started_at' => $row->started_at,
+                    'last_active_at' => $row->last_active_at,
+                ];
+            }
+
+            return $result;
+        } catch (\Throwable) {
+            return [];
+        }
     }
 
     public function sections(): JsonResponse
@@ -714,7 +997,8 @@ class QuizController extends Controller
 
     /**
      * Automatically repairs any previously saved quiz whose questions or options
-     * contain compressed PDF binary stream noise (e.g. "\$ MW _ Z r lKEfv...").
+     * contain compressed PDF binary stream noise (e.g. "\$ MW _ Z r lKEfv...")
+     * or whose answers are all stuck on Option A (correct_index === 0).
      */
     private function repairQuizQuestionsIfNeeded(Quiz $quiz): void
     {
@@ -752,6 +1036,9 @@ class QuizController extends Controller
                 );
                 $quiz->questions = $generated['questions'];
                 $dirty = true;
+            } elseif ($this->ai->hasAllAnswersStuckOnFirstOption($questions)) {
+                $quiz->questions = $this->ai->randomizeOptionsPreservingCorrectAnswer($questions);
+                $dirty = true;
             }
 
             if ($dirty) {
@@ -774,6 +1061,32 @@ class QuizController extends Controller
             } elseif (! Schema::hasColumn('quizzes', 'reference_pdf_data')) {
                 Schema::table('quizzes', function (Blueprint $table): void {
                     $table->longText('reference_pdf_data')->nullable();
+                });
+            }
+            if (! Schema::hasColumn('quizzes', 'quiz_type')) {
+                Schema::table('quizzes', function (Blueprint $table): void {
+                    $table->string('quiz_type')->default('formative');
+                });
+            }
+            if (! Schema::hasTable('quiz_live_sessions')) {
+                Schema::create('quiz_live_sessions', function (Blueprint $table): void {
+                    $table->id();
+                    $table->foreignId('quiz_id')->constrained('quizzes')->cascadeOnDelete();
+                    $table->foreignId('student_id')->constrained('users')->cascadeOnDelete();
+                    $table->string('status')->default('in_progress');
+                    $table->unsignedInteger('current_question')->default(1);
+                    $table->unsignedInteger('answered_count')->default(0);
+                    $table->unsignedInteger('total_questions')->default(0);
+                    $table->unsignedInteger('current_score')->default(0);
+                    $table->unsignedInteger('max_score')->default(0);
+                    $table->json('answers')->nullable();
+                    $table->unsignedInteger('cheating_attempts_count')->default(0);
+                    $table->integer('time_remaining_seconds')->nullable();
+                    $table->timestamp('started_at')->nullable();
+                    $table->timestamp('last_active_at')->nullable();
+                    $table->timestamp('completed_at')->nullable();
+                    $table->timestamps();
+                    $table->unique(['quiz_id', 'student_id']);
                 });
             }
             return Schema::hasColumn('quizzes', 'reference_pdf_name');
@@ -801,6 +1114,7 @@ class QuizController extends Controller
             'question_count' => count($quiz->questions ?? []),
             'is_published' => (bool) $quiz->is_published,
             'allow_review' => (bool) $quiz->allow_review,
+            'quiz_type' => ($quiz->quiz_type ?? 'formative') === 'summative' ? 'summative' : 'formative',
             'generated_by_ai' => (bool) $quiz->generated_by_ai,
             'target_type' => $quiz->target_type ?? 'all',
             'target_sections' => $quiz->target_sections ?? [],

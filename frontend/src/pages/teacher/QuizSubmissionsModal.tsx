@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { 
   ShieldAlert, ShieldCheck, AlertTriangle, Users, 
-  ChevronDown, ChevronUp, EyeOff, Search
+  ChevronDown, ChevronUp, EyeOff, Search, Radio, Clock, Lock
 } from 'lucide-react';
 import type { Quiz } from '../../lib/types';
 import Modal from '../../components/ui/Modal';
@@ -38,14 +38,43 @@ interface SubmissionRecord {
   completed_at?: string;
 }
 
+interface LiveSessionRecord {
+  id: number;
+  student_id: number;
+  student_name: string;
+  student_email: string;
+  student_section: string;
+  student_grade?: string;
+  status: string;
+  current_question: number;
+  answered_count: number;
+  total_questions: number;
+  progress_percentage: number;
+  current_score: number;
+  max_score: number;
+  cheating_attempts_count: number;
+  time_remaining_seconds?: number | null;
+  started_at?: string;
+  last_active_at?: string;
+}
+
 interface QuizSubmissionsModalProps {
   quiz: Quiz | null;
   isOpen: boolean;
   onClose: () => void;
 }
 
+function formatRemainingTime(secs: number | null | undefined): string {
+  if (secs === null || secs === undefined || secs < 0) return '—';
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return `${m}:${s < 10 ? '0' : ''}${s}`;
+}
+
 export default function QuizSubmissionsModal({ quiz, isOpen, onClose }: QuizSubmissionsModalProps) {
   const [submissions, setSubmissions] = useState<SubmissionRecord[]>([]);
+  const [liveSessions, setLiveSessions] = useState<LiveSessionRecord[]>([]);
+  const [quizType, setQuizType] = useState<'formative' | 'summative'>('formative');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -59,26 +88,44 @@ export default function QuizSubmissionsModal({ quiz, isOpen, onClose }: QuizSubm
     setError(null);
     setSearch('');
     setExpandedId(null);
+    setQuizType(quiz.quiz_type === 'summative' ? 'summative' : 'formative');
 
-    lmsFetch<{ submissions: SubmissionRecord[] }>(`/teacher/quizzes/${quiz.id}/submissions`)
-      .then(data => {
-        if (!mounted) return;
-        setSubmissions(data.submissions || []);
-      })
-      .catch(err => {
-        if (!mounted) return;
-        setError(err instanceof Error ? err.message : 'Could not load quiz submissions.');
-      })
-      .finally(() => {
-        if (mounted) setLoading(false);
-      });
+    const fetchMonitorData = (isInitial: boolean) => {
+      lmsFetch<{
+        quiz_type?: 'formative' | 'summative';
+        live_monitoring_enabled?: boolean;
+        live_sessions?: LiveSessionRecord[];
+        submissions: SubmissionRecord[];
+      }>(`/teacher/quizzes/${quiz.id}/live`)
+        .then(data => {
+          if (!mounted) return;
+          if (data.quiz_type) {
+            setQuizType(data.quiz_type === 'summative' ? 'summative' : 'formative');
+          }
+          setLiveSessions(Array.isArray(data.live_sessions) ? data.live_sessions : []);
+          setSubmissions(data.submissions || []);
+        })
+        .catch(err => {
+          if (!mounted || !isInitial) return;
+          setError(err instanceof Error ? err.message : 'Could not load quiz submissions.');
+        })
+        .finally(() => {
+          if (mounted && isInitial) setLoading(false);
+        });
+    };
+
+    fetchMonitorData(true);
+    const interval = window.setInterval(() => fetchMonitorData(false), 4000);
 
     return () => {
       mounted = false;
+      window.clearInterval(interval);
     };
   }, [isOpen, quiz?.id]);
 
   if (!quiz) return null;
+
+  const isFormative = quizType !== 'summative';
 
   const filteredSubmissions = submissions.filter(sub => {
     const student = sub.student;
@@ -89,6 +136,16 @@ export default function QuizSubmissionsModal({ quiz, isOpen, onClose }: QuizSubm
       (student.lrn && student.lrn.includes(term)) ||
       (student.section && student.section.toLowerCase().includes(term)) ||
       student.email.toLowerCase().includes(term)
+    );
+  });
+
+  const filteredLiveSessions = liveSessions.filter(s => {
+    const term = search.toLowerCase();
+    if (!term) return true;
+    return (
+      s.student_name.toLowerCase().includes(term) ||
+      s.student_section.toLowerCase().includes(term) ||
+      s.student_email.toLowerCase().includes(term)
     );
   });
 
@@ -103,7 +160,7 @@ export default function QuizSubmissionsModal({ quiz, isOpen, onClose }: QuizSubm
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={`Submissions & Proctoring: ${quiz.title}`}
+      title={isFormative ? `Live Monitor & Submissions: ${quiz.title}` : `Summative Submissions & Proctoring: ${quiz.title}`}
       footer={
         <Button variant="outline" onClick={onClose}>
           Close Review
@@ -113,7 +170,15 @@ export default function QuizSubmissionsModal({ quiz, isOpen, onClose }: QuizSubm
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', maxHeight: '72vh', overflowY: 'auto', paddingRight: '0.25rem' }}>
         
         {/* Metrics Overview Header */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(135px, 1fr))', gap: '0.75rem' }}>
+          {isFormative && (
+            <div style={{ background: 'rgba(59, 130, 246, 0.14)', padding: '0.85rem 1rem', borderRadius: 'var(--radius-md)', border: '1px solid rgba(59, 130, 246, 0.35)' }}>
+              <span style={{ fontSize: '0.74rem', color: '#93c5fd', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <Radio size={13} /> Taking Quiz Now
+              </span>
+              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#bfdbfe', marginTop: '0.2rem' }}>{liveSessions.length}</div>
+            </div>
+          )}
           <div style={{ background: 'rgba(255,255,255,0.05)', padding: '0.85rem 1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--glass-border)' }}>
             <span style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', textTransform: 'uppercase', fontWeight: 600 }}>Total Submissions</span>
             <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'white', marginTop: '0.2rem' }}>{totalCount}</div>
@@ -131,6 +196,122 @@ export default function QuizSubmissionsModal({ quiz, isOpen, onClose }: QuizSubm
             <div style={{ fontSize: '1.5rem', fontWeight: 800, color: flaggedCount > 0 ? '#ff5252' : 'white', marginTop: '0.2rem' }}>{flaggedCount}</div>
           </div>
         </div>
+
+        {/* Formative Live Student Monitoring Section OR Summative Mode Banner */}
+        {isFormative ? (
+          <div
+            style={{
+              background: 'rgba(16, 185, 129, 0.06)',
+              border: '1px solid rgba(16, 185, 129, 0.3)',
+              borderRadius: 'var(--radius-md)',
+              padding: '1rem 1.1rem',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.85rem',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+                <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#34d399', boxShadow: '0 0 8px #34d399', display: 'inline-block' }} />
+                <strong style={{ color: 'white', fontSize: '0.96rem' }}>
+                  Formative Live View — Students Currently Taking the Quiz ({filteredLiveSessions.length})
+                </strong>
+              </div>
+              <span style={{ fontSize: '0.76rem', color: '#a7f3d0', background: 'rgba(16, 185, 129, 0.16)', border: '1px solid rgba(16, 185, 129, 0.35)', padding: '0.18rem 0.6rem', borderRadius: '999px', fontWeight: 600 }}>
+                Auto-refreshing every 4s
+              </span>
+            </div>
+
+            {filteredLiveSessions.length === 0 ? (
+              <div style={{ fontSize: '0.85rem', color: 'var(--neutral-300)', padding: '0.5rem 0' }}>
+                No students are actively taking this Formative quiz right now. As soon as a student opens the quiz, their live progress, current question, score, and timer will appear here in real time.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                {filteredLiveSessions.map((live) => (
+                  <div
+                    key={live.id}
+                    style={{
+                      background: 'rgba(0, 0, 0, 0.28)',
+                      border: live.cheating_attempts_count > 0 ? '1px solid rgba(244, 67, 54, 0.4)' : '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: 'var(--radius-sm)',
+                      padding: '0.85rem 1rem',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.55rem',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <strong style={{ color: 'white', fontSize: '0.95rem' }}>{live.student_name}</strong>
+                        <Badge variant="primary" style={{ fontSize: '0.7rem' }}>{live.student_section}</Badge>
+                        <span style={{ fontSize: '0.78rem', color: '#93c5fd', fontWeight: 600 }}>
+                          On Question {live.current_question} of {live.total_questions}
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '0.82rem', color: 'var(--neutral-200)' }}>
+                          Answered: <strong style={{ color: 'white' }}>{live.answered_count}/{live.total_questions}</strong>
+                        </span>
+                        <span style={{ fontSize: '0.82rem', color: '#a5d6a7', fontWeight: 700 }}>
+                          Live Score: {live.current_score}/{live.max_score}
+                        </span>
+                        {live.time_remaining_seconds !== null && live.time_remaining_seconds !== undefined && (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.8rem', color: '#fbbf24', fontWeight: 700 }}>
+                            <Clock size={13} /> {formatRemainingTime(live.time_remaining_seconds)}
+                          </span>
+                        )}
+                        {live.cheating_attempts_count > 0 ? (
+                          <span style={{ fontSize: '0.76rem', color: '#ff8a80', background: 'rgba(244, 67, 54, 0.2)', border: '1px solid rgba(244, 67, 54, 0.45)', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 700 }}>
+                            ⚠️ {live.cheating_attempts_count} Alert{live.cheating_attempts_count === 1 ? '' : 's'}
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: '0.76rem', color: '#a5d6a7', background: 'rgba(76, 175, 80, 0.16)', border: '1px solid rgba(76, 175, 80, 0.35)', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 600 }}>
+                            ✓ Focused
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div style={{ width: '100%', height: '6px', background: 'rgba(255, 255, 255, 0.1)', borderRadius: '999px', overflow: 'hidden' }}>
+                      <div
+                        style={{
+                          width: `${Math.min(100, Math.max(4, live.progress_percentage))}%`,
+                          height: '100%',
+                          background: 'linear-gradient(90deg, #3b82f6, #10b981)',
+                          transition: 'width 0.3s ease',
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div
+            style={{
+              background: 'rgba(245, 158, 11, 0.09)',
+              border: '1px solid rgba(245, 158, 11, 0.35)',
+              borderRadius: 'var(--radius-md)',
+              padding: '0.9rem 1.1rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.75rem',
+              color: '#fde68a',
+              fontSize: '0.86rem',
+            }}
+          >
+            <Lock size={18} style={{ color: '#fbbf24', flexShrink: 0 }} />
+            <div>
+              <strong style={{ color: 'white', display: 'block', marginBottom: '0.15rem' }}>
+                Summative Quiz Mode — Final Submission Only
+              </strong>
+              Live student monitoring is disabled for Summative exams. Student scores and proctoring logs appear below as soon as each student finishes and submits the quiz.
+            </div>
+          </div>
+        )}
 
         {/* Search bar */}
         <div style={{ position: 'relative' }}>
