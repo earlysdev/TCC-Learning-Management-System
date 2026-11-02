@@ -200,4 +200,41 @@ class QuizTargetingAndAntiCheatTest extends TestCase
         $response->assertJsonPath('quiz.question_count', 12);
         $this->assertCount(12, $response->json('quiz.questions'));
     }
+
+    public function test_teacher_can_upload_pdf_for_ai_question_generation_and_post_quiz_study_feedback(): void
+    {
+        $teacher = User::where('role', 'teacher')->first() ?? User::factory()->create(['role' => 'teacher']);
+        $student = User::where('role', 'student')->first() ?? User::factory()->create(['role' => 'student']);
+
+        $response = $this->actingAs($teacher)->postJson('/api/teacher/quizzes', [
+            'title' => 'Database Normalization Quiz',
+            'subject' => 'IT 116 - Advanced Database System',
+            'topic' => 'Third Normal Form (3NF)',
+            'count' => 4,
+            'generate_with_ai' => true,
+            'difficulty' => 'medium',
+            'pdf_name' => 'Module_4_Database_Normalization.pdf',
+            'pdf_text' => 'Third Normal Form (3NF) requires that a relation is in Second Normal Form (2NF) and every non-prime attribute is non-transitively dependent on every superkey. Eliminating transitive dependencies prevents update, insertion, and deletion anomalies in relational database schemas.',
+        ]);
+
+        $response->assertStatus(201);
+        $response->assertJsonPath('quiz.reference_pdf_name', 'Module_4_Database_Normalization.pdf');
+        $response->assertJsonPath('quiz.generated_by_ai', true);
+        $response->assertJsonPath('quiz.question_count', 4);
+
+        $quizId = $response->json('quiz.id');
+        $this->actingAs($teacher)->patchJson("/api/teacher/quizzes/{$quizId}/publish", [
+            'is_published' => true,
+            'target_type' => 'all',
+        ])->assertStatus(200);
+
+        $submitRes = $this->actingAs($student)->postJson("/api/student/quizzes/{$quizId}/submit", [
+            'answers' => [1, 1, 1, 1],
+        ]);
+        $submitRes->assertStatus(201);
+        $this->assertStringContainsString(
+            'Module_4_Database_Normalization.pdf',
+            (string) $submitRes->json('attempt.recommendation.summary')
+        );
+    }
 }

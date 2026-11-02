@@ -20,6 +20,8 @@ export interface Quiz {
   subject: string;
   topic: string;
   instructions: string | null;
+  reference_pdf_name?: string | null;
+  reference_pdf_text?: string | null;
   question_count: number;
   time_limit_minutes?: number;
   shuffle_questions?: boolean;

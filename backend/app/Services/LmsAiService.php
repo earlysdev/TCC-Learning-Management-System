@@ -8,13 +8,90 @@ use Illuminate\Validation\ValidationException;
 
 class LmsAiService
 {
-    /** @return array{questions: array<int, array{prompt: string, options: array<int, string>, correct_index: int, skill: string}>, source: string} */
-    public function generateQuiz(string $subject, string $topic, int $count, string $difficulty): array
+    /**
+     * Extract readable text from a raw PDF binary string.
+     */
+    public function extractTextFromPdfBinary(string $pdfBinary): string
     {
+        if ($pdfBinary === '') {
+            return '';
+        }
+
+        $chunks = [];
+
+        if (preg_match_all('/stream[\r\n]+(.*?)[\r\n]+endstream/s', $pdfBinary, $matches)) {
+            foreach ($matches[1] as $rawStream) {
+                $decoded = @gzuncompress($rawStream);
+                if ($decoded === false) {
+                    $decoded = @gzinflate($rawStream);
+                }
+                if ($decoded === false) {
+                    $decoded = $rawStream;
+                }
+
+                if (! is_string($decoded) || $decoded === '') {
+                    continue;
+                }
+
+                if (preg_match_all('/\((?:\\\\.|[^\\\\()])*\)/s', $decoded, $strMatches)) {
+                    foreach ($strMatches[0] as $literal) {
+                        $inner = substr($literal, 1, -1);
+                        $inner = str_replace(
+                            ['\\n', '\\r', '\\t', '\\(', '\\)', '\\\\'],
+                            ["\n", ' ', ' ', '(', ')', '\\'],
+                            $inner
+                        );
+                        $inner = preg_replace_callback('/\\\\([0-7]{1,3})/', fn ($m) => chr(octdec($m[1])), $inner) ?? $inner;
+                        $cleaned = preg_replace('/[^\x20-\x7E\r\n]/', ' ', $inner) ?? '';
+                        if (strlen(trim($cleaned)) >= 2) {
+                            $chunks[] = trim($cleaned);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (empty($chunks) && preg_match_all('/\((?:\\\\.|[^\\\\()]){3,}\)/s', $pdfBinary, $fallbackMatches)) {
+            foreach ($fallbackMatches[0] as $literal) {
+                $inner = substr($literal, 1, -1);
+                $cleaned = preg_replace('/[^\x20-\x7E]/', ' ', $inner) ?? '';
+                if (strlen(trim($cleaned)) >= 3) {
+                    $chunks[] = trim($cleaned);
+                }
+            }
+        }
+
+        $combined = implode(' ', $chunks);
+        $combined = preg_replace('/\s+/', ' ', $combined) ?? '';
+
+        return Str::limit(trim($combined), 15000, '');
+    }
+
+    /** @return array{questions: array<int, array{prompt: string, options: array<int, string>, correct_index: int, skill: string}>, source: string} */
+    public function generateQuiz(
+        string $subject,
+        string $topic,
+        int $count,
+        string $difficulty,
+        ?string $pdfText = null,
+        ?string $pdfBase64 = null,
+        ?string $pdfName = null,
+    ): array {
+        $targetCount = max(1, min(50, $count));
+        $cleanPdfText = trim((string) $pdfText);
+        $cleanPdfName = trim((string) $pdfName);
+        $hasPdf = $cleanPdfText !== '' || ! empty($pdfBase64) || $cleanPdfName !== '';
+
         $key = config('services.gemini.key');
         if (! $key) {
-            $questions = $this->sampleQuestions($topic, $subject, $count);
-            return ['questions' => array_slice($questions, 0, $count), 'source' => 'local-template'];
+            $questions = $hasPdf
+                ? $this->generateQuestionsFromPdf($cleanPdfText, $cleanPdfName, $topic, $subject, $targetCount)
+                : $this->sampleQuestions($topic, $subject, $targetCount);
+
+            return [
+                'questions' => array_slice($questions, 0, $targetCount),
+                'source' => $hasPdf ? 'pdf-template' : 'local-template',
+            ];
         }
 
         $schema = [
@@ -32,17 +109,37 @@ class LmsAiService
             ],
             'required' => ['questions'],
         ];
-        $prompt = "Create exactly {$count} {$difficulty} four-option multiple-choice quiz questions for {$subject}, topic: {$topic}. "
-            .'Use age-appropriate, factually accurate wording. Every question needs exactly four distinct options, one unambiguous correct answer, a correct_index from 0 to 3, and a short skill label. Return only the requested JSON.';
+
+        $prompt = $hasPdf
+            ? "Create exactly {$targetCount} {$difficulty} four-option multiple-choice quiz questions for {$subject} (topic/unit: {$topic}) based directly on the uploaded PDF reference material"
+                .($cleanPdfName !== '' ? " (\"{$cleanPdfName}\")" : '').'. '
+                .($cleanPdfText !== '' ? "PDF Reference Content Excerpt:\n".Str::limit($cleanPdfText, 9000, '')."\n\n" : '')
+                .'Every question must have four distinct options, one unambiguous correct answer, a correct_index from 0 to 3, and a short skill label derived from the PDF material. Return only the requested JSON.'
+            : "Create exactly {$targetCount} {$difficulty} four-option multiple-choice quiz questions for {$subject}, topic: {$topic}. "
+                .'Use age-appropriate, factually accurate wording. Every question needs exactly four distinct options, one unambiguous correct answer, a correct_index from 0 to 3, and a short skill label. Return only the requested JSON.';
+
+        $parts = [];
+        if (! empty($pdfBase64)) {
+            $rawBase64 = preg_replace('/^data:application\/pdf;base64,/i', '', trim($pdfBase64)) ?? '';
+            if ($rawBase64 !== '' && strlen($rawBase64) <= 12_000_000) {
+                $parts[] = [
+                    'inlineData' => [
+                        'mimeType' => 'application/pdf',
+                        'data' => $rawBase64,
+                    ],
+                ];
+            }
+        }
+        $parts[] = ['text' => $prompt];
 
         $lastError = null;
         foreach ($this->candidateModels() as $model) {
             try {
                 $response = Http::withoutVerifying()
                     ->withHeaders(['x-goog-api-key' => $key])
-                    ->timeout(25)
+                    ->timeout(30)
                     ->post("https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent", [
-                        'contents' => [['parts' => [['text' => $prompt]]]],
+                        'contents' => [['parts' => $parts]],
                         'generationConfig' => ['responseMimeType' => 'application/json', 'responseJsonSchema' => $schema, 'temperature' => 0.35],
                     ]);
 
@@ -54,24 +151,35 @@ class LmsAiService
                 $json = $response->throw()->json();
                 $raw = $json['candidates'][0]['content']['parts'][0]['text'] ?? '';
                 $decoded = json_decode($raw, true, flags: JSON_THROW_ON_ERROR);
-                $questions = $this->validateQuestions($decoded['questions'] ?? [], $count);
-                return ['questions' => $questions, 'source' => 'gemini'];
+                $questions = $this->validateQuestions($decoded['questions'] ?? [], $targetCount);
+                return ['questions' => $questions, 'source' => $hasPdf ? 'gemini-pdf' : 'gemini'];
             } catch (\Throwable $error) {
                 $lastError = $error;
                 continue;
             }
         }
 
-        report($lastError);
-        $reason = Str::limit($lastError?->getMessage() ?? 'Service unavailable', 120);
-        throw ValidationException::withMessages([
-            'topic' => ['The AI provider could not generate this quiz ('.$reason.'). Please retry or check your Gemini settings.'],
-        ]);
+        // Graceful fallback to PDF or topic generator so teacher quiz creation never breaks if Gemini quota is reached
+        $fallbackQuestions = $hasPdf
+            ? $this->generateQuestionsFromPdf($cleanPdfText, $cleanPdfName, $topic, $subject, $targetCount)
+            : $this->sampleQuestions($topic, $subject, $targetCount);
+
+        return [
+            'questions' => array_slice($fallbackQuestions, 0, $targetCount),
+            'source' => $hasPdf ? 'pdf-template' : 'local-template',
+        ];
     }
 
     /** @param array<int, array<string, mixed>> $questions @return array{summary: string, focus_topics: array<int, string>, action_steps: array<int, string>, references: array<int, array{title: string, url: string, description: string, source_name: string}>, source: string} */
-    public function recommend(string $topic, int $score, int $max, array $questions, array $answers): array
-    {
+    public function recommend(
+        string $topic,
+        int $score,
+        int $max,
+        array $questions,
+        array $answers,
+        ?string $pdfText = null,
+        ?string $pdfName = null,
+    ): array {
         $missed = [];
         foreach ($questions as $index => $question) {
             if (($answers[$index] ?? null) !== $question['correct_index']) {
@@ -80,40 +188,58 @@ class LmsAiService
         }
         $focus = array_values(array_unique($missed));
         $topicSafe = trim($topic);
-        $curatedReferences = $this->buildTopicReferences($topicSafe, $focus);
+        $cleanPdfName = trim((string) $pdfName);
+        $cleanPdfText = trim((string) $pdfText);
+        $hasPdf = $cleanPdfName !== '' || $cleanPdfText !== '';
+        $curatedReferences = $this->buildTopicReferences($topicSafe, $focus, $cleanPdfName, $cleanPdfText);
 
         if ($focus === []) {
+            $pdfNote = $hasPdf
+                ? ' based on the uploaded reference handout ('.($cleanPdfName ?: 'PDF Module').')'
+                : '';
             return [
-                'summary' => 'Outstanding work! You demonstrated complete mastery across all tested learning competencies for '.$topicSafe.'.',
+                'summary' => 'Outstanding work! You demonstrated complete mastery across all tested learning competencies for '.$topicSafe.$pdfNote.'.',
                 'focus_topics' => [],
                 'action_steps' => [
-                    'Proceed to subsequent modules or challenge yourself with advanced problem sets in '.$topicSafe.'.',
+                    $hasPdf
+                        ? 'Revisit advanced sections of the uploaded PDF handout ('.($cleanPdfName ?: $topicSafe).') to deepen your practical mastery.'
+                        : 'Proceed to subsequent modules or challenge yourself with advanced problem sets in '.$topicSafe.'.',
                     'Share your mastery and mentor peers reviewing this unit.'
                 ],
                 'references' => $curatedReferences,
-                'source' => 'local',
+                'source' => $hasPdf ? 'pdf-local' : 'local',
             ];
         }
 
+        $pdfExcerptNote = '';
+        if ($cleanPdfText !== '') {
+            $pdfExcerptNote = ' Key handout excerpt to review: "'.Str::limit($cleanPdfText, 220).'"';
+        }
+
         $fallback = [
-            'summary' => "You achieved {$score} of {$max} points. A focused review of ".implode(', ', array_slice($focus, 0, 2)).' will strengthen your topic accuracy and exam readiness.',
+            'summary' => $hasPdf
+                ? "You achieved {$score} of {$max} points. Based on the uploaded PDF reference (".($cleanPdfName ?: $topicSafe)."), a focused review of ".implode(', ', array_slice($focus, 0, 2))." will strengthen your mastery.".$pdfExcerptNote
+                : "You achieved {$score} of {$max} points. A focused review of ".implode(', ', array_slice($focus, 0, 2)).' will strengthen your topic accuracy and exam readiness.',
             'focus_topics' => array_slice($focus, 0, 4),
             'action_steps' => [
-                'Review the core lesson notes and reference study links below for '.implode(' and ', array_slice($focus, 0, 2)).'.',
+                $hasPdf
+                    ? 'Re-read the uploaded PDF handout ('.($cleanPdfName ?: $topicSafe).') sections covering '.implode(' and ', array_slice($focus, 0, 2)).'.'
+                    : 'Review the core lesson notes and reference study links below for '.implode(' and ', array_slice($focus, 0, 2)).'.',
                 'Engage with the interactive practice modules and self-learning materials provided in the references.',
                 'Clarify specific misconceptions with your teacher during the next class session.'
             ],
             'references' => $curatedReferences,
-            'source' => 'local',
+            'source' => $hasPdf ? 'pdf-local' : 'local',
         ];
 
         $key = config('services.gemini.key');
         if (! $key) return $fallback;
 
-        $prompt = "Provide supportive, highly accurate educational study advice for a secondary school learner. "
+        $prompt = "Provide supportive, highly accurate educational study advice for a college/secondary learner. "
             ."Topic: {$topicSafe}. Score: {$score}/{$max}. Competencies missed: ".implode(', ', $focus).". "
+            .($hasPdf ? "The teacher provided a PDF reference handout (\"{$cleanPdfName}\"). Base your study feedback and action steps on this PDF material:\n".Str::limit($cleanPdfText, 5000, '')."\n\n" : '')
             ."Return JSON with:\n"
-            ."- summary (string: 2-3 sentences of constructive learning feedback)\n"
+            ."- summary (string: 2-3 sentences of constructive learning feedback".($hasPdf ? " referencing the uploaded PDF material" : "").")\n"
             ."- focus_topics (array of strings: specific concepts to review)\n"
             ."- action_steps (array of strings: actionable revision recommendations)\n"
             ."- references (array of 2 to 3 objects with title, url, description, and source_name). Ensure URLs are valid https educational links relevant to {$topicSafe} (e.g. Khan Academy, Wikipedia, or official educational portals). Do not infer personal traits or include answer keys.";
@@ -171,32 +297,107 @@ class LmsAiService
     }
 
     /** @param array<int, string> $focus @return array<int, array{title: string, url: string, description: string, source_name: string}> */
-    private function buildTopicReferences(string $topic, array $focus): array
+    private function buildTopicReferences(string $topic, array $focus, string $pdfName = '', string $pdfText = ''): array
     {
         $primarySkill = !empty($focus) ? $focus[0] : $topic;
         $encodedTopic = urlencode($topic);
         $encodedSkill = urlencode($primarySkill);
 
-        return [
-            [
-                'title' => "Khan Academy: {$topic} Study Module",
-                'url' => "https://www.khanacademy.org/search?page_search_query={$encodedTopic}",
-                'description' => "Interactive lessons, video walkthroughs, and practice problems focused on {$topic}.",
-                'source_name' => 'Khan Academy',
-            ],
-            [
-                'title' => "Wikipedia Knowledge Base: {$topic}",
-                'url' => "https://en.wikipedia.org/wiki/Special:Search?search={$encodedTopic}",
-                'description' => "Academic summaries, diagrams, and comprehensive definitions for {$topic}.",
-                'source_name' => 'Wikipedia Library',
-            ],
-            [
-                'title' => "DepEd LR Portal Competency: {$primarySkill}",
-                'url' => "https://lrmds.deped.gov.ph/search?query={$encodedSkill}",
-                'description' => "Official curriculum guides and self-learning modules for {$primarySkill}.",
-                'source_name' => 'DepEd Learning Resource',
-            ],
+        $refs = [];
+        if ($pdfName !== '' || $pdfText !== '') {
+            $excerpt = $pdfText !== ''
+                ? 'Handout focus: '.Str::limit($pdfText, 140)
+                : "Review the instructor's uploaded PDF handout ({$pdfName}) for {$primarySkill}.";
+            $refs[] = [
+                'title' => 'Instructor PDF Handout: '.($pdfName !== '' ? $pdfName : "{$topic} Reference PDF"),
+                'url' => "https://scholar.google.com/scholar?q={$encodedTopic}+{$encodedSkill}",
+                'description' => $excerpt,
+                'source_name' => 'Uploaded Course PDF & Scholar Reference',
+            ];
+        }
+
+        $refs[] = [
+            'title' => "Khan Academy: {$topic} Study Module",
+            'url' => "https://www.khanacademy.org/search?page_search_query={$encodedTopic}",
+            'description' => "Interactive lessons, video walkthroughs, and practice problems focused on {$topic}.",
+            'source_name' => 'Khan Academy',
         ];
+        $refs[] = [
+            'title' => "Wikipedia Knowledge Base: {$topic}",
+            'url' => "https://en.wikipedia.org/wiki/Special:Search?search={$encodedTopic}",
+            'description' => "Academic summaries, diagrams, and comprehensive definitions for {$topic}.",
+            'source_name' => 'Wikipedia Library',
+        ];
+        $refs[] = [
+            'title' => "DepEd LR Portal Competency: {$primarySkill}",
+            'url' => "https://lrmds.deped.gov.ph/search?query={$encodedSkill}",
+            'description' => "Official curriculum guides and self-learning modules for {$primarySkill}.",
+            'source_name' => 'DepEd Learning Resource',
+        ];
+
+        return array_slice($refs, 0, 4);
+    }
+
+    /**
+     * Generate questions directly from extracted PDF text (or PDF filename/topic fallback when local).
+     *
+     * @return array<int, array{prompt: string, options: array<int, string>, correct_index: int, skill: string}>
+     */
+    private function generateQuestionsFromPdf(string $pdfText, string $pdfName, string $topic, string $subject, int $count): array
+    {
+        $targetCount = max(1, min(50, $count));
+        $cleanTopic = trim($topic) ?: ($pdfName !== '' ? pathinfo($pdfName, PATHINFO_FILENAME) : 'Course Handout');
+        $cleanSubject = trim($subject) ?: 'BSIT Course';
+        $docLabel = $pdfName !== '' ? $pdfName : "{$cleanTopic} PDF";
+
+        // Split extracted PDF text into meaningful factual sentences if available
+        $sentences = [];
+        if ($pdfText !== '') {
+            $rawSentences = preg_split('/(?<=[.?!])\s+|\n+/', $pdfText) ?: [];
+            foreach ($rawSentences as $sentence) {
+                $trimmed = trim(preg_replace('/\s+/', ' ', $sentence) ?? '');
+                if (strlen($trimmed) >= 35 && strlen($trimmed) <= 220 && preg_match('/[a-zA-Z]{4,}/', $trimmed)) {
+                    $sentences[] = $trimmed;
+                }
+                if (count($sentences) >= 25) {
+                    break;
+                }
+            }
+        }
+
+        $generated = [];
+        foreach ($sentences as $idx => $statement) {
+            $shortStatement = Str::limit($statement, 140);
+            $generated[] = [
+                'prompt' => "Based on the uploaded PDF reference ({$docLabel}) for {$cleanTopic}, which statement accurately reflects the course material?",
+                'options' => [
+                    $shortStatement,
+                    "The PDF handout states that {$cleanTopic} is unrelated to {$cleanSubject} system design.",
+                    "According to the document, validation and structured analysis are omitted in {$cleanTopic}.",
+                    "The reference material specifies that {$cleanTopic} requires no testing or verification.",
+                ],
+                'correct_index' => 0,
+                'skill' => "{$cleanTopic} (PDF Reference #".($idx + 1).')',
+            ];
+            if (count($generated) >= $targetCount) {
+                return $generated;
+            }
+        }
+
+        $baseQuestions = $this->sampleQuestions($cleanTopic, $cleanSubject, $targetCount);
+        foreach ($baseQuestions as $baseQuestion) {
+            $generated[] = [
+                'prompt' => "[{$docLabel}] ".$baseQuestion['prompt'],
+                'options' => $baseQuestion['options'],
+                'correct_index' => $baseQuestion['correct_index'],
+                'skill' => $baseQuestion['skill'],
+            ];
+            if (count($generated) >= $targetCount) {
+                break;
+            }
+        }
+
+        return array_slice($generated, 0, $targetCount);
     }
 
     /** @return array<int, string> */

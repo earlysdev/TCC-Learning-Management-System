@@ -1,10 +1,12 @@
 import { useEffect, useState, useRef } from 'react';
 import { 
   Plus, Trash2, ArrowUp, ArrowDown, ChevronsUp, ChevronsDown, 
-  Award, CheckCircle2, Clock3, Shuffle 
+  Award, CheckCircle2, Clock3, Shuffle, FileText, Sparkles, Upload, X 
 } from 'lucide-react';
 import type { Question, Quiz, Subject } from '../../lib/types';
 import { BSIT_SUBJECT_OPTIONS } from '../../lib/constants';
+import { readPdfFile } from '../../lib/pdfUtils';
+import { lmsFetch } from '../../lmsApi';
 import Modal from '../../components/ui/Modal';
 import Button from '../../components/ui/Button';
 import Select from '../../components/ui/Select';
@@ -15,6 +17,9 @@ export interface QuizEditorValues {
   subject: string;
   topic: string;
   instructions: string;
+  reference_pdf_name?: string | null;
+  reference_pdf_text?: string | null;
+  pdf_base64?: string | null;
   allow_review: boolean;
   time_limit_minutes: number;
   shuffle_questions: boolean;
@@ -46,6 +51,9 @@ function toEditorValues(quiz: Quiz): QuizEditorValues {
     subject: quiz.subject,
     topic: quiz.topic,
     instructions: quiz.instructions || '',
+    reference_pdf_name: quiz.reference_pdf_name || null,
+    reference_pdf_text: quiz.reference_pdf_text || null,
+    pdf_base64: null,
     allow_review: Boolean(quiz.allow_review),
     time_limit_minutes: Number(quiz.time_limit_minutes) > 0 ? Number(quiz.time_limit_minutes) : 15,
     shuffle_questions: qList.length >= 3 ? Boolean(quiz.shuffle_questions ?? true) : false,
@@ -62,7 +70,11 @@ function toEditorValues(quiz: Quiz): QuizEditorValues {
 export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects = [], onClose, onSave }: QuizEditorModalProps) {
   const [draft, setDraft] = useState<QuizEditorValues | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [aiNotice, setAiNotice] = useState<string | null>(null);
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiDifficulty, setAiDifficulty] = useState<'easy' | 'medium' | 'challenging'>('medium');
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!quiz) {
@@ -200,6 +212,98 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
     });
   };
 
+  const handleSelectPdf = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
+      setValidationError('Please upload a valid PDF (.pdf) document.');
+      return;
+    }
+    try {
+      setValidationError(null);
+      const parsed = await readPdfFile(file);
+      setDraft((current) => {
+        if (!current) return current;
+        const nextInstructions = current.instructions.trim()
+          ? current.instructions
+          : `Refer to the attached PDF handout (${parsed.name}) and choose the best answer for each question. Alt-tabbing, taking screenshots, or opening developer tools is strictly prohibited and monitored.`;
+        return {
+          ...current,
+          reference_pdf_name: parsed.name,
+          reference_pdf_text: parsed.text,
+          pdf_base64: parsed.base64,
+          instructions: nextInstructions,
+        };
+      });
+      setAiNotice(`PDF "${parsed.name}" attached for quiz instructions, AI question generation, and post-quiz study feedback.`);
+    } catch (err: unknown) {
+      setValidationError(err instanceof Error ? err.message : 'Could not read the selected PDF file.');
+    } finally {
+      if (pdfInputRef.current) pdfInputRef.current.value = '';
+    }
+  };
+
+  const handleGenerateQuestionsWithAi = async () => {
+    if (!draft) return;
+    const cleanTopic = draft.topic.trim() || draft.title.trim();
+    const cleanSubject = draft.subject.trim();
+    if (!cleanTopic || !cleanSubject) {
+      setValidationError('Enter a Subject and Topic / Unit before generating questions with AI.');
+      return;
+    }
+    setAiGenerating(true);
+    setValidationError(null);
+    setAiNotice(null);
+    try {
+      const targetCount = Math.max(1, Math.min(50, draft.questions.length || 5));
+      const res = await lmsFetch<{
+        questions: Array<{ prompt: string; options: string[]; correct_index: number; skill?: string }>;
+        generation_source?: string;
+        reference_pdf_name?: string | null;
+        reference_pdf_text?: string | null;
+      }>('/teacher/quizzes/generate', {
+        method: 'POST',
+        body: JSON.stringify({
+          preview_only: true,
+          title: draft.title.trim() || cleanTopic,
+          subject: cleanSubject,
+          topic: cleanTopic,
+          count: targetCount,
+          difficulty: aiDifficulty,
+          pdf_name: draft.reference_pdf_name,
+          pdf_text: draft.reference_pdf_text,
+          pdf_base64: draft.pdf_base64,
+        }),
+      });
+      if (Array.isArray(res.questions) && res.questions.length > 0) {
+        setDraft((current) => {
+          if (!current) return current;
+          return {
+            ...current,
+            reference_pdf_name: res.reference_pdf_name ?? current.reference_pdf_name,
+            reference_pdf_text: res.reference_pdf_text ?? current.reference_pdf_text,
+            questions: res.questions.map((q) => ({
+              prompt: q.prompt || '',
+              skill: q.skill || cleanTopic,
+              points: 1,
+              options: Array.from({ length: 4 }, (_, idx) => q.options?.[idx] || ''),
+              correct_index: Number.isInteger(q.correct_index) ? Number(q.correct_index) : 0,
+            })),
+          };
+        });
+        setAiNotice(
+          draft.reference_pdf_name
+            ? `Generated ${res.questions.length} questions from PDF "${draft.reference_pdf_name}". Review and save when ready.`
+            : `Generated ${res.questions.length} questions based on topic "${cleanTopic}". Review and save when ready.`
+        );
+      }
+    } catch (err: unknown) {
+      setValidationError(err instanceof Error ? err.message : 'Could not generate AI questions.');
+    } finally {
+      setAiGenerating(false);
+    }
+  };
+
   const submit = () => {
     const rawTitle = draft.title.trim();
     const rawTopic = draft.topic.trim();
@@ -289,78 +393,207 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
           </div>
         )}
 
-        {/* Quiz Metadata */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
-          <label className="form-group" style={{ margin: 0 }}>
-            <span className="form-label">Quiz Title</span>
-            <input className="form-input" value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} />
-          </label>
-          <Select
-            label="Course Code & Subject Description"
-            value={draft.subject}
-            onChange={(val) => setDraft({ ...draft, subject: val })}
-            options={subjects && subjects.length > 0
-              ? subjects.map((s) => ({
-                  value: s.code && !s.name.startsWith(s.code) ? `${s.code} - ${s.name}` : s.name,
-                  label: s.code && !s.name.startsWith(s.code) ? `${s.code} — ${s.name}` : s.name,
-                }))
-              : BSIT_SUBJECT_OPTIONS
-            }
-          />
-          <label className="form-group" style={{ margin: 0 }}>
-            <span className="form-label">Topic / Unit</span>
-            <input className="form-input" value={draft.topic} onChange={(event) => setDraft({ ...draft, topic: event.target.value })} />
-          </label>
-          <label className="form-group" style={{ margin: 0 }}>
-            <span className="form-label" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
-              <Clock3 size={13} style={{ color: '#fbbf24' }} /> Time Limit (Minutes)
-            </span>
-            <input
-              type="number"
-              min={1}
-              max={300}
-              className="form-input"
-              value={draft.time_limit_minutes ?? 15}
-              onChange={(event) => setDraft({ ...draft, time_limit_minutes: Math.max(1, Math.min(300, Number(event.target.value) || 15)) })}
-            />
-          </label>
+        {aiNotice && (
+          <div style={{ border: '1px solid rgba(67, 160, 71, 0.45)', background: 'rgba(67, 160, 71, 0.15)', color: '#c8e6c9', borderRadius: 'var(--radius-md)', padding: '0.7rem 1rem', fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <CheckCircle2 size={16} style={{ flexShrink: 0 }} />
+            <span>{aiNotice}</span>
+          </div>
+        )}
+
+        {/* Quiz Metadata — Organized & Aligned 2-Row Grid */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', background: 'rgba(255, 255, 255, 0.02)', padding: '1.1rem', borderRadius: 'var(--radius-lg, 12px)', border: '1px solid rgba(255, 255, 255, 0.07)' }}>
+          {/* Metadata Row 1: Quiz Title + Full Course Code & Subject Description */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem', alignItems: 'end' }}>
+            <label className="form-group" style={{ margin: 0 }}>
+              <span className="form-label" style={{ display: 'flex', alignItems: 'center', minHeight: '22px', marginBottom: '0.45rem' }}>
+                Quiz Title
+              </span>
+              <input
+                className="form-input"
+                value={draft.title}
+                placeholder="Enter quiz title..."
+                onChange={(event) => setDraft({ ...draft, title: event.target.value })}
+              />
+            </label>
+
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span className="form-label" style={{ display: 'flex', alignItems: 'center', minHeight: '22px', marginBottom: '0.45rem' }}>
+                Course Code & Subject Description
+              </span>
+              <Select
+                value={draft.subject}
+                onChange={(val) => setDraft({ ...draft, subject: val })}
+                style={{ margin: 0 }}
+                options={subjects && subjects.length > 0
+                  ? subjects.map((s) => ({
+                      value: s.code && !s.name.startsWith(s.code) ? `${s.code} - ${s.name}` : s.name,
+                      label: s.code && !s.name.startsWith(s.code) ? `${s.code} — ${s.name}` : s.name,
+                    }))
+                  : BSIT_SUBJECT_OPTIONS
+                }
+              />
+            </div>
+          </div>
+
+          {/* Metadata Row 2: Topic / Unit + Time Limit (Minutes) */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', alignItems: 'end' }}>
+            <label className="form-group" style={{ margin: 0 }}>
+              <span className="form-label" style={{ display: 'flex', alignItems: 'center', minHeight: '22px', marginBottom: '0.45rem' }}>
+                Topic / Unit
+              </span>
+              <input
+                className="form-input"
+                value={draft.topic}
+                placeholder="e.g. Data Structures, Relational Databases"
+                onChange={(event) => setDraft({ ...draft, topic: event.target.value })}
+              />
+            </label>
+
+            <label className="form-group" style={{ margin: 0 }}>
+              <span className="form-label" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', minHeight: '22px', marginBottom: '0.45rem' }}>
+                <Clock3 size={14} style={{ color: '#fbbf24' }} /> Time Limit (Minutes)
+              </span>
+              <input
+                type="number"
+                min={1}
+                max={300}
+                className="form-input"
+                value={draft.time_limit_minutes ?? 15}
+                onChange={(event) => setDraft({ ...draft, time_limit_minutes: Math.max(1, Math.min(300, Number(event.target.value) || 15)) })}
+              />
+            </label>
+          </div>
         </div>
 
+        {/* Instructions for Students */}
         <label className="form-group" style={{ margin: 0 }}>
-          <span className="form-label">Instructions for Students</span>
+          <span className="form-label" style={{ marginBottom: '0.45rem' }}>Instructions for Students</span>
           <textarea
             className="form-input"
             rows={2}
             value={draft.instructions}
             onChange={(event) => setDraft({ ...draft, instructions: event.target.value })}
-            style={{ minHeight: '64px', lineHeight: 1.5, resize: 'vertical' }}
+            style={{ minHeight: '68px', lineHeight: 1.5, resize: 'vertical' }}
           />
         </label>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '0.75rem' }}>
-          <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.65rem', color: 'var(--neutral-200)', fontSize: '0.9rem', cursor: 'pointer', background: 'rgba(255,255,255,0.03)', padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid rgba(255,255,255,0.06)' }}>
+        {/* PDF Reference Upload & AI Question Generation Bar */}
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '0.85rem',
+            padding: '0.9rem 1.1rem',
+            borderRadius: 'var(--radius-md)',
+            background: 'rgba(245, 158, 11, 0.06)',
+            border: '1px solid rgba(245, 158, 11, 0.25)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: '1 1 280px', minWidth: 0 }}>
+            <div style={{ background: 'rgba(245, 158, 11, 0.18)', color: '#fbbf24', padding: '0.5rem', borderRadius: 'var(--radius-md)', flexShrink: 0 }}>
+              <FileText size={19} />
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 700, color: 'white', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
+                <span>PDF Reference & AI Quiz Generator</span>
+                {draft.reference_pdf_name && (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.75rem', background: 'rgba(67, 160, 71, 0.2)', color: '#a5d6a7', border: '1px solid rgba(67, 160, 71, 0.4)', padding: '0.12rem 0.5rem', borderRadius: '999px' }}>
+                    <FileText size={11} /> {draft.reference_pdf_name}
+                    <button
+                      type="button"
+                      title="Remove attached PDF"
+                      onClick={() => setDraft({ ...draft, reference_pdf_name: null, reference_pdf_text: null, pdf_base64: null })}
+                      style={{ background: 'transparent', border: 'none', color: '#ffcdd2', cursor: 'pointer', padding: 0, display: 'inline-flex' }}
+                    >
+                      <X size={12} />
+                    </button>
+                  </span>
+                )}
+              </div>
+              <p style={{ margin: '0.15rem 0 0', fontSize: '0.78rem', color: 'var(--neutral-300)', lineHeight: 1.4 }}>
+                {draft.reference_pdf_name
+                  ? 'AI will read this PDF to generate questions and provide post-quiz study feedback.'
+                  : 'Upload a PDF handout for instructions & AI questions, or generate directly from the Topic / Unit.'}
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <input
+              ref={pdfInputRef}
+              type="file"
+              accept=".pdf,application/pdf"
+              onChange={handleSelectPdf}
+              style={{ display: 'none' }}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => pdfInputRef.current?.click()}
+              style={{ gap: '0.35rem' }}
+            >
+              <Upload size={14} /> {draft.reference_pdf_name ? 'Replace PDF' : 'Upload PDF'}
+            </Button>
+
+            <select
+              aria-label="AI Question Difficulty"
+              value={aiDifficulty}
+              onChange={(e) => setAiDifficulty(e.target.value as 'easy' | 'medium' | 'challenging')}
+              className="form-select"
+              style={{ width: 'auto', height: '34px', padding: '0 2rem 0 0.7rem', fontSize: '0.78rem' }}
+            >
+              <option value="easy">Easy</option>
+              <option value="medium">Medium</option>
+              <option value="challenging">Challenging</option>
+            </select>
+
+            <Button
+              type="button"
+              variant="accent"
+              size="sm"
+              disabled={aiGenerating || busy}
+              isLoading={aiGenerating}
+              onClick={handleGenerateQuestionsWithAi}
+              style={{ gap: '0.35rem' }}
+            >
+              <Sparkles size={14} />
+              {aiGenerating
+                ? 'Generating...'
+                : draft.reference_pdf_name
+                  ? `Generate ${draft.questions.length} from PDF`
+                  : `Generate ${draft.questions.length} from Topic`}
+            </Button>
+          </div>
+        </div>
+
+        {/* Settings Checkboxes Row — Equal Height & Aligned */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '0.85rem', alignItems: 'stretch' }}>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.7rem', color: 'var(--neutral-200)', fontSize: '0.88rem', cursor: 'pointer', background: draft.allow_review ? 'rgba(245, 158, 11, 0.1)' : 'rgba(255,255,255,0.03)', padding: '0.85rem 1rem', borderRadius: 'var(--radius-md)', border: `1px solid ${draft.allow_review ? 'rgba(245, 158, 11, 0.4)' : 'rgba(255,255,255,0.07)'}`, margin: 0 }}>
             <input
               type="checkbox"
               checked={draft.allow_review}
               onChange={(event) => setDraft({ ...draft, allow_review: event.target.checked })}
-              style={{ accentColor: 'var(--primary-400)', marginTop: '0.2rem', width: '16px', height: '16px' }}
+              style={{ accentColor: 'var(--accent-gold, #f59e0b)', marginTop: '0.2rem', width: '16px', height: '16px', flexShrink: 0 }}
             />
             <span>
-              <strong style={{ color: 'white', display: 'block' }}>Allow Answer Review After Submission</strong>
+              <strong style={{ color: 'white', display: 'block', marginBottom: '0.15rem' }}>Allow Answer Review After Submission</strong>
               Students can review full answer keys and explanations once they submit.
             </span>
           </label>
 
           {draft.questions.length >= 3 && (
-            <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.65rem', color: 'var(--neutral-200)', fontSize: '0.9rem', cursor: 'pointer', background: draft.shuffle_questions ? 'rgba(63,81,181,0.14)' : 'rgba(255,255,255,0.03)', padding: '0.75rem', borderRadius: 'var(--radius-md)', border: `1px solid ${draft.shuffle_questions ? 'var(--primary-400)' : 'rgba(255,255,255,0.06)'}` }}>
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.7rem', color: 'var(--neutral-200)', fontSize: '0.88rem', cursor: 'pointer', background: draft.shuffle_questions ? 'rgba(245, 158, 11, 0.1)' : 'rgba(255,255,255,0.03)', padding: '0.85rem 1rem', borderRadius: 'var(--radius-md)', border: `1px solid ${draft.shuffle_questions ? 'rgba(245, 158, 11, 0.4)' : 'rgba(255,255,255,0.07)'}`, margin: 0 }}>
               <input
                 type="checkbox"
                 checked={Boolean(draft.shuffle_questions)}
                 onChange={(event) => setDraft({ ...draft, shuffle_questions: event.target.checked })}
-                style={{ accentColor: 'var(--primary-400)', marginTop: '0.2rem', width: '16px', height: '16px' }}
+                style={{ accentColor: 'var(--accent-gold, #f59e0b)', marginTop: '0.2rem', width: '16px', height: '16px', flexShrink: 0 }}
               />
               <span>
-                <strong style={{ color: 'white', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <strong style={{ color: 'white', display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.15rem' }}>
                   <Shuffle size={14} style={{ color: '#fbbf24' }} /> Shuffle Questions
                 </strong>
                 Randomize question order for each student attempt ({draft.questions.length} questions).

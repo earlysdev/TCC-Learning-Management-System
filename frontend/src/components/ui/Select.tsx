@@ -137,8 +137,9 @@ export default function Select({
         className={`custom-select-trigger ${isOpen ? 'active' : ''} ${error ? 'error' : ''}`}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
+        title={selectedOption ? selectedOption.label : placeholder}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0, flex: 1, overflow: 'hidden' }}>
           {selectedOption?.icon && (
             <span style={{ display: 'inline-flex', color: 'var(--accent-purple-light)' }}>
               {selectedOption.icon}
@@ -180,9 +181,10 @@ export default function Select({
           <ChevronDown
             size={16}
             style={{
+              flexShrink: 0,
               transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
               transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-              color: isOpen ? 'var(--accent-purple-light, #a78bfa)' : 'rgba(255, 255, 255, 0.6)',
+              color: isOpen ? 'var(--accent-gold, #fbbf24)' : 'rgba(255, 255, 255, 0.65)',
             }}
           />
         </div>

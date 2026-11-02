@@ -11,9 +11,11 @@ use App\Models\User;
 use App\Services\LmsAiService;
 use Carbon\Carbon;
 use Illuminate\Database\QueryException;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class QuizController extends Controller
 {
@@ -56,39 +58,77 @@ class QuizController extends Controller
             'target_type' => ['sometimes', 'in:all,section,individual'],
             'target_sections' => ['sometimes', 'nullable', 'array'],
             'questions' => ['sometimes', 'array', 'min:1'],
+            'generate_with_ai' => ['sometimes', 'boolean'],
+            'difficulty' => ['sometimes', 'in:easy,medium,challenging'],
+            'pdf_name' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'pdf_text' => ['sometimes', 'nullable', 'string'],
+            'pdf_base64' => ['sometimes', 'nullable', 'string'],
         ]);
 
         $cleanTopic = trim($input['topic']);
         $questionCount = max(1, min(50, (int) ($input['count'] ?? 3)));
-        $questions = $input['questions'] ?? array_map(fn (int $i) => [
-            'prompt' => '',
-            'skill' => $cleanTopic,
-            'points' => 1,
-            'options' => ['', '', '', ''],
-            'correct_index' => 0,
-        ], range(1, $questionCount));
+        $pdf = $this->extractPdfInput($request, $input);
+        $hasPdf = !empty($pdf['name']) || !empty($pdf['text']) || !empty($pdf['base64']);
+        $useAi = (bool) ($input['generate_with_ai'] ?? $hasPdf);
+        $difficulty = (string) ($input['difficulty'] ?? 'medium');
+
+        $generatedByAi = false;
+        if (!empty($input['questions'])) {
+            $questions = $input['questions'];
+        } elseif ($useAi) {
+            $generated = $this->ai->generateQuiz(
+                trim($input['subject']),
+                $cleanTopic,
+                $questionCount,
+                $difficulty,
+                $pdf['text'],
+                $pdf['base64'],
+                $pdf['name'],
+            );
+            $questions = $generated['questions'];
+            $generatedByAi = true;
+        } else {
+            $questions = array_map(fn (int $i) => [
+                'prompt' => '',
+                'skill' => $cleanTopic,
+                'points' => 1,
+                'options' => ['', '', '', ''],
+                'correct_index' => 0,
+            ], range(1, $questionCount));
+        }
 
         $title = !empty(trim($input['title'] ?? ''))
             ? trim($input['title'])
             : $cleanTopic;
 
-        $quiz = Quiz::create([
+        $defaultInstructions = $hasPdf && !empty($pdf['name'])
+            ? "Refer to the attached PDF handout ({$pdf['name']}) and choose the best answer for each question. Alt-tabbing, taking screenshots, or opening developer tools is strictly prohibited and monitored."
+            : 'Choose the best answer for each question. Alt-tabbing, taking screenshots, or opening developer tools is strictly prohibited and monitored.';
+
+        $createAttributes = [
             'teacher_id' => $request->user()->id,
             'title' => $title,
             'subject' => trim($input['subject']),
             'topic' => $cleanTopic,
-            'instructions' => $input['instructions'] ?? 'Choose the best answer for each question. Alt-tabbing, taking screenshots, or opening developer tools is strictly prohibited and monitored.',
+            'instructions' => !empty(trim((string) ($input['instructions'] ?? ''))) ? trim((string) $input['instructions']) : $defaultInstructions,
             'questions' => $questions,
-            'generated_by_ai' => false,
+            'generated_by_ai' => $generatedByAi,
             'target_type' => $input['target_type'] ?? 'all',
             'target_sections' => $input['target_sections'] ?? null,
             'time_limit_minutes' => $input['time_limit_minutes'] ?? 15,
-        ]);
+        ];
+
+        if ($this->ensurePdfColumns()) {
+            $createAttributes['reference_pdf_name'] = $pdf['name'];
+            $createAttributes['reference_pdf_text'] = $pdf['text'];
+        }
+
+        $quiz = Quiz::create($createAttributes);
 
         \App\Models\ActivityLog::create([
             'user_id' => $request->user()->id,
             'action' => 'create_quiz',
-            'description' => "Created manual quiz \"{$quiz->title}\" ({$quiz->subject})",
+            'description' => "Created ".($generatedByAi ? 'AI' : 'manual')." quiz \"{$quiz->title}\" ({$quiz->subject})".(!empty($pdf['name']) ? " with PDF \"{$pdf['name']}\"" : ''),
             'ip_address' => $request->ip(),
             'user_agent' => $request->userAgent(),
         ]);
@@ -100,31 +140,71 @@ class QuizController extends Controller
     {
         $this->requireRole($request, 'teacher');
         $input = $request->validate([
+            'quiz_id' => ['sometimes', 'nullable', 'integer'],
             'title' => ['nullable', 'string', 'max:200'],
             'subject' => ['required', 'string', 'max:100'],
             'topic' => ['required', 'string', 'max:120'],
             'count' => ['required', 'integer', 'between:1,50'],
-            'difficulty' => ['required', 'in:easy,medium,challenging'],
+            'difficulty' => ['sometimes', 'in:easy,medium,challenging'],
+            'instructions' => ['sometimes', 'nullable', 'string'],
             'target_type' => ['sometimes', 'in:all,section,individual'],
             'target_sections' => ['sometimes', 'nullable', 'array'],
+            'pdf_name' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'pdf_text' => ['sometimes', 'nullable', 'string'],
+            'pdf_base64' => ['sometimes', 'nullable', 'string'],
+            'preview_only' => ['sometimes', 'boolean'],
         ]);
         $cleanTopic = trim($input['topic']);
         $cleanTitle = !empty(trim($input['title'] ?? ''))
             ? trim($input['title'])
             : $cleanTopic;
-        $generated = $this->ai->generateQuiz($input['subject'], $cleanTopic, (int) $input['count'], $input['difficulty']);
-        $quiz = Quiz::create([
+        $difficulty = (string) ($input['difficulty'] ?? 'medium');
+        $pdf = $this->extractPdfInput($request, $input);
+
+        $generated = $this->ai->generateQuiz(
+            trim($input['subject']),
+            $cleanTopic,
+            (int) $input['count'],
+            $difficulty,
+            $pdf['text'],
+            $pdf['base64'],
+            $pdf['name'],
+        );
+
+        // If preview_only is passed (e.g. from inside the Quiz Editor Modal), return the generated questions without creating a duplicate quiz row
+        if (!empty($input['preview_only'])) {
+            return response()->json([
+                'questions' => $generated['questions'],
+                'generation_source' => $generated['source'],
+                'reference_pdf_name' => $pdf['name'],
+                'reference_pdf_text' => $pdf['text'],
+            ]);
+        }
+
+        $hasPdf = !empty($pdf['name']) || !empty($pdf['text']);
+        $defaultInstructions = $hasPdf && !empty($pdf['name'])
+            ? "Refer to the attached PDF handout ({$pdf['name']}) and choose the best answer for each question. Alt-tabbing, taking screenshots, or opening developer tools is strictly prohibited and monitored."
+            : 'Choose the best answer for each question. Alt-tabbing, taking screenshots, or opening developer tools is strictly prohibited and monitored.';
+
+        $createAttributes = [
             'teacher_id' => $request->user()->id,
             'title' => $cleanTitle,
             'subject' => trim($input['subject']),
             'topic' => $cleanTopic,
-            'instructions' => 'Choose the best answer for each question. Alt-tabbing, taking screenshots, or opening developer tools is strictly prohibited and monitored.',
+            'instructions' => !empty(trim((string) ($input['instructions'] ?? ''))) ? trim((string) $input['instructions']) : $defaultInstructions,
             'questions' => $generated['questions'],
-            'generated_by_ai' => $generated['source'] === 'gemini',
+            'generated_by_ai' => true,
             'target_type' => $input['target_type'] ?? 'all',
             'target_sections' => $input['target_sections'] ?? null,
             'time_limit_minutes' => 15,
-        ]);
+        ];
+
+        if ($this->ensurePdfColumns()) {
+            $createAttributes['reference_pdf_name'] = $pdf['name'];
+            $createAttributes['reference_pdf_text'] = $pdf['text'];
+        }
+
+        $quiz = Quiz::create($createAttributes);
 
         return response()->json(['quiz' => $this->teacherQuizPayload($quiz), 'generation_source' => $generated['source']], 201);
     }
@@ -139,11 +219,17 @@ class QuizController extends Controller
             'subject' => ['sometimes', 'string', 'max:100'],
             'topic' => ['sometimes', 'string', 'max:120'],
             'instructions' => ['sometimes', 'string'],
+            'allow_review' => ['sometimes', 'boolean'],
             'time_limit_minutes' => ['sometimes', 'nullable', 'integer', 'between:1,300'],
             'shuffle_questions' => ['sometimes', 'boolean'],
             'target_type' => ['sometimes', 'in:all,section,individual'],
             'target_sections' => ['sometimes', 'nullable', 'array'],
             'target_student_ids' => ['sometimes', 'nullable', 'array'],
+            'reference_pdf_name' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'reference_pdf_text' => ['sometimes', 'nullable', 'string'],
+            'pdf_name' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'pdf_text' => ['sometimes', 'nullable', 'string'],
+            'pdf_base64' => ['sometimes', 'nullable', 'string'],
             'questions' => ['sometimes', 'array', 'min:1'],
             'questions.*.prompt' => ['required_with:questions', 'string'],
             'questions.*.options' => ['required_with:questions', 'array', 'min:2', 'max:6'],
@@ -151,6 +237,20 @@ class QuizController extends Controller
             'questions.*.points' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:100'],
             'questions.*.skill' => ['sometimes', 'nullable', 'string', 'max:120'],
         ]);
+
+        $pdf = $this->extractPdfInput($request, $input);
+        unset($input['pdf_name'], $input['pdf_text'], $input['pdf_base64']);
+
+        if ($this->ensurePdfColumns()) {
+            if ($pdf['name'] !== null || array_key_exists('reference_pdf_name', $input)) {
+                $input['reference_pdf_name'] = $pdf['name'] ?? $input['reference_pdf_name'] ?? null;
+            }
+            if ($pdf['text'] !== null || array_key_exists('reference_pdf_text', $input)) {
+                $input['reference_pdf_text'] = $pdf['text'] ?? $input['reference_pdf_text'] ?? null;
+            }
+        } else {
+            unset($input['reference_pdf_name'], $input['reference_pdf_text']);
+        }
 
         $quiz->update($input);
 
@@ -268,6 +368,7 @@ class QuizController extends Controller
                 'subject' => $quiz->subject,
                 'topic' => $quiz->topic,
                 'instructions' => $quiz->instructions,
+                'reference_pdf_name' => $quiz->reference_pdf_name ?? null,
                 'question_count' => count($quiz->questions ?? []),
                 'time_limit_minutes' => $quiz->time_limit_minutes ?? 15,
                 'shuffle_questions' => (bool) ($quiz->shuffle_questions ?? false),
@@ -299,6 +400,7 @@ class QuizController extends Controller
                 'subject' => $quiz->subject,
                 'topic' => $quiz->topic,
                 'instructions' => $quiz->instructions,
+                'reference_pdf_name' => $quiz->reference_pdf_name ?? null,
                 'time_limit_minutes' => $quiz->time_limit_minutes ?? 15,
                 'shuffle_questions' => (bool) ($quiz->shuffle_questions ?? false),
                 'questions' => collect($quiz->questions ?? [])->map(fn (array $question) => [
@@ -383,7 +485,15 @@ class QuizController extends Controller
         $maxScore = max(1, $maxScore);
         $percentage = round(($score / $maxScore) * 100, 2);
 
-        $recommendation = $this->ai->recommend($quiz->topic, $score, $maxScore, $questions, $answers);
+        $recommendation = $this->ai->recommend(
+            $quiz->topic,
+            $score,
+            $maxScore,
+            $questions,
+            $answers,
+            $quiz->reference_pdf_text ?? null,
+            $quiz->reference_pdf_name ?? null,
+        );
         $cheatingCount = (int) ($validated['cheating_attempts_count'] ?? 0);
         $violations = $validated['violations'] ?? [];
 
@@ -489,6 +599,68 @@ class QuizController extends Controller
     }
 
 
+    /**
+     * Extract PDF filename, readable text, and base64 data from either multipart file upload or JSON payload.
+     *
+     * @param array<string, mixed> $input
+     * @return array{name: ?string, text: ?string, base64: ?string}
+     */
+    private function extractPdfInput(Request $request, array $input): array
+    {
+        $name = isset($input['pdf_name']) && is_string($input['pdf_name']) && trim($input['pdf_name']) !== ''
+            ? trim($input['pdf_name'])
+            : null;
+        $text = isset($input['pdf_text']) && is_string($input['pdf_text']) && trim($input['pdf_text']) !== ''
+            ? trim($input['pdf_text'])
+            : null;
+        $base64 = isset($input['pdf_base64']) && is_string($input['pdf_base64']) && trim($input['pdf_base64']) !== ''
+            ? trim($input['pdf_base64'])
+            : null;
+
+        $file = $request->file('pdf') ?? $request->file('pdf_file');
+        if ($file && $file->isValid()) {
+            $name = $name ?: $file->getClientOriginalName();
+            $binary = @file_get_contents($file->getRealPath());
+            if (is_string($binary) && $binary !== '') {
+                $base64 = $base64 ?: base64_encode($binary);
+                $extracted = $this->ai->extractTextFromPdfBinary($binary);
+                if ($extracted !== '') {
+                    $text = $text ? ($text."\n".$extracted) : $extracted;
+                }
+            }
+        } elseif ($base64 !== null) {
+            $cleanBase64 = preg_replace('/^data:application\/pdf;base64,/i', '', $base64) ?? '';
+            $binary = @base64_decode($cleanBase64, true);
+            if (is_string($binary) && $binary !== '') {
+                $extracted = $this->ai->extractTextFromPdfBinary($binary);
+                if ($extracted !== '' && $text === null) {
+                    $text = $extracted;
+                }
+            }
+        }
+
+        return [
+            'name' => $name,
+            'text' => $text,
+            'base64' => $base64,
+        ];
+    }
+
+    private function ensurePdfColumns(): bool
+    {
+        try {
+            if (! Schema::hasColumn('quizzes', 'reference_pdf_name')) {
+                Schema::table('quizzes', function (Blueprint $table): void {
+                    $table->string('reference_pdf_name')->nullable();
+                    $table->longText('reference_pdf_text')->nullable();
+                });
+            }
+            return Schema::hasColumn('quizzes', 'reference_pdf_name');
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
     /** @return array<string, mixed> */
     private function teacherQuizPayload(Quiz $quiz): array
     {
@@ -498,6 +670,8 @@ class QuizController extends Controller
             'subject' => $quiz->subject,
             'topic' => $quiz->topic,
             'instructions' => $quiz->instructions,
+            'reference_pdf_name' => $quiz->reference_pdf_name ?? null,
+            'reference_pdf_text' => $quiz->reference_pdf_text ?? null,
             'question_count' => count($quiz->questions ?? []),
             'is_published' => (bool) $quiz->is_published,
             'allow_review' => (bool) $quiz->allow_review,

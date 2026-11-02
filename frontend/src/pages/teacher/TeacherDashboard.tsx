@@ -1,13 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import { lmsFetch, getLmsUser, extractCollection } from '../../lmsApi';
 import type { Quiz, User, Subject } from '../../lib/types';
 import { BSIT_SUBJECT_OPTIONS, ALL_BLOCKS, getYearLevelFromBlock } from '../../lib/constants';
+import { readPdfFile, type ParsedPdfPayload } from '../../lib/pdfUtils';
 import { 
   BookOpen, CheckCircle2, Users, Target, Sparkles, 
   ArrowRight, AlertCircle, Eye, EyeOff, Pencil,
-  ShieldAlert
+  ShieldAlert, FileText, Upload, X
 } from 'lucide-react';
 import GlassCard from '../../components/ui/GlassCard';
 import StatCard from '../../components/ui/StatCard';
@@ -110,13 +111,17 @@ export default function TeacherDashboard() {
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // Manual Quiz Builder form
+  // Manual & PDF/AI Quiz Builder form
   const [quizTitle, setQuizTitle] = useState('');
   const [subject, setSubject] = useState(BSIT_SUBJECT_OPTIONS[2]?.value || 'IT 101 - Introduction To Computing');
   const [topic, setTopic] = useState('');
   const [count, setCount] = useState(5);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [selectedTargetSection, setSelectedTargetSection] = useState('');
+  const [uploadedPdf, setUploadedPdf] = useState<ParsedPdfPayload | null>(null);
+  const [generateWithAi, setGenerateWithAi] = useState(false);
+  const [aiDifficulty, setAiDifficulty] = useState<'easy' | 'medium' | 'challenging'>('medium');
+  const createPdfInputRef = useRef<HTMLInputElement>(null);
 
   // Student filter
   const [studentSearch, setStudentSearch] = useState('');
@@ -186,6 +191,29 @@ export default function TeacherDashboard() {
     }
   }, [subpage]);
 
+  const handlePdfUploadChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
+      setError('Please select a valid PDF (.pdf) document.');
+      return;
+    }
+    try {
+      setError(null);
+      const parsed = await readPdfFile(file);
+      setUploadedPdf(parsed);
+      setGenerateWithAi(true);
+      if (!topic.trim() && !quizTitle.trim()) {
+        const cleanFileName = parsed.name.replace(/\.pdf$/i, '').replace(/[_-]+/g, ' ').trim();
+        if (cleanFileName) setTopic(cleanFileName);
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to read PDF file.');
+    } finally {
+      if (createPdfInputRef.current) createPdfInputRef.current.value = '';
+    }
+  };
+
   const handleCreateManualQuiz = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
@@ -193,7 +221,8 @@ export default function TeacherDashboard() {
     setNotice(null);
     try {
       const finalSubject = (subject && subject.trim()) || (subjects[0]?.name) || 'IT 101 - Introduction To Computing';
-      const cleanTopic = topic.trim() || quizTitle.trim();
+      const fallbackPdfTopic = uploadedPdf ? uploadedPdf.name.replace(/\.pdf$/i, '').replace(/[_-]+/g, ' ').trim() : '';
+      const cleanTopic = topic.trim() || quizTitle.trim() || fallbackPdfTopic || 'Course Unit';
       const cleanTitle = quizTitle.trim() || cleanTopic;
       const questionCount = Math.max(1, Math.min(50, Number(count) || 1));
       const data = await lmsFetch<{ quiz: Quiz }>('/teacher/quizzes', {
@@ -203,13 +232,27 @@ export default function TeacherDashboard() {
           subject: finalSubject,
           topic: cleanTopic,
           count: questionCount,
+          generate_with_ai: generateWithAi,
+          difficulty: aiDifficulty,
+          pdf_name: uploadedPdf?.name || null,
+          pdf_text: uploadedPdf?.text || null,
+          pdf_base64: uploadedPdf?.base64 || null,
           target_type: selectedTargetSection ? 'section' : 'all',
           target_sections: selectedTargetSection ? [selectedTargetSection] : null,
         }),
       });
-      setNotice(`Quiz draft "${data.quiz.title}" created with ${questionCount} question ${questionCount === 1 ? 'slot' : 'slots'}. Add your questions and answer choices in the editor.`);
+      const sourceNote = uploadedPdf
+        ? generateWithAi
+          ? `with ${questionCount} AI-generated questions from PDF "${uploadedPdf.name}"`
+          : `with PDF handout "${uploadedPdf.name}" and ${questionCount} question ${questionCount === 1 ? 'slot' : 'slots'}`
+        : generateWithAi
+          ? `with ${questionCount} AI-generated questions based on topic "${cleanTopic}"`
+          : `with ${questionCount} question ${questionCount === 1 ? 'slot' : 'slots'}`;
+      setNotice(`Quiz draft "${data.quiz.title}" created ${sourceNote}. Review and customize in the editor.`);
       setQuizTitle('');
       setTopic('');
+      setUploadedPdf(null);
+      setGenerateWithAi(false);
       setQuizzes((current) => [data.quiz, ...current.filter((quiz) => quiz.id !== data.quiz.id)]);
       setEditingQuiz(data.quiz);
       void loadDashboard();
@@ -256,6 +299,9 @@ export default function TeacherDashboard() {
           subject: draft.subject,
           topic: draft.topic,
           instructions: draft.instructions,
+          reference_pdf_name: draft.reference_pdf_name ?? null,
+          reference_pdf_text: draft.reference_pdf_text ?? null,
+          pdf_base64: draft.pdf_base64 ?? null,
           allow_review: draft.allow_review,
           time_limit_minutes: draft.time_limit_minutes,
           shuffle_questions: draft.questions.length >= 3 ? Boolean(draft.shuffle_questions) : false,
@@ -532,7 +578,7 @@ export default function TeacherDashboard() {
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
               placeholder="e.g. Data Structures, OOP Principles, Relational Databases"
-              required={!quizTitle.trim()}
+              required={!quizTitle.trim() && !uploadedPdf}
             />
           </div>
 
@@ -594,6 +640,94 @@ export default function TeacherDashboard() {
             />
           </div>
 
+          {/* Row 2.5: PDF Upload for Quiz Instructions, AI Question Generation & Post-Quiz Study Feedback */}
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '1rem',
+              padding: '1rem 1.15rem',
+              borderRadius: 'var(--radius-md)',
+              background: uploadedPdf ? 'rgba(67, 160, 71, 0.1)' : 'rgba(245, 158, 11, 0.06)',
+              border: uploadedPdf ? '1px solid rgba(67, 160, 71, 0.35)' : '1px solid rgba(245, 158, 11, 0.22)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', flex: '1 1 300px', minWidth: 0 }}>
+              <div style={{ background: uploadedPdf ? 'rgba(67, 160, 71, 0.25)' : 'rgba(245, 158, 11, 0.2)', color: uploadedPdf ? '#a5d6a7' : '#fbbf24', padding: '0.55rem', borderRadius: 'var(--radius-md)', flexShrink: 0 }}>
+                <FileText size={20} />
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 700, color: 'white', fontSize: '0.92rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <span>PDF Upload for Instructions & AI Question Generation (Optional)</span>
+                  {uploadedPdf && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.76rem', background: 'rgba(67, 160, 71, 0.25)', color: '#c8e6c9', border: '1px solid rgba(67, 160, 71, 0.45)', padding: '0.15rem 0.55rem', borderRadius: '999px' }}>
+                      <FileText size={12} /> {uploadedPdf.name}
+                      <button
+                        type="button"
+                        onClick={() => setUploadedPdf(null)}
+                        title="Remove uploaded PDF"
+                        style={{ background: 'transparent', border: 'none', color: '#ffcdd2', cursor: 'pointer', padding: 0, display: 'inline-flex' }}
+                      >
+                        <X size={13} />
+                      </button>
+                    </span>
+                  )}
+                </div>
+                <p style={{ margin: '0.2rem 0 0', fontSize: '0.8rem', color: 'var(--neutral-300)', lineHeight: 1.45 }}>
+                  {uploadedPdf
+                    ? `AI will read "${uploadedPdf.name}" to generate ${count} questions and provide study feedback after quiz submission.`
+                    : 'Upload a PDF handout so AI generates questions and study feedback from the PDF, or leave empty to base AI questions on the Topic / Unit.'}
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <input
+                ref={createPdfInputRef}
+                type="file"
+                accept=".pdf,application/pdf"
+                onChange={handlePdfUploadChange}
+                style={{ display: 'none' }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => createPdfInputRef.current?.click()}
+                style={{ gap: '0.4rem' }}
+              >
+                <Upload size={14} /> {uploadedPdf ? 'Change PDF' : 'Upload PDF (.pdf)'}
+              </Button>
+
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.83rem', color: 'white', cursor: 'pointer', background: 'rgba(255,255,255,0.05)', padding: '0.4rem 0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid rgba(255,255,255,0.12)' }}>
+                <input
+                  type="checkbox"
+                  checked={generateWithAi}
+                  onChange={(e) => setGenerateWithAi(e.target.checked)}
+                  style={{ accentColor: 'var(--accent-gold, #f59e0b)', width: '15px', height: '15px' }}
+                />
+                <Sparkles size={14} style={{ color: '#fbbf24' }} />
+                <span>{uploadedPdf ? 'AI Generate from PDF' : 'AI Generate from Topic'}</span>
+              </label>
+
+              {generateWithAi && (
+                <select
+                  aria-label="AI Difficulty"
+                  value={aiDifficulty}
+                  onChange={(e) => setAiDifficulty(e.target.value as 'easy' | 'medium' | 'challenging')}
+                  className="form-select"
+                  style={{ width: 'auto', height: '35px', padding: '0 2rem 0 0.75rem', fontSize: '0.8rem' }}
+                >
+                  <option value="easy">Easy</option>
+                  <option value="medium">Medium</option>
+                  <option value="challenging">Challenging</option>
+                </select>
+              )}
+            </div>
+          </div>
+
           {/* Row 3: Action Bar */}
           <div style={{
             display: 'flex',
@@ -606,7 +740,13 @@ export default function TeacherDashboard() {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--neutral-400)', fontSize: '0.85rem' }}>
               <BookOpen size={16} style={{ color: 'var(--primary-300)', flexShrink: 0 }} />
-              <span>Opens the interactive Question Editor where you can type questions, set points per item, and mark correct answers.</span>
+              <span>
+                {generateWithAi
+                  ? uploadedPdf
+                    ? `AI will generate ${count} questions from "${uploadedPdf.name}" and open the editor for review.`
+                    : `AI will generate ${count} questions from your Topic / Unit and open the editor for review.`
+                  : 'Opens the interactive Question Editor where you can type questions, set points per item, and mark correct answers.'}
+              </span>
             </div>
 
             <Button
@@ -615,7 +755,16 @@ export default function TeacherDashboard() {
               disabled={busy || !subject}
               style={{ padding: '0.75rem 1.75rem', whiteSpace: 'nowrap' }}
             >
-              <Pencil size={16} /> {busy ? 'Creating Quiz...' : 'Create Quiz & Add Questions'}
+              {generateWithAi ? <Sparkles size={16} /> : <Pencil size={16} />}
+              {busy
+                ? generateWithAi
+                  ? 'Generating AI Quiz...'
+                  : 'Creating Quiz...'
+                : generateWithAi
+                  ? uploadedPdf
+                    ? `Generate ${count} Questions from PDF`
+                    : `Generate ${count} Questions with AI`
+                  : 'Create Quiz & Add Questions'}
             </Button>
           </div>
         </form>
@@ -629,10 +778,20 @@ export default function TeacherDashboard() {
           <GlassCard key={quiz.id}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1rem' }}>
               <div>
-                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.35rem' }}>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.35rem', flexWrap: 'wrap' }}>
                   <Badge variant="primary">{quiz.subject}</Badge>
                   {hasDistinctTopic(quiz) && (
                     <span style={{ fontSize: '0.85rem', color: 'var(--neutral-300)' }}>Topic: {quiz.topic}</span>
+                  )}
+                  {quiz.reference_pdf_name && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem', color: '#fbbf24', background: 'rgba(245, 158, 11, 0.14)', border: '1px solid rgba(245, 158, 11, 0.3)', padding: '0.15rem 0.5rem', borderRadius: '999px' }}>
+                      <FileText size={12} /> {quiz.reference_pdf_name}
+                    </span>
+                  )}
+                  {quiz.generated_by_ai && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem', color: '#c4b5fd', background: 'rgba(124, 58, 237, 0.18)', border: '1px solid rgba(167, 139, 250, 0.3)', padding: '0.15rem 0.5rem', borderRadius: '999px' }}>
+                      <Sparkles size={12} /> AI Generated
+                    </span>
                   )}
                   <Badge variant={quiz.is_published ? 'success' : 'warning'}>
                     {quiz.is_published ? 'Published' : 'Draft'}
