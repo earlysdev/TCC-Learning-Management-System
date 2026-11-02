@@ -248,12 +248,20 @@ class QuizController extends Controller
             'pdf_text' => ['sometimes', 'nullable', 'string'],
             'pdf_base64' => ['sometimes', 'nullable', 'string'],
             'questions' => ['sometimes', 'array', 'min:1'],
+            'questions.*.type' => ['sometimes', 'nullable', 'string', 'in:multiple_choice,identification,true_false,multiple_answer,essay'],
             'questions.*.prompt' => ['required_with:questions', 'string'],
-            'questions.*.options' => ['required_with:questions', 'array', 'min:2', 'max:6'],
-            'questions.*.correct_index' => ['required_with:questions', 'integer', 'min:0'],
+            'questions.*.options' => ['sometimes', 'nullable', 'array', 'max:8'],
+            'questions.*.correct_index' => ['sometimes', 'nullable', 'integer', 'min:0'],
+            'questions.*.correct_indices' => ['sometimes', 'nullable', 'array'],
+            'questions.*.correct_indices.*' => ['integer', 'min:0'],
+            'questions.*.correct_answer' => ['sometimes', 'nullable', 'string', 'max:2000'],
             'questions.*.points' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:100'],
             'questions.*.skill' => ['sometimes', 'nullable', 'string', 'max:120'],
         ]);
+
+        if (isset($input['questions']) && is_array($input['questions'])) {
+            $input['questions'] = $this->normalizeQuizQuestions($input['questions']);
+        }
 
         $pdf = $this->extractPdfInput($request, $input);
         unset($input['pdf_name'], $input['pdf_text'], $input['pdf_base64']);
@@ -505,11 +513,18 @@ class QuizController extends Controller
                 'shuffle_questions' => (bool) ($quiz->shuffle_questions ?? false),
                 'quiz_type' => ($quiz->quiz_type ?? 'formative') === 'summative' ? 'summative' : 'formative',
                 'allow_review' => (bool) $quiz->allow_review,
-                'questions' => collect($quiz->questions ?? [])->map(fn (array $question) => [
-                    'prompt' => $question['prompt'],
-                    'options' => $question['options'],
-                    'points' => (int) ($question['points'] ?? 1),
-                ])->values(),
+                'questions' => collect($quiz->questions ?? [])->map(function (array $question): array {
+                    $qType = (string) ($question['type'] ?? 'multiple_choice');
+                    $hideOptions = in_array($qType, ['identification', 'essay'], true);
+                    return [
+                        'type' => $qType,
+                        'prompt' => $question['prompt'] ?? '',
+                        'options' => $hideOptions
+                            ? []
+                            : ($qType === 'true_false' ? ['True', 'False'] : ($question['options'] ?? [])),
+                        'points' => (int) ($question['points'] ?? 1),
+                    ];
+                })->values(),
             ],
             'attempt' => $attempt ? [
                 'score' => $attempt->score,
@@ -559,14 +574,17 @@ class QuizController extends Controller
                 $answeredCount = 0;
                 $currentScore = 0;
                 $maxScore = 0;
+                $normalizedLiveAnswers = [];
 
                 foreach ($questions as $idx => $question) {
                     $pts = isset($question['points']) && is_numeric($question['points']) ? max(1, (int) $question['points']) : 1;
                     $maxScore += $pts;
                     $ans = $rawAnswers[$idx] ?? $rawAnswers[(string) $idx] ?? null;
-                    if ($ans !== null && is_numeric($ans) && (int) $ans >= 0) {
+                    $eval = $this->evaluateQuestionAnswer($question, $ans);
+                    $normalizedLiveAnswers[] = $eval['normalized_answer'];
+                    if ($eval['is_answered']) {
                         $answeredCount++;
-                        if ((int) $ans === (int) ($question['correct_index'] ?? -99)) {
+                        if ($eval['is_correct']) {
                             $currentScore += $pts;
                         }
                     }
@@ -578,10 +596,7 @@ class QuizController extends Controller
                     ->first();
 
                 $telemetryEnvelope = [
-                    'answers' => array_map(
-                        fn ($a) => $a !== null && is_numeric($a) ? (int) $a : -1,
-                        $rawAnswers
-                    ),
+                    'answers' => $normalizedLiveAnswers,
                     'question_order' => is_array($input['question_order'] ?? null)
                         ? array_values(array_map('intval', $input['question_order']))
                         : [],
@@ -705,7 +720,6 @@ class QuizController extends Controller
         $questions = $quiz->questions ?? [];
         $validated = $request->validate([
             'answers' => ['required', 'array', 'size:'.count($questions)],
-            'answers.*' => ['nullable', 'integer', 'between:-1,5'],
             'cheating_attempts_count' => ['sometimes', 'nullable', 'integer', 'min:0'],
             'violations' => ['sometimes', 'nullable', 'array'],
             'started_at' => ['sometimes', 'nullable', 'string'],
@@ -719,20 +733,19 @@ class QuizController extends Controller
             return response()->json(['message' => 'This quiz has already been submitted.'], 409);
         }
 
-        $answers = array_map(
-            fn ($ans) => $ans !== null && is_numeric($ans) ? (int) $ans : -1,
-            array_values($validated['answers'])
-        );
+        $rawSubmittedAnswers = array_values($validated['answers']);
+        $answers = [];
         $score = 0;
         $maxScore = 0;
         $answeredCount = 0;
         foreach ($questions as $index => $question) {
             $pts = isset($question['points']) && is_numeric($question['points']) ? max(1, (int) $question['points']) : 1;
             $maxScore += $pts;
-            $studentAns = $answers[$index] ?? -1;
-            if ($studentAns >= 0) {
+            $eval = $this->evaluateQuestionAnswer($question, $rawSubmittedAnswers[$index] ?? null);
+            $answers[$index] = $eval['normalized_answer'];
+            if ($eval['is_answered']) {
                 $answeredCount++;
-                if ($studentAns === (int) $question['correct_index']) {
+                if ($eval['is_correct']) {
                     $score += $pts;
                 }
             }
@@ -836,27 +849,220 @@ class QuizController extends Controller
      * Build detailed question review payload when allow_review is enabled.
      *
      * @param array<int, array<string, mixed>> $questions
-     * @param array<int, int|null> $answers
+     * @param array<int, mixed> $answers
      * @return array<int, array<string, mixed>>
      */
     private function buildReviewQuestions(array $questions, array $answers): array
     {
         $review = [];
         foreach (array_values($questions) as $idx => $question) {
-            $studentAns = isset($answers[$idx]) && is_numeric($answers[$idx]) ? (int) $answers[$idx] : -1;
+            $qType = (string) ($question['type'] ?? 'multiple_choice');
+            $eval = $this->evaluateQuestionAnswer($question, $answers[$idx] ?? null);
             $correctIdx = (int) ($question['correct_index'] ?? 0);
-            $options = array_values(is_array($question['options'] ?? null) ? $question['options'] : []);
+            $options = $qType === 'true_false'
+                ? ['True', 'False']
+                : array_values(is_array($question['options'] ?? null) ? $question['options'] : []);
+            $correctIndices = is_array($question['correct_indices'] ?? null) && !empty($question['correct_indices'])
+                ? array_values(array_map('intval', $question['correct_indices']))
+                : [$correctIdx];
+            $correctAnswer = (string) ($question['correct_answer'] ?? ($options[$correctIdx] ?? ''));
+
             $review[] = [
+                'type' => $qType,
                 'prompt' => (string) ($question['prompt'] ?? ''),
                 'options' => $options,
                 'points' => isset($question['points']) && is_numeric($question['points']) ? max(1, (int) $question['points']) : 1,
                 'skill' => (string) ($question['skill'] ?? 'Core Concepts'),
                 'correct_index' => $correctIdx,
-                'student_answer' => $studentAns,
-                'is_correct' => $studentAns >= 0 && $studentAns === $correctIdx,
+                'correct_indices' => $correctIndices,
+                'correct_answer' => $correctAnswer,
+                'student_answer' => $eval['normalized_answer'],
+                'is_correct' => $eval['is_correct'],
             ];
         }
         return $review;
+    }
+
+    /**
+     * Normalize question array from Quiz Editor Modal across all 5 question types.
+     *
+     * @param array<int, array<string, mixed>> $questions
+     * @return array<int, array<string, mixed>>
+     */
+    private function normalizeQuizQuestions(array $questions): array
+    {
+        $validTypes = ['multiple_choice', 'identification', 'true_false', 'multiple_answer', 'essay'];
+        $normalized = [];
+
+        foreach (array_values($questions) as $q) {
+            $type = in_array($q['type'] ?? '', $validTypes, true) ? (string) $q['type'] : 'multiple_choice';
+            $prompt = trim((string) ($q['prompt'] ?? ''));
+            $skill = trim((string) ($q['skill'] ?? 'General Knowledge')) ?: 'General Knowledge';
+            $points = isset($q['points']) && is_numeric($q['points']) ? max(1, min(100, (int) $q['points'])) : 1;
+
+            if ($type === 'true_false') {
+                $cIdx = ((int) ($q['correct_index'] ?? 0)) === 1 ? 1 : 0;
+                $normalized[] = [
+                    'type' => 'true_false',
+                    'prompt' => $prompt,
+                    'skill' => $skill,
+                    'points' => $points,
+                    'options' => ['True', 'False'],
+                    'correct_index' => $cIdx,
+                    'correct_indices' => [$cIdx],
+                    'correct_answer' => $cIdx === 1 ? 'False' : 'True',
+                ];
+                continue;
+            }
+
+            if ($type === 'identification') {
+                $ans = trim((string) ($q['correct_answer'] ?? ($q['options'][0] ?? '')));
+                $normalized[] = [
+                    'type' => 'identification',
+                    'prompt' => $prompt,
+                    'skill' => $skill,
+                    'points' => $points,
+                    'options' => [$ans, $ans],
+                    'correct_index' => 0,
+                    'correct_indices' => [0],
+                    'correct_answer' => $ans,
+                ];
+                continue;
+            }
+
+            if ($type === 'essay') {
+                $rubric = trim((string) ($q['correct_answer'] ?? ($q['options'][0] ?? '')));
+                $normalized[] = [
+                    'type' => 'essay',
+                    'prompt' => $prompt,
+                    'skill' => $skill,
+                    'points' => $points,
+                    'options' => [$rubric ?: 'Essay', 'Essay'],
+                    'correct_index' => 0,
+                    'correct_indices' => [0],
+                    'correct_answer' => $rubric,
+                ];
+                continue;
+            }
+
+            $rawOpts = is_array($q['options'] ?? null) ? array_values(array_map(fn ($o) => trim((string) $o), $q['options'])) : [];
+            while (count($rawOpts) < 2) {
+                $rawOpts[] = 'Option '.chr(65 + count($rawOpts));
+            }
+            $options = array_slice($rawOpts, 0, 6);
+            $correctIdx = isset($q['correct_index']) && is_numeric($q['correct_index'])
+                ? max(0, min(count($options) - 1, (int) $q['correct_index']))
+                : 0;
+            $rawIndices = is_array($q['correct_indices'] ?? null) && !empty($q['correct_indices'])
+                ? array_values(array_unique(array_filter(
+                    array_map('intval', $q['correct_indices']),
+                    fn (int $i) => $i >= 0 && $i < count($options)
+                )))
+                : [$correctIdx];
+            sort($rawIndices);
+            if ($rawIndices === []) {
+                $rawIndices = [$correctIdx];
+            }
+
+            $normalized[] = [
+                'type' => $type,
+                'prompt' => $prompt,
+                'skill' => $skill,
+                'points' => $points,
+                'options' => $options,
+                'correct_index' => $type === 'multiple_answer' ? $rawIndices[0] : $correctIdx,
+                'correct_indices' => $type === 'multiple_answer' ? $rawIndices : [$correctIdx],
+                'correct_answer' => $options[$correctIdx] ?? '',
+            ];
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * Evaluate a student's answer for any question type (multiple_choice, identification, true_false, multiple_answer, essay).
+     *
+     * @param array<string, mixed> $question
+     * @return array{is_answered: bool, is_correct: bool, normalized_answer: mixed}
+     */
+    private function evaluateQuestionAnswer(array $question, mixed $rawAnswer): array
+    {
+        $type = (string) ($question['type'] ?? 'multiple_choice');
+
+        if ($type === 'identification') {
+            $studentText = is_string($rawAnswer)
+                ? trim($rawAnswer)
+                : (is_numeric($rawAnswer) && (int) $rawAnswer !== -1 ? trim((string) $rawAnswer) : '');
+            $isAnswered = $studentText !== '';
+            $expectedRaw = (string) ($question['correct_answer'] ?? ($question['options'][0] ?? ''));
+            $variants = array_filter(array_map(
+                fn (string $s) => strtolower(preg_replace('/\s+/', ' ', trim($s, " \t\n\r\0\x0B.,;:?!\"'")) ?? ''),
+                preg_split('/[,|\/]/', $expectedRaw) ?: [$expectedRaw]
+            ));
+            $normalizedStudent = strtolower(preg_replace('/\s+/', ' ', trim($studentText, " \t\n\r\0\x0B.,;:?!\"'")) ?? '');
+            $isCorrect = $isAnswered && $normalizedStudent !== '' && in_array($normalizedStudent, $variants, true);
+
+            return [
+                'is_answered' => $isAnswered,
+                'is_correct' => $isCorrect,
+                'normalized_answer' => $studentText,
+            ];
+        }
+
+        if ($type === 'essay') {
+            $studentText = is_string($rawAnswer)
+                ? trim($rawAnswer)
+                : '';
+            $isAnswered = $studentText !== '';
+            $wordCount = count(array_filter(preg_split('/\s+/', $studentText) ?: []));
+            $isCorrect = $isAnswered && ($wordCount >= 3 || strlen($studentText) >= 12);
+
+            return [
+                'is_answered' => $isAnswered,
+                'is_correct' => $isCorrect,
+                'normalized_answer' => $studentText,
+            ];
+        }
+
+        if ($type === 'multiple_answer') {
+            $selected = [];
+            if (is_array($rawAnswer)) {
+                foreach ($rawAnswer as $val) {
+                    if (is_numeric($val) && (int) $val >= 0) {
+                        $selected[] = (int) $val;
+                    }
+                }
+            } elseif (is_numeric($rawAnswer) && (int) $rawAnswer >= 0) {
+                $selected[] = (int) $rawAnswer;
+            }
+            $selected = array_values(array_unique($selected));
+            sort($selected);
+
+            $expected = is_array($question['correct_indices'] ?? null) && !empty($question['correct_indices'])
+                ? array_values(array_unique(array_map('intval', $question['correct_indices'])))
+                : [(int) ($question['correct_index'] ?? 0)];
+            sort($expected);
+
+            $isAnswered = count($selected) > 0;
+            $isCorrect = $isAnswered && $selected === $expected;
+
+            return [
+                'is_answered' => $isAnswered,
+                'is_correct' => $isCorrect,
+                'normalized_answer' => $selected,
+            ];
+        }
+
+        // Default: multiple_choice & true_false
+        $choiceIdx = ($rawAnswer !== null && is_numeric($rawAnswer)) ? (int) $rawAnswer : -1;
+        $isAnswered = $choiceIdx >= 0;
+        $correctIdx = (int) ($question['correct_index'] ?? 0);
+
+        return [
+            'is_answered' => $isAnswered,
+            'is_correct' => $isAnswered && $choiceIdx === $correctIdx,
+            'normalized_answer' => $choiceIdx,
+        ];
     }
 
     /**
@@ -915,7 +1121,7 @@ class QuizController extends Controller
 
                 if (is_array($decoded)) {
                     if (array_key_exists('answers', $decoded) && is_array($decoded['answers'])) {
-                        $liveAnswers = array_values(array_map(fn ($a) => is_numeric($a) ? (int) $a : -1, $decoded['answers']));
+                        $liveAnswers = array_values($decoded['answers']);
                         $questionOrder = is_array($decoded['question_order'] ?? null) ? array_values(array_map('intval', $decoded['question_order'])) : [];
                         $cursorX = isset($decoded['cursor_x']) ? (float) $decoded['cursor_x'] : 50.0;
                         $cursorY = isset($decoded['cursor_y']) ? (float) $decoded['cursor_y'] : 50.0;
@@ -930,7 +1136,7 @@ class QuizController extends Controller
                         $interruptionTitle = isset($decoded['interruption_title']) ? (string) $decoded['interruption_title'] : null;
                         $ipAddress = isset($decoded['ip_address']) ? (string) $decoded['ip_address'] : null;
                     } elseif (array_is_list($decoded)) {
-                        $liveAnswers = array_values(array_map(fn ($a) => is_numeric($a) ? (int) $a : -1, $decoded));
+                        $liveAnswers = array_values($decoded);
                     }
                 }
 

@@ -20,7 +20,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { lmsFetch } from '../../lmsApi';
-import type { Quiz, Recommendation, ReviewQuestion } from '../../lib/types';
+import type { Question, Quiz, Recommendation, ReviewQuestion, StudentAnswerValue } from '../../lib/types';
 import Button from '../../components/ui/Button';
 import QuizDetailsPdfModal from '../../components/ui/QuizDetailsPdfModal';
 
@@ -31,9 +31,28 @@ type QuizResult = {
   cheating_attempts_count?: number;
   recommendation?: Recommendation | null;
   allow_review?: boolean;
-  answers?: number[];
+  answers?: StudentAnswerValue[];
   review_questions?: ReviewQuestion[];
 };
+
+function isAnswerProvided(ans: StudentAnswerValue | undefined, question?: Question): boolean {
+  if (ans === undefined || ans === null) return false;
+  const qType = question?.type || 'multiple_choice';
+  if (qType === 'identification' || qType === 'essay') {
+    return typeof ans === 'string' && ans.trim().length > 0;
+  }
+  if (qType === 'multiple_answer') {
+    return Array.isArray(ans) && ans.length > 0;
+  }
+  return typeof ans === 'number' && ans >= 0;
+}
+
+function normalizeDefaultUnanswered(question?: Question): StudentAnswerValue {
+  const qType = question?.type || 'multiple_choice';
+  if (qType === 'identification' || qType === 'essay') return '';
+  if (qType === 'multiple_answer') return [];
+  return -1;
+}
 
 type IntegrityEventType =
   | 'assessment_tab_hidden'
@@ -184,8 +203,10 @@ function getShortcutEvent(event: KeyboardEvent): IntegrityEventType | null {
     return 'screenshot_shortcut';
   }
 
-  // Copy / cut prevention
-  if (primaryModifier && ['c', 'x', 'a'].includes(key)) {
+  // Copy / cut prevention (allow Ctrl+A inside text inputs/textareas for identification & essay questions)
+  const targetTag = (event.target as HTMLElement | null)?.tagName;
+  const isTextInput = targetTag === 'INPUT' || targetTag === 'TEXTAREA';
+  if (primaryModifier && (['c', 'x'].includes(key) || (key === 'a' && !isTextInput))) {
     return 'clipboard_action';
   }
 
@@ -198,7 +219,7 @@ export default function StudentQuizTakePage() {
   const [quiz, setQuiz] = useState<Quiz | null>(null);
   const [questionOrder, setQuestionOrder] = useState<number[]>([]);
   const [result, setResult] = useState<QuizResult | null>(null);
-  const [answers, setAnswers] = useState<number[]>([]);
+  const [answers, setAnswers] = useState<StudentAnswerValue[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -400,7 +421,11 @@ export default function StudentQuizTakePage() {
       setSubmitting(true);
       setAutoSubmittedByTimer(true);
       const qCount = quiz.questions?.length ?? 0;
-      const paddedAnswers = Array.from({ length: qCount }, (_, idx) => (answers[idx] !== undefined ? answers[idx] : -1));
+      const paddedAnswers = Array.from({ length: qCount }, (_, idx) =>
+        isAnswerProvided(answers[idx], quiz.questions?.[idx])
+          ? answers[idx]
+          : normalizeDefaultUnanswered(quiz.questions?.[idx])
+      );
       void lmsFetch<{ attempt: QuizResult }>(`/student/quizzes/${quizId}/submit`, {
         method: 'POST',
         body: JSON.stringify({
@@ -428,7 +453,11 @@ export default function StudentQuizTakePage() {
 
     const sendHeartbeat = () => {
       const qCount = quiz.questions?.length ?? 0;
-      const normalizedAnswers = Array.from({ length: qCount }, (_, idx) => (answers[idx] !== undefined ? answers[idx] : -1));
+      const normalizedAnswers = Array.from({ length: qCount }, (_, idx) =>
+        isAnswerProvided(answers[idx], quiz.questions?.[idx])
+          ? answers[idx]
+          : normalizeDefaultUnanswered(quiz.questions?.[idx])
+      );
       void lmsFetch(`/student/quizzes/${quizId}/progress`, {
         method: 'POST',
         body: JSON.stringify({
@@ -560,11 +589,28 @@ export default function StudentQuizTakePage() {
     };
   }, [isAssessmentActive, isBlocked, reportIntegrityEvent]);
 
-  const handleAnswer = (questionIndex: number, optionIndex: number, displayQuestionNum = questionIndex + 1) => {
+  const handleAnswer = (questionIndex: number, value: StudentAnswerValue, displayQuestionNum = questionIndex + 1) => {
     setCurrentQuestionNum(displayQuestionNum);
     setAnswers((current) => {
       const next = [...current];
-      next[questionIndex] = optionIndex;
+      next[questionIndex] = value;
+      return next;
+    });
+  };
+
+  const handleToggleMultiAnswer = (questionIndex: number, optionIndex: number, displayQuestionNum = questionIndex + 1) => {
+    setCurrentQuestionNum(displayQuestionNum);
+    setAnswers((current) => {
+      const next = [...current];
+      const existing = Array.isArray(next[questionIndex]) ? [...(next[questionIndex] as number[])] : [];
+      const pos = existing.indexOf(optionIndex);
+      if (pos >= 0) {
+        existing.splice(pos, 1);
+      } else {
+        existing.push(optionIndex);
+      }
+      existing.sort((a, b) => a - b);
+      next[questionIndex] = existing;
       return next;
     });
   };
@@ -573,11 +619,19 @@ export default function StudentQuizTakePage() {
     event.preventDefault();
     if (!quiz || !quizId || isBlocked) return;
 
-    const questionCount = quiz.questions?.length ?? 0;
-    if (answers.length !== questionCount || answers.some((answer) => answer === undefined)) {
+    const questions = quiz.questions ?? [];
+    const questionCount = questions.length;
+    const hasUnanswered = questions.some((q, idx) => !isAnswerProvided(answers[idx], q));
+    if (hasUnanswered) {
       setError('Answer every question before submitting the quiz.');
       return;
     }
+
+    const normalizedAnswers = Array.from({ length: questionCount }, (_, idx) =>
+      isAnswerProvided(answers[idx], questions[idx])
+        ? answers[idx]
+        : normalizeDefaultUnanswered(questions[idx])
+    );
 
     setSubmitting(true);
     setError(null);
@@ -585,7 +639,7 @@ export default function StudentQuizTakePage() {
       const data = await lmsFetch<{ attempt: QuizResult }>(`/student/quizzes/${quizId}/submit`, {
         method: 'POST',
         body: JSON.stringify({
-          answers,
+          answers: normalizedAnswers,
           cheating_attempts_count: integrityIncidentCount,
           violations: violationsList,
           started_at: startTimeRef.current,
@@ -623,7 +677,7 @@ export default function StudentQuizTakePage() {
     });
   };
 
-  const answeredCount = answers.filter((answer) => answer !== undefined).length;
+  const answeredCount = (quiz?.questions ?? []).filter((q, idx) => isAnswerProvided(answers[idx], q)).length;
 
   if (loading) {
     return (
@@ -751,7 +805,28 @@ export default function StudentQuizTakePage() {
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '0.75rem' }}>
                 {result.review_questions.map((item, idx) => {
-                  const unanswered = item.student_answer < 0;
+                  const qType = item.type ?? 'multiple_choice';
+                  const unanswered = !isAnswerProvided(item.student_answer, item);
+                  const typeLabelMap: Record<string, string> = {
+                    multiple_choice: 'Multiple Choice',
+                    true_false: 'True or False',
+                    identification: 'Identification',
+                    multiple_answer: 'Multiple Answer',
+                    essay: 'Essay',
+                  };
+                  const correctIndicesSet = new Set<number>(
+                    Array.isArray(item.correct_indices) && item.correct_indices.length > 0
+                      ? item.correct_indices
+                      : [item.correct_index]
+                  );
+                  const studentIndicesSet = new Set<number>(
+                    Array.isArray(item.student_answer)
+                      ? (item.student_answer as number[]).map((n) => Number(n))
+                      : typeof item.student_answer === 'number' && item.student_answer >= 0
+                        ? [item.student_answer]
+                        : []
+                  );
+
                   return (
                     <div
                       key={idx}
@@ -768,8 +843,13 @@ export default function StudentQuizTakePage() {
                       }}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem', flexWrap: 'wrap' }}>
-                        <div style={{ fontWeight: 700, color: 'white', fontSize: '0.96rem', flex: 1 }}>
-                          {idx + 1}. {item.prompt}
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: '0.72rem', color: '#c4b5fd', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.2rem' }}>
+                            {typeLabelMap[qType] || 'Question'}
+                          </div>
+                          <div style={{ fontWeight: 700, color: 'white', fontSize: '0.96rem' }}>
+                            {idx + 1}. {item.prompt}
+                          </div>
                         </div>
                         <span
                           style={{
@@ -798,54 +878,101 @@ export default function StudentQuizTakePage() {
                         </span>
                       </div>
 
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                        {item.options.map((opt, optIdx) => {
-                          const isCorrectChoice = optIdx === item.correct_index;
-                          const isStudentChoice = optIdx === item.student_answer;
-                          return (
+                      {qType === 'identification' || qType === 'essay' ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                          <div
+                            style={{
+                              padding: '0.65rem 0.85rem',
+                              borderRadius: '8px',
+                              background: item.is_correct ? 'rgba(76, 175, 80, 0.16)' : 'rgba(239, 83, 80, 0.16)',
+                              border: item.is_correct ? '1px solid rgba(76, 175, 80, 0.45)' : '1px solid rgba(239, 83, 80, 0.45)',
+                              color: item.is_correct ? '#c8e6c9' : '#ffcdd2',
+                              fontSize: '0.88rem',
+                            }}
+                          >
+                            <div style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', opacity: 0.85, marginBottom: '0.2rem' }}>
+                              Your Answer
+                            </div>
+                            <div style={{ whiteSpace: 'pre-wrap', fontWeight: 600 }}>
+                              {typeof item.student_answer === 'string' && item.student_answer.trim().length > 0
+                                ? item.student_answer
+                                : '(No answer submitted)'}
+                            </div>
+                          </div>
+                          {(item.correct_answer || item.options?.[0]) && (
                             <div
-                              key={optIdx}
                               style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                gap: '0.75rem',
-                                padding: '0.55rem 0.8rem',
+                                padding: '0.65rem 0.85rem',
                                 borderRadius: '8px',
+                                background: 'rgba(76, 175, 80, 0.14)',
+                                border: '1px solid rgba(76, 175, 80, 0.4)',
+                                color: '#a5d6a7',
                                 fontSize: '0.88rem',
-                                background: isCorrectChoice
-                                  ? 'rgba(76, 175, 80, 0.18)'
-                                  : isStudentChoice
-                                    ? 'rgba(239, 83, 80, 0.18)'
-                                    : 'rgba(255, 255, 255, 0.03)',
-                                border: isCorrectChoice
-                                  ? '1px solid rgba(76, 175, 80, 0.5)'
-                                  : isStudentChoice
-                                    ? '1px solid rgba(239, 83, 80, 0.5)'
-                                    : '1px solid rgba(255, 255, 255, 0.07)',
-                                color: isCorrectChoice ? '#c8e6c9' : isStudentChoice ? '#ffcdd2' : 'var(--neutral-200)',
-                                fontWeight: isCorrectChoice || isStudentChoice ? 600 : 400,
                               }}
                             >
-                              <span>
-                                <strong>{String.fromCharCode(65 + optIdx)}.</strong> {opt}
-                              </span>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0, fontSize: '0.75rem' }}>
-                                {isStudentChoice && (
-                                  <span style={{ padding: '0.1rem 0.45rem', borderRadius: '999px', background: 'rgba(255,255,255,0.12)', color: 'white' }}>
-                                    Your Answer
-                                  </span>
-                                )}
-                                {isCorrectChoice && (
-                                  <span style={{ padding: '0.1rem 0.45rem', borderRadius: '999px', background: 'rgba(76, 175, 80, 0.3)', color: '#a5d6a7' }}>
-                                    ✓ Correct Answer
-                                  </span>
-                                )}
+                              <div style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', opacity: 0.85, marginBottom: '0.2rem' }}>
+                                {qType === 'essay' ? '✓ Reference / Model Key' : '✓ Correct Answer Key'}
+                              </div>
+                              <div style={{ whiteSpace: 'pre-wrap', fontWeight: 600 }}>
+                                {item.correct_answer || item.options?.[0]}
                               </div>
                             </div>
-                          );
-                        })}
-                      </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                          {item.options.map((opt, optIdx) => {
+                            const isCorrectChoice = qType === 'multiple_answer'
+                              ? correctIndicesSet.has(optIdx)
+                              : optIdx === item.correct_index;
+                            const isStudentChoice = qType === 'multiple_answer'
+                              ? studentIndicesSet.has(optIdx)
+                              : optIdx === item.student_answer;
+                            return (
+                              <div
+                                key={optIdx}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  gap: '0.75rem',
+                                  padding: '0.55rem 0.8rem',
+                                  borderRadius: '8px',
+                                  fontSize: '0.88rem',
+                                  background: isCorrectChoice
+                                    ? 'rgba(76, 175, 80, 0.18)'
+                                    : isStudentChoice
+                                      ? 'rgba(239, 83, 80, 0.18)'
+                                      : 'rgba(255, 255, 255, 0.03)',
+                                  border: isCorrectChoice
+                                    ? '1px solid rgba(76, 175, 80, 0.5)'
+                                    : isStudentChoice
+                                      ? '1px solid rgba(239, 83, 80, 0.5)'
+                                      : '1px solid rgba(255, 255, 255, 0.07)',
+                                  color: isCorrectChoice ? '#c8e6c9' : isStudentChoice ? '#ffcdd2' : 'var(--neutral-200)',
+                                  fontWeight: isCorrectChoice || isStudentChoice ? 600 : 400,
+                                }}
+                              >
+                                <span>
+                                  <strong>{String.fromCharCode(65 + optIdx)}.</strong> {opt}
+                                </span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0, fontSize: '0.75rem' }}>
+                                  {isStudentChoice && (
+                                    <span style={{ padding: '0.1rem 0.45rem', borderRadius: '999px', background: 'rgba(255,255,255,0.12)', color: 'white' }}>
+                                      Your Answer
+                                    </span>
+                                  )}
+                                  {isCorrectChoice && (
+                                    <span style={{ padding: '0.1rem 0.45rem', borderRadius: '999px', background: 'rgba(76, 175, 80, 0.3)', color: '#a5d6a7' }}>
+                                      ✓ Correct Answer
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -1097,35 +1224,145 @@ export default function StudentQuizTakePage() {
             {(questionOrder.length > 0 ? questionOrder : (quiz.questions?.map((_, idx) => idx) ?? [])).map((originalIndex, displayIndex) => {
               const question = quiz.questions?.[originalIndex];
               if (!question) return null;
+              const qType = question.type ?? 'multiple_choice';
+              const qPoints = Number(question.points) > 0 ? Number(question.points) : 1;
+              const typeBadgeMap: Record<string, string> = {
+                multiple_choice: 'Multiple Choice',
+                true_false: 'True or False',
+                identification: 'Identification • Type Exact Answer',
+                multiple_answer: 'Multiple Answer • Select All That Apply',
+                essay: 'Essay • Written Response',
+              };
+              const currentAns = answers[originalIndex];
+
               return (
                 <fieldset
                   key={originalIndex}
                   className="quiz-question-card"
                   data-proctor-label={`Question ${displayIndex + 1}`}
                 >
-                  <legend><span>{displayIndex + 1}</span>{question.prompt}</legend>
-                  <div className="quiz-options">
-                    {question.options.map((option, optionIndex) => {
-                      const selected = answers[originalIndex] === optionIndex;
-                      const letter = String.fromCharCode(65 + optionIndex);
-                      return (
-                        <label
-                          className={`quiz-option ${selected ? 'is-selected' : ''}`}
-                          key={optionIndex}
-                          data-proctor-label={`Question ${displayIndex + 1} — Option ${letter}`}
-                        >
-                          <input
-                            type="radio"
-                            name={`question-${originalIndex}`}
-                            checked={selected}
-                            onChange={() => handleAnswer(originalIndex, optionIndex, displayIndex + 1)}
-                          />
-                          <span className="quiz-option-letter">{letter}</span>
-                          <span>{option}</span>
-                        </label>
-                      );
-                    })}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem', flexWrap: 'wrap' }}>
+                    <span
+                      style={{
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px',
+                        padding: '0.18rem 0.55rem',
+                        borderRadius: '999px',
+                        background: 'rgba(139, 92, 246, 0.16)',
+                        border: '1px solid rgba(139, 92, 246, 0.38)',
+                        color: '#ddd6fe',
+                      }}
+                    >
+                      {typeBadgeMap[qType] || 'Multiple Choice'}
+                    </span>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#fbbf24' }}>
+                      {qPoints} {qPoints === 1 ? 'pt' : 'pts'}
+                    </span>
                   </div>
+                  <legend><span>{displayIndex + 1}</span>{question.prompt}</legend>
+
+                  {qType === 'identification' ? (
+                    <div style={{ marginTop: '0.6rem' }}>
+                      <input
+                        type="text"
+                        value={typeof currentAns === 'string' ? currentAns : ''}
+                        onFocus={() => setCurrentQuestionNum(displayIndex + 1)}
+                        onChange={(e) => handleAnswer(originalIndex, e.target.value, displayIndex + 1)}
+                        placeholder="Type your answer here..."
+                        data-proctor-label={`Question ${displayIndex + 1} — Identification Input`}
+                        autoComplete="off"
+                        spellCheck={false}
+                        style={{
+                          width: '100%',
+                          padding: '0.8rem 1rem',
+                          borderRadius: '10px',
+                          background: 'rgba(255, 255, 255, 0.06)',
+                          border: typeof currentAns === 'string' && currentAns.trim().length > 0
+                            ? '1.5px solid rgba(139, 92, 246, 0.65)'
+                            : '1px solid rgba(255, 255, 255, 0.16)',
+                          color: 'white',
+                          fontSize: '0.95rem',
+                          userSelect: 'text',
+                          WebkitUserSelect: 'text',
+                        }}
+                      />
+                    </div>
+                  ) : qType === 'essay' ? (
+                    <div style={{ marginTop: '0.6rem' }}>
+                      <textarea
+                        rows={5}
+                        value={typeof currentAns === 'string' ? currentAns : ''}
+                        onFocus={() => setCurrentQuestionNum(displayIndex + 1)}
+                        onChange={(e) => handleAnswer(originalIndex, e.target.value, displayIndex + 1)}
+                        placeholder="Write your complete answer or explanation here..."
+                        data-proctor-label={`Question ${displayIndex + 1} — Essay Textarea`}
+                        style={{
+                          width: '100%',
+                          padding: '0.85rem 1rem',
+                          borderRadius: '10px',
+                          background: 'rgba(255, 255, 255, 0.06)',
+                          border: typeof currentAns === 'string' && currentAns.trim().length > 0
+                            ? '1.5px solid rgba(139, 92, 246, 0.65)'
+                            : '1px solid rgba(255, 255, 255, 0.16)',
+                          color: 'white',
+                          fontSize: '0.93rem',
+                          lineHeight: 1.5,
+                          resize: 'vertical',
+                          userSelect: 'text',
+                          WebkitUserSelect: 'text',
+                        }}
+                      />
+                    </div>
+                  ) : qType === 'multiple_answer' ? (
+                    <div className="quiz-options">
+                      {(question.options ?? []).map((option, optionIndex) => {
+                        const selectedArr = Array.isArray(currentAns) ? (currentAns as number[]) : [];
+                        const selected = selectedArr.includes(optionIndex);
+                        const letter = String.fromCharCode(65 + optionIndex);
+                        return (
+                          <label
+                            className={`quiz-option ${selected ? 'is-selected' : ''}`}
+                            key={optionIndex}
+                            data-proctor-label={`Question ${displayIndex + 1} — Option ${letter}`}
+                          >
+                            <input
+                              type="checkbox"
+                              name={`question-${originalIndex}-${optionIndex}`}
+                              checked={selected}
+                              onChange={() => handleToggleMultiAnswer(originalIndex, optionIndex, displayIndex + 1)}
+                            />
+                            <span className="quiz-option-letter">{selected ? '✓' : letter}</span>
+                            <span>{option}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="quiz-options">
+                      {(question.options ?? []).map((option, optionIndex) => {
+                        const selected = currentAns === optionIndex;
+                        const letter = String.fromCharCode(65 + optionIndex);
+                        return (
+                          <label
+                            className={`quiz-option ${selected ? 'is-selected' : ''}`}
+                            key={optionIndex}
+                            data-proctor-label={`Question ${displayIndex + 1} — Option ${letter}`}
+                          >
+                            <input
+                              type="radio"
+                              name={`question-${originalIndex}`}
+                              checked={selected}
+                              onChange={() => handleAnswer(originalIndex, optionIndex, displayIndex + 1)}
+                            />
+                            <span className="quiz-option-letter">{letter}</span>
+                            <span>{option}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
                 </fieldset>
               );
             })}

@@ -259,28 +259,31 @@ class LmsAiService
     }
 
     /**
-     * Detect whether a multi-question quiz has every single correct answer stuck on Option A (index 0).
+     * Detect whether a multi-question quiz has every single multiple-choice correct answer stuck on Option A (index 0).
      *
      * @param array<int, mixed> $questions
      */
     public function hasAllAnswersStuckOnFirstOption(array $questions): bool
     {
-        if (count($questions) < 2) {
-            return false;
-        }
+        $mcCount = 0;
         foreach ($questions as $q) {
             if (! is_array($q)) {
                 return false;
             }
+            $type = (string) ($q['type'] ?? 'multiple_choice');
+            if ($type !== 'multiple_choice') {
+                continue;
+            }
+            $mcCount++;
             if ((int) ($q['correct_index'] ?? 0) !== 0) {
                 return false;
             }
         }
-        return true;
+        return $mcCount >= 2;
     }
 
     /**
-     * Shuffle the 4 options of each question while keeping the exact real answer as `correct_index`,
+     * Shuffle the options of each multiple-choice question while keeping the exact real answer as `correct_index`,
      * ensuring the correct answers do not stick to Option A.
      *
      * @param array<int, array<string, mixed>> $questions
@@ -293,6 +296,12 @@ class LmsAiService
 
         foreach (array_values($questions) as $idx => $q) {
             if (! is_array($q) || empty($q['options']) || ! is_array($q['options'])) {
+                $randomized[] = $q;
+                continue;
+            }
+
+            $type = (string) ($q['type'] ?? 'multiple_choice');
+            if ($type !== 'multiple_choice') {
                 $randomized[] = $q;
                 continue;
             }

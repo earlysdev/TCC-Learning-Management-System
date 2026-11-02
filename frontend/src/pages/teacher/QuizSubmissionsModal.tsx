@@ -3,7 +3,7 @@ import {
   ShieldAlert, ShieldCheck, AlertTriangle, Users, 
   ChevronDown, ChevronUp, Eye, EyeOff, Search, Radio, Clock, Lock, Monitor, MousePointer2
 } from 'lucide-react';
-import type { Quiz, QuizQuestion } from '../../lib/types';
+import type { Quiz, QuizQuestion, StudentAnswerValue } from '../../lib/types';
 import Modal from '../../components/ui/Modal';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
@@ -54,7 +54,7 @@ interface LiveSessionRecord {
   max_score: number;
   cheating_attempts_count: number;
   time_remaining_seconds?: number | null;
-  answers?: number[];
+  answers?: StudentAnswerValue[];
   question_order?: number[];
   cursor_x?: number;
   cursor_y?: number;
@@ -537,12 +537,52 @@ export default function QuizSubmissionsModal({ quiz, isOpen, onClose }: QuizSubm
                           return order.map((origIdx, displayIdx) => {
                             const q = liveQuestions[origIdx];
                             if (!q) return null;
-                            const pickedIdx = studentAnswers[origIdx] !== undefined ? Number(studentAnswers[origIdx]) : -1;
-                            const isAnswered = pickedIdx >= 0;
-                            const isCorrect = isAnswered && pickedIdx === Number(q.correct_index ?? 0);
+                            const qType = q.type ?? 'multiple_choice';
+                            const rawAns = studentAnswers[origIdx];
                             const isHoveredQuestion = Boolean(
                               monitoredSession.hovered_element?.startsWith(`Question ${displayIdx + 1}`)
                             );
+
+                            let isAnswered = false;
+                            let isCorrect = false;
+                            let statusBadgeText = 'Not answered yet';
+
+                            if (qType === 'identification' || qType === 'essay') {
+                              const typed = typeof rawAns === 'string' ? rawAns.trim() : '';
+                              isAnswered = typed.length > 0;
+                              const keyStr = (q.correct_answer ?? q.options?.[0] ?? '').trim();
+                              if (isAnswered) {
+                                if (qType === 'essay') {
+                                  isCorrect = keyStr === ''
+                                    ? typed.length >= 10
+                                    : typed.toLowerCase().includes(keyStr.toLowerCase()) || typed.length >= 15;
+                                } else {
+                                  const accepted = keyStr.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+                                  isCorrect = accepted.includes(typed.toLowerCase());
+                                }
+                                statusBadgeText = `Typed (${typed.length} chars) • ${isCorrect ? '✓ Correct' : '✗ Check Answer'}`;
+                              }
+                            } else if (qType === 'multiple_answer') {
+                              const pickedArr = Array.isArray(rawAns) ? rawAns.map((n) => Number(n)).filter((n) => n >= 0) : [];
+                              isAnswered = pickedArr.length > 0;
+                              const keyArr = Array.isArray(q.correct_indices) && q.correct_indices.length > 0
+                                ? q.correct_indices.map((n) => Number(n))
+                                : [Number(q.correct_index ?? 0)];
+                              if (isAnswered) {
+                                const aSorted = [...new Set(pickedArr)].sort((a, b) => a - b);
+                                const kSorted = [...new Set(keyArr)].sort((a, b) => a - b);
+                                isCorrect = aSorted.length === kSorted.length && aSorted.every((v, idx) => v === kSorted[idx]);
+                                const letters = aSorted.map((i) => String.fromCharCode(65 + i)).join(', ');
+                                statusBadgeText = `Selected ${letters} • ${isCorrect ? '✓ Correct' : '✗ Incorrect'}`;
+                              }
+                            } else {
+                              const pickedIdx = typeof rawAns === 'number' ? rawAns : -1;
+                              isAnswered = pickedIdx >= 0;
+                              isCorrect = isAnswered && pickedIdx === Number(q.correct_index ?? 0);
+                              if (isAnswered) {
+                                statusBadgeText = `Selected ${String.fromCharCode(65 + pickedIdx)} • ${isCorrect ? '✓ Correct' : '✗ Incorrect'}`;
+                              }
+                            }
 
                             return (
                               <div
@@ -587,62 +627,86 @@ export default function QuizSubmissionsModal({ quiz, isOpen, onClose }: QuizSubm
                                         color: !isAnswered ? '#94a3b8' : isCorrect ? '#a5d6a7' : '#ff8a80',
                                       }}
                                     >
-                                      {!isAnswered
-                                        ? 'Not answered yet'
-                                        : `Selected ${String.fromCharCode(65 + pickedIdx)} • ${isCorrect ? '✓ Correct' : '✗ Incorrect'}`}
+                                      {statusBadgeText}
                                     </span>
                                   </div>
                                 </div>
 
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '0.4rem' }}>
-                                  {q.options.map((opt, optIdx) => {
-                                    const letter = String.fromCharCode(65 + optIdx);
-                                    const isStudentPick = pickedIdx === optIdx;
-                                    const isCorrectKey = Number(q.correct_index ?? 0) === optIdx;
-                                    const isHoveredOption = monitoredSession.hovered_element === `Question ${displayIdx + 1} — Option ${letter}`;
-                                    return (
-                                      <div
-                                        key={optIdx}
-                                        style={{
-                                          padding: '0.42rem 0.65rem',
-                                          borderRadius: '7px',
-                                          fontSize: '0.8rem',
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          justifyContent: 'space-between',
-                                          gap: '0.4rem',
-                                          background: isStudentPick
-                                            ? isCorrectKey
-                                              ? 'rgba(76, 175, 80, 0.22)'
-                                              : 'rgba(239, 83, 80, 0.22)'
-                                            : isHoveredOption
-                                              ? 'rgba(6, 182, 212, 0.16)'
-                                              : 'rgba(255, 255, 255, 0.03)',
-                                          border: isStudentPick
-                                            ? isCorrectKey
-                                              ? '1px solid rgba(76, 175, 80, 0.55)'
-                                              : '1px solid rgba(239, 83, 80, 0.55)'
-                                            : isHoveredOption
-                                              ? '1px solid rgba(34, 211, 238, 0.55)'
-                                              : isCorrectKey
-                                                ? '1px dashed rgba(76, 175, 80, 0.35)'
-                                                : '1px solid rgba(255, 255, 255, 0.06)',
-                                          color: isStudentPick ? 'white' : '#cbd5e1',
-                                          fontWeight: isStudentPick ? 700 : 400,
-                                        }}
-                                      >
-                                        <span>
-                                          <strong>{letter}.</strong> {opt}
-                                        </span>
-                                        {isStudentPick && (
-                                          <span style={{ fontSize: '0.68rem', padding: '0.08rem 0.4rem', borderRadius: '999px', background: 'rgba(255,255,255,0.16)', color: 'white', flexShrink: 0 }}>
-                                            Student Answer
-                                          </span>
-                                        )}
+                                {qType === 'identification' || qType === 'essay' ? (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.8rem' }}>
+                                    <div
+                                      style={{
+                                        padding: '0.5rem 0.7rem',
+                                        borderRadius: '7px',
+                                        background: isAnswered ? 'rgba(59, 130, 246, 0.16)' : 'rgba(255,255,255,0.03)',
+                                        border: isAnswered ? '1px solid rgba(96, 165, 250, 0.45)' : '1px solid rgba(255,255,255,0.07)',
+                                        color: isAnswered ? 'white' : '#94a3b8',
+                                      }}
+                                    >
+                                      <strong style={{ color: '#93c5fd' }}>Live Student Typing: </strong>
+                                      {typeof rawAns === 'string' && rawAns.trim().length > 0 ? rawAns : '(Not typed yet)'}
+                                    </div>
+                                    {(q.correct_answer || q.options?.[0]) && (
+                                      <div style={{ fontSize: '0.75rem', color: '#a5d6a7' }}>
+                                        <strong>Answer Key:</strong> {q.correct_answer || q.options?.[0]}
                                       </div>
-                                    );
-                                  })}
-                                </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '0.4rem' }}>
+                                    {(q.options ?? []).map((opt, optIdx) => {
+                                      const letter = String.fromCharCode(65 + optIdx);
+                                      const isStudentPick = qType === 'multiple_answer'
+                                        ? Array.isArray(rawAns) && rawAns.map((n) => Number(n)).includes(optIdx)
+                                        : rawAns === optIdx;
+                                      const isCorrectKey = qType === 'multiple_answer'
+                                        ? (Array.isArray(q.correct_indices) ? q.correct_indices.includes(optIdx) : Number(q.correct_index ?? 0) === optIdx)
+                                        : Number(q.correct_index ?? 0) === optIdx;
+                                      const isHoveredOption = monitoredSession.hovered_element === `Question ${displayIdx + 1} — Option ${letter}`;
+                                      return (
+                                        <div
+                                          key={optIdx}
+                                          style={{
+                                            padding: '0.42rem 0.65rem',
+                                            borderRadius: '7px',
+                                            fontSize: '0.8rem',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'space-between',
+                                            gap: '0.4rem',
+                                            background: isStudentPick
+                                              ? isCorrectKey
+                                                ? 'rgba(76, 175, 80, 0.22)'
+                                                : 'rgba(239, 83, 80, 0.22)'
+                                              : isHoveredOption
+                                                ? 'rgba(6, 182, 212, 0.16)'
+                                                : 'rgba(255, 255, 255, 0.03)',
+                                            border: isStudentPick
+                                              ? isCorrectKey
+                                                ? '1px solid rgba(76, 175, 80, 0.55)'
+                                                : '1px solid rgba(239, 83, 80, 0.55)'
+                                              : isHoveredOption
+                                                ? '1px solid rgba(34, 211, 238, 0.55)'
+                                                : isCorrectKey
+                                                  ? '1px dashed rgba(76, 175, 80, 0.35)'
+                                                  : '1px solid rgba(255, 255, 255, 0.06)',
+                                            color: isStudentPick ? 'white' : '#cbd5e1',
+                                            fontWeight: isStudentPick ? 700 : 400,
+                                          }}
+                                        >
+                                          <span>
+                                            <strong>{letter}.</strong> {opt}
+                                          </span>
+                                          {isStudentPick && (
+                                            <span style={{ fontSize: '0.68rem', padding: '0.08rem 0.4rem', borderRadius: '999px', background: 'rgba(255,255,255,0.16)', color: 'white', flexShrink: 0 }}>
+                                              Student Answer
+                                            </span>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
                               </div>
                             );
                           });

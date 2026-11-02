@@ -55,10 +55,22 @@ export interface QuizAudience {
   label?: string;
 }
 
+export type QuestionType =
+  | 'multiple_choice'
+  | 'identification'
+  | 'true_false'
+  | 'multiple_answer'
+  | 'essay';
+
+export type StudentAnswerValue = number | string | number[] | null;
+
 export interface Question {
+  type?: QuestionType;
   prompt: string;
   options: string[];
   correct_index?: number;
+  correct_indices?: number[];
+  correct_answer?: string;
   skill?: string;
   points?: number;
 }
@@ -66,12 +78,15 @@ export interface Question {
 export type QuizQuestion = Question;
 
 export interface ReviewQuestion {
+  type?: QuestionType;
   prompt: string;
   options: string[];
   points: number;
   skill?: string;
   correct_index: number;
-  student_answer: number;
+  correct_indices?: number[];
+  correct_answer?: string;
+  student_answer: StudentAnswerValue;
   is_correct: boolean;
 }
 
