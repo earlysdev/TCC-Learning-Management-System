@@ -298,10 +298,16 @@ class LmsAiService
                 ['What is 2/3 of 12?', ['6', '8', '9', '10'], 1, 'Fraction of a quantity'],
             ],
         ];
+        $targetCount = max(1, min(50, $count));
         $key = Str::lower(trim($topic));
         foreach ($sets as $name => $questions) {
             if (str_contains($key, $name)) {
-                return array_map(fn ($q) => ['prompt' => $q[0], 'options' => $q[1], 'correct_index' => $q[2], 'skill' => $q[3]], $questions);
+                $mapped = array_map(fn ($q) => ['prompt' => $q[0], 'options' => $q[1], 'correct_index' => $q[2], 'skill' => $q[3]], $questions);
+                $results = [];
+                for ($i = 0; $i < $targetCount; $i++) {
+                    $results[] = $mapped[$i % count($mapped)];
+                }
+                return $results;
             }
         }
 
@@ -321,10 +327,12 @@ class LmsAiService
             ["Why is continuous review important when studying {$cleanTopic} in {$cleanSubject}?", ["It reinforces core competencies and bridges theoretical concepts with practical application", "It memorizes answers without understanding underlying logic", "It limits adaptation to modern technologies", "It replaces hands-on laboratory practice"], 0, "Competency Mastery"],
         ];
 
-        return array_slice(
-            array_map(fn ($q) => ['prompt' => $q[0], 'options' => $q[1], 'correct_index' => $q[2], 'skill' => $q[3]], $templates),
-            0,
-            max(3, min(10, $count))
-        );
+        $mappedTemplates = array_map(fn ($q) => ['prompt' => $q[0], 'options' => $q[1], 'correct_index' => $q[2], 'skill' => $q[3]], $templates);
+        $results = [];
+        for ($i = 0; $i < $targetCount; $i++) {
+            $results[] = $mappedTemplates[$i % count($mappedTemplates)];
+        }
+
+        return $results;
     }
 }

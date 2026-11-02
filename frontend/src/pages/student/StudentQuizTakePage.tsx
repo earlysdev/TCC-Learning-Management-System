@@ -592,7 +592,9 @@ export default function StudentQuizTakePage() {
         <aside className="quiz-take-sidebar">
           <div className="quiz-take-subject">{quiz.subject}</div>
           <h1>{quiz.title}</h1>
-          <p>{quiz.topic}</p>
+          {quiz.topic && quiz.topic.trim().toLowerCase() !== quiz.title.trim().toLowerCase() && (
+            <p>{quiz.topic}</p>
+          )}
           <div className="quiz-progress-block">
             <div><span>Progress</span><strong>{answeredCount} / {quiz.questions?.length ?? 0}</strong></div>
             <div className="quiz-progress-track"><span style={{ width: `${(answeredCount / Math.max(quiz.questions?.length ?? 1, 1)) * 100}%` }} /></div>

@@ -437,7 +437,7 @@ export default function PrincipalDashboard() {
                 <div>
                   <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.25rem' }}>
                     <Badge variant="primary">{quiz.subject}</Badge>
-                    <span style={{ fontSize: '0.85rem', color: 'var(--neutral-300)' }}>{quiz.topic}</span>
+                    {quiz.topic && quiz.topic.trim().toLowerCase() !== quiz.title.trim().toLowerCase() && <span style={{ fontSize: '0.85rem', color: 'var(--neutral-300)' }}>{quiz.topic}</span>}
                     <Badge variant={quiz.is_published ? 'success' : 'warning'}>
                       {quiz.is_published ? 'Published' : 'Draft'}
                     </Badge>

@@ -58,24 +58,25 @@ class QuizController extends Controller
             'questions' => ['sometimes', 'array', 'min:1'],
         ]);
 
-        $questionCount = (int) ($input['count'] ?? 3);
+        $cleanTopic = trim($input['topic']);
+        $questionCount = max(1, min(50, (int) ($input['count'] ?? 3)));
         $questions = $input['questions'] ?? array_map(fn (int $i) => [
             'prompt' => '',
-            'skill' => $input['topic'],
+            'skill' => $cleanTopic,
             'points' => 1,
             'options' => ['', '', '', ''],
             'correct_index' => 0,
-        ], range(1, max(1, $questionCount)));
+        ], range(1, $questionCount));
 
         $title = !empty(trim($input['title'] ?? ''))
             ? trim($input['title'])
-            : ($input['topic'] . ' Assessment');
+            : $cleanTopic;
 
         $quiz = Quiz::create([
             'teacher_id' => $request->user()->id,
             'title' => $title,
-            'subject' => $input['subject'],
-            'topic' => $input['topic'],
+            'subject' => trim($input['subject']),
+            'topic' => $cleanTopic,
             'instructions' => $input['instructions'] ?? 'Choose the best answer for each question. Alt-tabbing, taking screenshots, or opening developer tools is strictly prohibited and monitored.',
             'questions' => $questions,
             'generated_by_ai' => false,
@@ -99,19 +100,24 @@ class QuizController extends Controller
     {
         $this->requireRole($request, 'teacher');
         $input = $request->validate([
+            'title' => ['nullable', 'string', 'max:200'],
             'subject' => ['required', 'string', 'max:100'],
             'topic' => ['required', 'string', 'max:120'],
-            'count' => ['required', 'integer', 'between:3,10'],
+            'count' => ['required', 'integer', 'between:1,50'],
             'difficulty' => ['required', 'in:easy,medium,challenging'],
             'target_type' => ['sometimes', 'in:all,section,individual'],
             'target_sections' => ['sometimes', 'nullable', 'array'],
         ]);
-        $generated = $this->ai->generateQuiz($input['subject'], $input['topic'], $input['count'], $input['difficulty']);
+        $cleanTopic = trim($input['topic']);
+        $cleanTitle = !empty(trim($input['title'] ?? ''))
+            ? trim($input['title'])
+            : $cleanTopic;
+        $generated = $this->ai->generateQuiz($input['subject'], $cleanTopic, (int) $input['count'], $input['difficulty']);
         $quiz = Quiz::create([
             'teacher_id' => $request->user()->id,
-            'title' => $input['topic'].' — '.$input['difficulty'].' practice',
-            'subject' => $input['subject'],
-            'topic' => $input['topic'],
+            'title' => $cleanTitle,
+            'subject' => trim($input['subject']),
+            'topic' => $cleanTopic,
             'instructions' => 'Choose the best answer for each question. Alt-tabbing, taking screenshots, or opening developer tools is strictly prohibited and monitored.',
             'questions' => $generated['questions'],
             'generated_by_ai' => $generated['source'] === 'gemini',
@@ -184,12 +190,15 @@ class QuizController extends Controller
             $students = User::where('role', 'student')->get();
             foreach ($students as $student) {
                 if ($this->isStudentEligible($student, $quiz)) {
+                    $sameTitleAndTopic = strtolower(trim((string) $quiz->title)) === strtolower(trim((string) $quiz->topic));
                     \App\Models\LmsNotification::create([
                         'user_id' => $student->id,
                         'recipient_role' => 'student',
                         'type' => 'quiz_published',
                         'title' => "New Quiz: {$quiz->title}",
-                        'message' => "{$quiz->subject} ({$quiz->topic}) is now open for taking.",
+                        'message' => $sameTitleAndTopic
+                            ? "{$quiz->subject} is now open for taking."
+                            : "{$quiz->subject} ({$quiz->topic}) is now open for taking.",
                         'data' => ['quiz_id' => $quiz->id],
                         'is_read' => false,
                     ]);

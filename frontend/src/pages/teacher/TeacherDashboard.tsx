@@ -83,6 +83,15 @@ function quizAudienceLabel(quiz: Quiz): string | null {
   return null;
 }
 
+function hasDistinctTopic(quiz: Pick<Quiz, 'title' | 'topic'>): boolean {
+  const cleanTitle = (quiz.title || '').trim().toLowerCase();
+  const cleanTopic = (quiz.topic || '').trim().toLowerCase();
+  if (!cleanTopic) return false;
+  if (cleanTitle === cleanTopic) return false;
+  if (cleanTitle === `${cleanTopic} assessment`) return false;
+  return true;
+}
+
 export default function TeacherDashboard() {
   const user = getLmsUser();
   const { subpage } = useParams<{ subpage?: string }>();
@@ -184,18 +193,21 @@ export default function TeacherDashboard() {
     setNotice(null);
     try {
       const finalSubject = (subject && subject.trim()) || (subjects[0]?.name) || 'IT 101 - Introduction To Computing';
+      const cleanTopic = topic.trim() || quizTitle.trim();
+      const cleanTitle = quizTitle.trim() || cleanTopic;
+      const questionCount = Math.max(1, Math.min(50, Number(count) || 1));
       const data = await lmsFetch<{ quiz: Quiz }>('/teacher/quizzes', {
         method: 'POST',
         body: JSON.stringify({
-          title: quizTitle.trim() || `${topic.trim()} Assessment`,
+          title: cleanTitle,
           subject: finalSubject,
-          topic: topic.trim(),
-          count,
+          topic: cleanTopic,
+          count: questionCount,
           target_type: selectedTargetSection ? 'section' : 'all',
           target_sections: selectedTargetSection ? [selectedTargetSection] : null,
         }),
       });
-      setNotice(`Quiz draft "${data.quiz.title}" created. Add your questions and answer choices in the editor.`);
+      setNotice(`Quiz draft "${data.quiz.title}" created with ${questionCount} question ${questionCount === 1 ? 'slot' : 'slots'}. Add your questions and answer choices in the editor.`);
       setQuizTitle('');
       setTopic('');
       setQuizzes((current) => [data.quiz, ...current.filter((quiz) => quiz.id !== data.quiz.id)]);
@@ -393,7 +405,9 @@ export default function TeacherDashboard() {
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
                     <Badge variant="primary">{quiz.subject}</Badge>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--neutral-400)' }}>{quiz.topic}</span>
+                    {hasDistinctTopic(quiz) && (
+                      <span style={{ fontSize: '0.8rem', color: 'var(--neutral-400)' }}>{quiz.topic}</span>
+                    )}
                     {quiz.generated_by_ai && (
                       <span style={{ fontSize: '0.75rem', color: 'var(--accent-purple-light)', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
                         <Sparkles size={12} /> AI Generated
@@ -494,10 +508,10 @@ export default function TeacherDashboard() {
           {/* Row 1: Quiz Title, BSIT Subject, and Topic */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem' }}>
             <Input
-              label="Quiz Title (Optional)"
+              label="Quiz Title (Optional — uses Topic if blank)"
               value={quizTitle}
               onChange={(e) => setQuizTitle(e.target.value)}
-              placeholder="e.g. Midterm Quiz 1 — Arrays & Loops"
+              placeholder="e.g. Midterm Quiz 1 (No extra title added)"
             />
 
             <Select
@@ -518,23 +532,53 @@ export default function TeacherDashboard() {
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
               placeholder="e.g. Data Structures, OOP Principles, Relational Databases"
-              required
+              required={!quizTitle.trim()}
             />
           </div>
 
-          {/* Row 2: Initial Questions & Block Targeting */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
-            <Select 
-              label="Initial Question Slots"
-              value={String(count)} 
-              onChange={(val) => setCount(Number(val))}
-              options={[
-                { value: '1', label: '1 Question (Add more in editor)' },
-                { value: '3', label: '3 Questions' },
-                { value: '5', label: '5 Questions (Standard)' },
-                { value: '10', label: '10 Questions (Unit Quiz)' },
-              ]}
-            />
+          {/* Row 2: Custom Question Count & Block Targeting */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem', alignItems: 'start' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+              <Input
+                label="Number of Questions (1–50)"
+                type="number"
+                min={1}
+                max={50}
+                value={String(count)}
+                onChange={(e) => {
+                  const parsed = parseInt(e.target.value, 10);
+                  if (Number.isNaN(parsed)) {
+                    setCount(1);
+                  } else {
+                    setCount(Math.max(1, Math.min(50, parsed)));
+                  }
+                }}
+                required
+              />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', marginRight: '0.15rem' }}>Quick set:</span>
+                {[1, 3, 5, 10, 15, 20, 30].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setCount(preset)}
+                    style={{
+                      padding: '0.18rem 0.55rem',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      borderRadius: '999px',
+                      cursor: 'pointer',
+                      border: count === preset ? '1px solid var(--primary-400)' : '1px solid rgba(255,255,255,0.12)',
+                      background: count === preset ? 'rgba(63, 81, 181, 0.3)' : 'rgba(255,255,255,0.04)',
+                      color: count === preset ? 'white' : 'var(--neutral-300)',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+            </div>
 
             <Select
               label="Target Block (Optional)"
@@ -587,7 +631,9 @@ export default function TeacherDashboard() {
               <div>
                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.35rem' }}>
                   <Badge variant="primary">{quiz.subject}</Badge>
-                  <span style={{ fontSize: '0.85rem', color: 'var(--neutral-300)' }}>Topic: {quiz.topic}</span>
+                  {hasDistinctTopic(quiz) && (
+                    <span style={{ fontSize: '0.85rem', color: 'var(--neutral-300)' }}>Topic: {quiz.topic}</span>
+                  )}
                   <Badge variant={quiz.is_published ? 'success' : 'warning'}>
                     {quiz.is_published ? 'Published' : 'Draft'}
                   </Badge>

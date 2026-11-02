@@ -239,7 +239,9 @@ export default function StudentDashboard() {
                 </div>
                 <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'white', marginBottom: '0.4rem' }}>{quiz.title}</h3>
                 <p style={{ color: 'var(--neutral-300)', fontSize: '0.85rem', marginBottom: '1rem', flex: 1 }}>
-                  {quiz.topic} • {quiz.question_count} questions
+                  {quiz.topic && quiz.topic.trim().toLowerCase() !== quiz.title.trim().toLowerCase()
+                    ? `${quiz.topic} • ${quiz.question_count} questions`
+                    : `${quiz.question_count} questions`}
                 </p>
                 {quiz.attempted && (
                   <div style={{ background: 'rgba(67, 160, 71, 0.15)', border: '1px solid rgba(67, 160, 71, 0.3)', padding: '0.5rem 0.75rem', borderRadius: 'var(--radius-md)', marginBottom: '0.75rem', fontSize: '0.85rem', color: '#a5d6a7' }}>
@@ -532,7 +534,11 @@ export default function StudentDashboard() {
                 </div>
                 <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: 'white', marginBottom: '0.4rem' }}>{quiz.title}</h3>
                 <p style={{ color: 'var(--neutral-300)', fontSize: '0.9rem', marginBottom: '1rem', flex: 1 }}>
-                  Topic: <strong>{quiz.topic}</strong> • {quiz.question_count} Questions
+                  {quiz.topic && quiz.topic.trim().toLowerCase() !== quiz.title.trim().toLowerCase() ? (
+                    <>Topic: <strong>{quiz.topic}</strong> • {quiz.question_count} Questions</>
+                  ) : (
+                    <>{quiz.question_count} Questions</>
+                  )}
                 </p>
 
                 {quiz.attempted && (

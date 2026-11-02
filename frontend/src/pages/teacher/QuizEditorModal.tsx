@@ -187,14 +187,29 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
     });
   };
 
+  const setQuestionCount = (nextCount: number) => {
+    const safeCount = Math.max(1, Math.min(50, nextCount));
+    setDraft((current) => {
+      if (!current) return current;
+      if (safeCount === current.questions.length) return current;
+      if (safeCount > current.questions.length) {
+        const additional = Array.from({ length: safeCount - current.questions.length }, () => emptyQuestion());
+        return { ...current, questions: [...current.questions, ...additional] };
+      }
+      return { ...current, questions: current.questions.slice(0, safeCount) };
+    });
+  };
+
   const submit = () => {
-    const title = draft.title.trim();
+    const rawTitle = draft.title.trim();
+    const rawTopic = draft.topic.trim();
+    const title = rawTitle || rawTopic;
+    const topic = rawTopic || rawTitle;
     const subject = draft.subject.trim();
-    const topic = draft.topic.trim();
     const instructions = draft.instructions.trim();
 
     if (!title || !subject || !topic) {
-      setValidationError('Add a title, subject, and topic before saving the quiz.');
+      setValidationError('Add a quiz title/topic and subject before saving the quiz.');
       return;
     }
     if (draft.questions.length === 0) {
@@ -369,6 +384,34 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
           </div>
 
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', background: 'rgba(255,255,255,0.05)', padding: '0.28rem 0.6rem', borderRadius: 'var(--radius-md)', border: '1px solid rgba(255,255,255,0.1)' }}>
+              <span style={{ fontSize: '0.78rem', color: 'var(--neutral-300)', fontWeight: 600 }}>Question Count:</span>
+              <input
+                type="number"
+                min={1}
+                max={50}
+                aria-label="Total question count"
+                value={draft.questions.length}
+                onChange={(e) => {
+                  const parsed = parseInt(e.target.value, 10);
+                  if (!Number.isNaN(parsed)) {
+                    setQuestionCount(parsed);
+                  }
+                }}
+                style={{
+                  width: '50px',
+                  height: '26px',
+                  background: 'rgba(16, 10, 28, 0.85)',
+                  border: '1px solid rgba(167, 139, 250, 0.35)',
+                  borderRadius: '4px',
+                  color: 'white',
+                  textAlign: 'center',
+                  fontWeight: 700,
+                  fontSize: '0.85rem',
+                  outline: 'none',
+                }}
+              />
+            </div>
             {draft.questions.length >= 3 && (
               <Button
                 type="button"

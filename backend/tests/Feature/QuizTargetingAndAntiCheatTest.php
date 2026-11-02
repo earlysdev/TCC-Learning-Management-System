@@ -182,4 +182,22 @@ class QuizTargetingAndAntiCheatTest extends TestCase
         $resLogs = $this->actingAs($dean)->getJson('/api/dean/security-logs');
         $resLogs->assertStatus(200);
     }
+
+    public function test_teacher_can_create_manual_quiz_with_custom_question_count_and_clean_title(): void
+    {
+        $teacher = User::where('role', 'teacher')->first() ?? User::factory()->create(['role' => 'teacher']);
+
+        $response = $this->actingAs($teacher)->postJson('/api/teacher/quizzes', [
+            'title' => '',
+            'subject' => 'IT 108 - Data Structures & Algorithms',
+            'topic' => 'Binary Search Trees',
+            'count' => 12,
+        ]);
+
+        $response->assertStatus(201);
+        $response->assertJsonPath('quiz.title', 'Binary Search Trees');
+        $response->assertJsonPath('quiz.topic', 'Binary Search Trees');
+        $response->assertJsonPath('quiz.question_count', 12);
+        $this->assertCount(12, $response->json('quiz.questions'));
+    }
 }
