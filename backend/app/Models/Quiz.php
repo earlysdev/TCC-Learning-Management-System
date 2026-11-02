@@ -16,6 +16,7 @@ class Quiz extends Model
         'instructions',
         'reference_pdf_name',
         'reference_pdf_text',
+        'reference_pdf_data',
         'questions',
         'is_published',
         'allow_review',

@@ -32,6 +32,7 @@ class QuizController extends Controller
             $query->where('teacher_id', $user->id);
         }
         $quizzes = $query->withCount('attempts')->withAvg('attempts', 'percentage')->latest()->get();
+        $quizzes->each(fn (Quiz $quiz) => $this->repairQuizQuestionsIfNeeded($quiz));
 
         return response()->json([
             'metrics' => [
@@ -121,6 +122,9 @@ class QuizController extends Controller
         if ($this->ensurePdfColumns()) {
             $createAttributes['reference_pdf_name'] = $pdf['name'];
             $createAttributes['reference_pdf_text'] = $pdf['text'];
+            if (!empty($pdf['base64']) && strlen($pdf['base64']) <= 12_000_000) {
+                $createAttributes['reference_pdf_data'] = $pdf['base64'];
+            }
         }
 
         $quiz = Quiz::create($createAttributes);
@@ -202,6 +206,9 @@ class QuizController extends Controller
         if ($this->ensurePdfColumns()) {
             $createAttributes['reference_pdf_name'] = $pdf['name'];
             $createAttributes['reference_pdf_text'] = $pdf['text'];
+            if (!empty($pdf['base64']) && strlen($pdf['base64']) <= 12_000_000) {
+                $createAttributes['reference_pdf_data'] = $pdf['base64'];
+            }
         }
 
         $quiz = Quiz::create($createAttributes);
@@ -247,6 +254,9 @@ class QuizController extends Controller
             }
             if ($pdf['text'] !== null || array_key_exists('reference_pdf_text', $input)) {
                 $input['reference_pdf_text'] = $pdf['text'] ?? $input['reference_pdf_text'] ?? null;
+            }
+            if (!empty($pdf['base64']) && strlen($pdf['base64']) <= 12_000_000) {
+                $input['reference_pdf_data'] = $pdf['base64'];
             }
         } else {
             unset($input['reference_pdf_name'], $input['reference_pdf_text']);
@@ -361,7 +371,11 @@ class QuizController extends Controller
         $eligibleQuizzes = $quizzes->filter(fn (Quiz $quiz) => $this->isStudentEligible($student, $quiz));
 
         return response()->json(['quizzes' => $eligibleQuizzes->values()->map(function (Quiz $quiz): array {
+            $this->repairQuizQuestionsIfNeeded($quiz);
             $attempt = $quiz->attempts->first();
+            $cleanPdfText = !empty($quiz->reference_pdf_text)
+                ? implode(' ', $this->ai->extractCleanSentences((string) $quiz->reference_pdf_text))
+                : null;
             return [
                 'id' => $quiz->id,
                 'title' => $quiz->title,
@@ -369,6 +383,8 @@ class QuizController extends Controller
                 'topic' => $quiz->topic,
                 'instructions' => $quiz->instructions,
                 'reference_pdf_name' => $quiz->reference_pdf_name ?? null,
+                'reference_pdf_text' => $cleanPdfText ?: null,
+                'has_pdf_data' => !empty($quiz->reference_pdf_data),
                 'question_count' => count($quiz->questions ?? []),
                 'time_limit_minutes' => $quiz->time_limit_minutes ?? 15,
                 'shuffle_questions' => (bool) ($quiz->shuffle_questions ?? false),
@@ -391,7 +407,12 @@ class QuizController extends Controller
         $student = $request->user();
         abort_unless($this->isStudentEligible($student, $quiz), 403, 'This quiz is not assigned to your section or account.');
 
+        $this->repairQuizQuestionsIfNeeded($quiz);
+
         $attempt = QuizAttempt::where('quiz_id', $quiz->id)->where('student_id', $student->id)->first();
+        $cleanPdfText = !empty($quiz->reference_pdf_text)
+            ? implode(' ', $this->ai->extractCleanSentences((string) $quiz->reference_pdf_text))
+            : null;
 
         return response()->json([
             'quiz' => [
@@ -401,6 +422,8 @@ class QuizController extends Controller
                 'topic' => $quiz->topic,
                 'instructions' => $quiz->instructions,
                 'reference_pdf_name' => $quiz->reference_pdf_name ?? null,
+                'reference_pdf_text' => $cleanPdfText ?: null,
+                'has_pdf_data' => !empty($quiz->reference_pdf_data),
                 'time_limit_minutes' => $quiz->time_limit_minutes ?? 15,
                 'shuffle_questions' => (bool) ($quiz->shuffle_questions ?? false),
                 'questions' => collect($quiz->questions ?? [])->map(fn (array $question) => [
@@ -417,6 +440,37 @@ class QuizController extends Controller
                 'violations' => $attempt->violations ?? [],
                 'recommendation' => $attempt->recommendation,
             ] : null,
+        ]);
+    }
+
+    public function showPdf(Request $request, Quiz $quiz): JsonResponse
+    {
+        $user = $request->user();
+        abort_unless($user !== null, 401, 'Unauthenticated.');
+
+        if ($user->role === 'student') {
+            abort_unless($quiz->is_published, 404, 'Quiz not found or not published.');
+            abort_unless($this->isStudentEligible($user, $quiz), 403, 'This quiz is not assigned to your section or account.');
+        }
+
+        $this->repairQuizQuestionsIfNeeded($quiz);
+
+        $cleanPdfText = !empty($quiz->reference_pdf_text)
+            ? implode("\n\n", $this->ai->extractCleanSentences((string) $quiz->reference_pdf_text))
+            : null;
+
+        return response()->json([
+            'id' => $quiz->id,
+            'title' => $quiz->title,
+            'subject' => $quiz->subject,
+            'topic' => $quiz->topic,
+            'instructions' => $quiz->instructions,
+            'time_limit_minutes' => $quiz->time_limit_minutes ?? 15,
+            'question_count' => count($quiz->questions ?? []),
+            'reference_pdf_name' => $quiz->reference_pdf_name ?? null,
+            'reference_pdf_text' => $cleanPdfText ?: null,
+            'reference_pdf_data' => $quiz->reference_pdf_data ?? null,
+            'has_pdf_data' => !empty($quiz->reference_pdf_data),
         ]);
     }
 
@@ -610,12 +664,20 @@ class QuizController extends Controller
         $name = isset($input['pdf_name']) && is_string($input['pdf_name']) && trim($input['pdf_name']) !== ''
             ? trim($input['pdf_name'])
             : null;
-        $text = isset($input['pdf_text']) && is_string($input['pdf_text']) && trim($input['pdf_text']) !== ''
+        $rawText = isset($input['pdf_text']) && is_string($input['pdf_text']) && trim($input['pdf_text']) !== ''
             ? trim($input['pdf_text'])
             : null;
         $base64 = isset($input['pdf_base64']) && is_string($input['pdf_base64']) && trim($input['pdf_base64']) !== ''
             ? trim($input['pdf_base64'])
             : null;
+
+        if ($base64 !== null) {
+            $base64 = preg_replace('/^data:application\/pdf;base64,/i', '', $base64) ?: null;
+        }
+
+        // Sanitize any client-side extracted text so binary/encoding fragments never pollute generation
+        $cleanClientSentences = $rawText !== null ? $this->ai->extractCleanSentences($rawText) : [];
+        $text = $cleanClientSentences !== [] ? implode(' ', $cleanClientSentences) : null;
 
         $file = $request->file('pdf') ?? $request->file('pdf_file');
         if ($file && $file->isValid()) {
@@ -629,14 +691,18 @@ class QuizController extends Controller
                 }
             }
         } elseif ($base64 !== null) {
-            $cleanBase64 = preg_replace('/^data:application\/pdf;base64,/i', '', $base64) ?? '';
-            $binary = @base64_decode($cleanBase64, true);
+            $binary = @base64_decode($base64, true);
             if (is_string($binary) && $binary !== '') {
                 $extracted = $this->ai->extractTextFromPdfBinary($binary);
-                if ($extracted !== '' && $text === null) {
-                    $text = $extracted;
+                if ($extracted !== '') {
+                    $text = $text ? ($text."\n".$extracted) : $extracted;
                 }
             }
+        }
+
+        if ($text !== null) {
+            $verifiedSentences = $this->ai->extractCleanSentences($text);
+            $text = $verifiedSentences !== [] ? implode(' ', $verifiedSentences) : null;
         }
 
         return [
@@ -646,6 +712,56 @@ class QuizController extends Controller
         ];
     }
 
+    /**
+     * Automatically repairs any previously saved quiz whose questions or options
+     * contain compressed PDF binary stream noise (e.g. "\$ MW _ Z r lKEfv...").
+     */
+    private function repairQuizQuestionsIfNeeded(Quiz $quiz): void
+    {
+        try {
+            $this->ensurePdfColumns();
+            $questions = is_array($quiz->questions) ? $quiz->questions : [];
+            $dirty = false;
+
+            if (empty($quiz->reference_pdf_name) && !empty($quiz->instructions)) {
+                if (preg_match('/attached PDF handout \(([^)]+\.pdf)\)/i', (string) $quiz->instructions, $m)) {
+                    $quiz->reference_pdf_name = trim($m[1]);
+                    $dirty = true;
+                }
+            }
+
+            if (!empty($quiz->reference_pdf_text)) {
+                $cleanSentences = $this->ai->extractCleanSentences((string) $quiz->reference_pdf_text);
+                $cleanText = $cleanSentences !== [] ? implode(' ', $cleanSentences) : null;
+                if ($cleanText !== $quiz->reference_pdf_text) {
+                    $quiz->reference_pdf_text = $cleanText;
+                    $dirty = true;
+                }
+            }
+
+            if ($this->ai->hasCorruptedQuestions($questions)) {
+                $count = max(1, count($questions));
+                $generated = $this->ai->generateQuiz(
+                    (string) ($quiz->subject ?: 'General'),
+                    (string) ($quiz->topic ?: $quiz->title ?: 'Course Material'),
+                    $count,
+                    'medium',
+                    $quiz->reference_pdf_text,
+                    $quiz->reference_pdf_data ?? null,
+                    $quiz->reference_pdf_name ?? null,
+                );
+                $quiz->questions = $generated['questions'];
+                $dirty = true;
+            }
+
+            if ($dirty) {
+                $quiz->save();
+            }
+        } catch (\Throwable) {
+            // Non-blocking safeguard
+        }
+    }
+
     private function ensurePdfColumns(): bool
     {
         try {
@@ -653,6 +769,11 @@ class QuizController extends Controller
                 Schema::table('quizzes', function (Blueprint $table): void {
                     $table->string('reference_pdf_name')->nullable();
                     $table->longText('reference_pdf_text')->nullable();
+                    $table->longText('reference_pdf_data')->nullable();
+                });
+            } elseif (! Schema::hasColumn('quizzes', 'reference_pdf_data')) {
+                Schema::table('quizzes', function (Blueprint $table): void {
+                    $table->longText('reference_pdf_data')->nullable();
                 });
             }
             return Schema::hasColumn('quizzes', 'reference_pdf_name');
@@ -664,6 +785,10 @@ class QuizController extends Controller
     /** @return array<string, mixed> */
     private function teacherQuizPayload(Quiz $quiz): array
     {
+        $cleanPdfText = !empty($quiz->reference_pdf_text)
+            ? implode(' ', $this->ai->extractCleanSentences((string) $quiz->reference_pdf_text))
+            : null;
+
         return [
             'id' => $quiz->id,
             'title' => $quiz->title,
@@ -671,7 +796,8 @@ class QuizController extends Controller
             'topic' => $quiz->topic,
             'instructions' => $quiz->instructions,
             'reference_pdf_name' => $quiz->reference_pdf_name ?? null,
-            'reference_pdf_text' => $quiz->reference_pdf_text ?? null,
+            'reference_pdf_text' => $cleanPdfText ?: null,
+            'has_pdf_data' => !empty($quiz->reference_pdf_data),
             'question_count' => count($quiz->questions ?? []),
             'is_published' => (bool) $quiz->is_published,
             'allow_review' => (bool) $quiz->allow_review,

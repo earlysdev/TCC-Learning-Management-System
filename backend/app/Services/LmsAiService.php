@@ -9,7 +9,9 @@ use Illuminate\Validation\ValidationException;
 class LmsAiService
 {
     /**
-     * Extract readable text from a raw PDF binary string.
+     * Extract clean, human-readable text from a raw PDF binary string.
+     * Supports FlateDecode streams, ToUnicode CMap hex strings, and literal PDF text blocks,
+     * while strictly filtering out any binary/font/compressed stream noise.
      */
     public function extractTextFromPdfBinary(string $pdfBinary): string
     {
@@ -17,54 +19,243 @@ class LmsAiService
             return '';
         }
 
-        $chunks = [];
+        $decompressedStreams = [];
+        $cmap = [];
 
-        if (preg_match_all('/stream[\r\n]+(.*?)[\r\n]+endstream/s', $pdfBinary, $matches)) {
+        if (preg_match_all('/stream\r?\n(.*?)\r?\nendstream/s', $pdfBinary, $matches)) {
             foreach ($matches[1] as $rawStream) {
-                $decoded = @gzuncompress($rawStream);
+                $trimmedStream = ltrim($rawStream, "\r\n");
+                $decoded = @gzuncompress($trimmedStream);
                 if ($decoded === false) {
-                    $decoded = @gzinflate($rawStream);
+                    $decoded = @gzinflate($trimmedStream);
                 }
+                if ($decoded === false && strlen($trimmedStream) > 2) {
+                    $decoded = @gzinflate(substr($trimmedStream, 2));
+                }
+                // Only accept genuinely uncompressed streams if they contain explicit PDF text operators (BT / ET)
                 if ($decoded === false) {
-                    $decoded = $rawStream;
+                    if (str_contains($trimmedStream, 'BT') && str_contains($trimmedStream, 'ET')) {
+                        $decoded = $trimmedStream;
+                    } else {
+                        continue;
+                    }
                 }
 
                 if (! is_string($decoded) || $decoded === '') {
                     continue;
                 }
 
-                if (preg_match_all('/\((?:\\\\.|[^\\\\()])*\)/s', $decoded, $strMatches)) {
-                    foreach ($strMatches[0] as $literal) {
-                        $inner = substr($literal, 1, -1);
-                        $inner = str_replace(
-                            ['\\n', '\\r', '\\t', '\\(', '\\)', '\\\\'],
-                            ["\n", ' ', ' ', '(', ')', '\\'],
-                            $inner
-                        );
-                        $inner = preg_replace_callback('/\\\\([0-7]{1,3})/', fn ($m) => chr(octdec($m[1])), $inner) ?? $inner;
-                        $cleaned = preg_replace('/[^\x20-\x7E\r\n]/', ' ', $inner) ?? '';
-                        if (strlen(trim($cleaned)) >= 2) {
-                            $chunks[] = trim($cleaned);
+                $decompressedStreams[] = $decoded;
+
+                // Parse ToUnicode CMap mappings if present in this stream
+                if (str_contains($decoded, 'beginbfchar')) {
+                    if (preg_match_all('/beginbfchar(.*?)endbfchar/s', $decoded, $bfMatches)) {
+                        foreach ($bfMatches[1] as $block) {
+                            if (preg_match_all('/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/', $block, $pairs, PREG_SET_ORDER)) {
+                                foreach ($pairs as $pair) {
+                                    $src = strtoupper($pair[1]);
+                                    $dstHex = $pair[2];
+                                    $char = @hex2bin($dstHex);
+                                    if ($char !== false) {
+                                        $utf8 = strlen($dstHex) >= 4
+                                            ? @mb_convert_encoding($char, 'UTF-8', 'UTF-16BE')
+                                            : $char;
+                                        if (is_string($utf8) && $utf8 !== '') {
+                                            $cmap[$src] = $utf8;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (str_contains($decoded, 'beginbfrange')) {
+                    if (preg_match_all('/beginbfrange(.*?)endbfrange/s', $decoded, $rangeMatches)) {
+                        foreach ($rangeMatches[1] as $block) {
+                            if (preg_match_all('/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/', $block, $ranges, PREG_SET_ORDER)) {
+                                foreach ($ranges as $r) {
+                                    $start = hexdec($r[1]);
+                                    $end = hexdec($r[2]);
+                                    $target = hexdec($r[3]);
+                                    $width = strlen($r[1]);
+                                    if ($end >= $start && ($end - $start) <= 256) {
+                                        for ($code = $start; $code <= $end; $code++) {
+                                            $keyHex = strtoupper(str_pad(dechex($code), $width, '0', STR_PAD_LEFT));
+                                            $uCode = $target + ($code - $start);
+                                            if ($uCode >= 32 && $uCode <= 126) {
+                                                $cmap[$keyHex] = chr((int) $uCode);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             }
         }
 
-        if (empty($chunks) && preg_match_all('/\((?:\\\\.|[^\\\\()]){3,}\)/s', $pdfBinary, $fallbackMatches)) {
-            foreach ($fallbackMatches[0] as $literal) {
-                $inner = substr($literal, 1, -1);
-                $cleaned = preg_replace('/[^\x20-\x7E]/', ' ', $inner) ?? '';
-                if (strlen(trim($cleaned)) >= 3) {
-                    $chunks[] = trim($cleaned);
+        $chunks = [];
+        foreach ($decompressedStreams as $stream) {
+            if (str_contains($stream, 'beginbfchar') || str_contains($stream, '/CIDInit')) {
+                continue;
+            }
+
+            $textBlocks = [];
+            if (preg_match_all('/BT\b(.*?)\bET/s', $stream, $btMatches)) {
+                $textBlocks = $btMatches[1];
+            }
+
+            foreach ($textBlocks as $block) {
+                // 1. Extract literal strings (...) inside BT..ET
+                if (preg_match_all('/\((?:\\\\.|[^\\\\()])*\)/s', $block, $strMatches)) {
+                    $lineParts = [];
+                    foreach ($strMatches[0] as $literal) {
+                        $inner = substr($literal, 1, -1);
+                        $inner = str_replace(
+                            ['\\n', '\\r', '\\t', '\\(', '\\)', '\\\\'],
+                            [' ', ' ', ' ', '(', ')', '\\'],
+                            $inner
+                        );
+                        $inner = preg_replace_callback('/\\\\([0-7]{1,3})/', fn ($m) => chr(octdec($m[1])), $inner) ?? $inner;
+                        $lineParts[] = $inner;
+                    }
+                    $joined = trim(implode('', $lineParts));
+                    if ($joined !== '') {
+                        $chunks[] = $joined;
+                    }
+                }
+
+                // 2. Extract hex strings <...> inside BT..ET using ToUnicode CMap or UTF-16BE
+                if (! empty($cmap) && preg_match_all('/<([0-9A-Fa-f]{2,})>/', $block, $hexMatches)) {
+                    $decodedHexLine = '';
+                    foreach ($hexMatches[1] as $hexStr) {
+                        $upperHex = strtoupper($hexStr);
+                        $step = isset($cmap[substr($upperHex, 0, 4)]) ? 4 : 2;
+                        for ($i = 0; $i < strlen($upperHex); $i += $step) {
+                            $token = substr($upperHex, $i, $step);
+                            if (isset($cmap[$token])) {
+                                $decodedHexLine .= $cmap[$token];
+                            }
+                        }
+                    }
+                    if (trim($decodedHexLine) !== '') {
+                        $chunks[] = trim($decodedHexLine);
+                    }
                 }
             }
         }
 
-        $combined = implode(' ', $chunks);
-        $combined = preg_replace('/\s+/', ' ', $combined) ?? '';
+        $cleanSentences = $this->extractCleanSentences(implode(' ', $chunks));
 
-        return Str::limit(trim($combined), 15000, '');
+        return Str::limit(implode(' ', $cleanSentences), 15000, '');
+    }
+
+    /**
+     * Filter raw text into verified, human-readable English sentences and reject any binary/encoding noise.
+     *
+     * @return array<int, string>
+     */
+    public function extractCleanSentences(string $rawText): array
+    {
+        if (trim($rawText) === '') {
+            return [];
+        }
+
+        $normalized = preg_replace('/[^\x20-\x7E\r\n]/', ' ', $rawText) ?? '';
+        $normalized = preg_replace('/\s+/', ' ', $normalized) ?? '';
+        $candidates = preg_split('/(?<=[.?!:;])\s+|\s{2,}/', $normalized) ?: [];
+
+        $clean = [];
+        foreach ($candidates as $candidate) {
+            $trimmed = trim($candidate);
+            if ($this->isCleanReadableSentence($trimmed)) {
+                $clean[] = $trimmed;
+            }
+            if (count($clean) >= 60) {
+                break;
+            }
+        }
+
+        return array_values(array_unique($clean));
+    }
+
+    /**
+     * Strictly verify that a string is genuine human-readable text and not compressed stream noise.
+     */
+    public function isCleanReadableSentence(string $text): bool
+    {
+        $trimmed = trim($text);
+        $len = strlen($trimmed);
+        if ($len < 25 || $len > 320) {
+            return false;
+        }
+
+        // Reject strings containing binary/stream noise markers
+        if (preg_match('/(\\\\\$|\\\\[A-Za-z0-9]|[|@^~`{}\[\]<>]|obj\b|endobj\b|stream\b|FlateDecode)/', $trimmed)) {
+            return false;
+        }
+
+        // Require at least 78% of characters to be standard letters, digits, spaces, or normal punctuation
+        $lettersAndSpaces = preg_match_all('/[a-zA-Z\s]/', $trimmed);
+        if ($lettersAndSpaces < ($len * 0.78)) {
+            return false;
+        }
+
+        // Check token quality: must have at least 5 real words of 3+ letters, and very few 1-2 char isolated tokens
+        $tokens = preg_split('/\s+/', $trimmed) ?: [];
+        if (count($tokens) < 5) {
+            return false;
+        }
+
+        $realWords = 0;
+        $noiseTokens = 0;
+        foreach ($tokens as $tok) {
+            $cleanTok = trim($tok, ".,;:?!()\"'-");
+            if ($cleanTok === '') {
+                continue;
+            }
+            if (preg_match('/^[a-zA-Z]{3,}$/', $cleanTok) && preg_match('/[aeiouAEIOU]/', $cleanTok)) {
+                $realWords++;
+            } elseif (strlen($cleanTok) <= 2 && ! in_array(strtolower($cleanTok), ['a', 'an', 'in', 'on', 'of', 'to', 'is', 'it', 'or', 'by', 'as', 'at', 'be', 'we', 'no', 'so', 'do', 'if', 'up'], true)) {
+                $noiseTokens++;
+            } elseif (preg_match('/[A-Z].*[a-z].*[A-Z]/', $cleanTok) || preg_match('/[0-9]+[A-Za-z]+[0-9]+/', $cleanTok)) {
+                $noiseTokens += 2;
+            }
+        }
+
+        if ($realWords < 4 || $noiseTokens > max(2, (int) floor(count($tokens) * 0.2))) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Detect whether a quiz's existing questions contain legacy binary stream noise so they can be auto-repaired.
+     *
+     * @param array<int, mixed> $questions
+     */
+    public function hasCorruptedQuestions(array $questions): bool
+    {
+        if (empty($questions)) {
+            return false;
+        }
+        foreach ($questions as $q) {
+            if (! is_array($q)) {
+                continue;
+            }
+            $prompt = (string) ($q['prompt'] ?? '');
+            $firstOption = (string) ($q['options'][0] ?? '');
+            if (
+                str_contains($prompt, 'which statement accurately reflects the course material?')
+                && ! $this->isCleanReadableSentence($firstOption)
+            ) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** @return array{questions: array<int, array{prompt: string, options: array<int, string>, correct_index: int, skill: string}>, source: string} */
@@ -78,7 +269,8 @@ class LmsAiService
         ?string $pdfName = null,
     ): array {
         $targetCount = max(1, min(50, $count));
-        $cleanPdfText = trim((string) $pdfText);
+        $cleanSentences = $this->extractCleanSentences((string) $pdfText);
+        $cleanPdfText = implode(' ', $cleanSentences);
         $cleanPdfName = trim((string) $pdfName);
         $hasPdf = $cleanPdfText !== '' || ! empty($pdfBase64) || $cleanPdfName !== '';
 
@@ -140,7 +332,7 @@ class LmsAiService
                     ->timeout(30)
                     ->post("https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent", [
                         'contents' => [['parts' => $parts]],
-                        'generationConfig' => ['responseMimeType' => 'application/json', 'responseJsonSchema' => $schema, 'temperature' => 0.35],
+                        'generationConfig' => ['responseMimeType' => 'application/json', 'responseSchema' => $schema, 'temperature' => 0.35],
                     ]);
 
                 if ($response->status() === 503 || $response->status() === 429) {
@@ -339,59 +531,73 @@ class LmsAiService
     }
 
     /**
-     * Generate questions directly from extracted PDF text (or PDF filename/topic fallback when local).
+     * Generate clear, understandable multiple-choice questions from verified PDF text
+     * or topic-specific academic concepts when offline/local.
      *
      * @return array<int, array{prompt: string, options: array<int, string>, correct_index: int, skill: string}>
      */
-    private function generateQuestionsFromPdf(string $pdfText, string $pdfName, string $topic, string $subject, int $count): array
+    public function generateQuestionsFromPdf(string $pdfText, string $pdfName, string $topic, string $subject, int $count): array
     {
         $targetCount = max(1, min(50, $count));
-        $cleanTopic = trim($topic) ?: ($pdfName !== '' ? pathinfo($pdfName, PATHINFO_FILENAME) : 'Course Handout');
-        $cleanSubject = trim($subject) ?: 'BSIT Course';
-        $docLabel = $pdfName !== '' ? $pdfName : "{$cleanTopic} PDF";
+        $rawTitleFromPdf = $pdfName !== '' ? pathinfo($pdfName, PATHINFO_FILENAME) : '';
+        $cleanPdfTitle = trim(preg_replace('/^(Module\s*\d+[\s_:-]*)/i', '', str_replace(['_', '-'], ' ', $rawTitleFromPdf)) ?? '');
+        $cleanTopic = trim($topic) ?: ($cleanPdfTitle ?: 'Core Course Concepts');
+        $cleanSubject = trim($subject) ?: 'Information Technology';
 
-        // Split extracted PDF text into meaningful factual sentences if available
-        $sentences = [];
-        if ($pdfText !== '') {
-            $rawSentences = preg_split('/(?<=[.?!])\s+|\n+/', $pdfText) ?: [];
-            foreach ($rawSentences as $sentence) {
-                $trimmed = trim(preg_replace('/\s+/', ' ', $sentence) ?? '');
-                if (strlen($trimmed) >= 35 && strlen($trimmed) <= 220 && preg_match('/[a-zA-Z]{4,}/', $trimmed)) {
-                    $sentences[] = $trimmed;
-                }
-                if (count($sentences) >= 25) {
-                    break;
-                }
-            }
-        }
+        // Extract only verified, human-readable sentences from the PDF
+        $sentences = $this->extractCleanSentences($pdfText);
 
         $generated = [];
+        $questionStems = [
+            "According to the course material on {$cleanTopic}, which of the following statements is correct?",
+            "Which principle or concept is emphasized in the {$cleanTopic} module?",
+            "In the context of {$cleanTopic}, which statement accurately describes a core concept from the handout?",
+            "Based on the lesson coverage for {$cleanTopic}, which of the following is a valid technical takeaway?",
+            "When studying {$cleanTopic} in {$cleanSubject}, which key point is highlighted in the reference material?",
+        ];
+
+        $distractorPools = [
+            [
+                "Security controls, data validation, and access policies are unnecessary when implementing {$cleanTopic}.",
+                "All data in {$cleanTopic} should be stored in unencrypted plain text without backup or integrity checks.",
+                "System performance in {$cleanTopic} is achieved by removing authentication and error handling.",
+            ],
+            [
+                "{$cleanTopic} operates without structured protocols, schema definitions, or architectural standards.",
+                "Documentation and modular design are discouraged when configuring {$cleanTopic}.",
+                "Verification testing is skipped entirely during the deployment of {$cleanTopic}.",
+            ],
+            [
+                "Redundancy, confidentiality, and integrity are ignored in modern {$cleanTopic} implementations.",
+                "{$cleanTopic} relies exclusively on manual unverified inputs rather than automated validation.",
+                "Scalability and maintainability have no impact on {$cleanTopic} architecture.",
+            ],
+        ];
+
         foreach ($sentences as $idx => $statement) {
-            $shortStatement = Str::limit($statement, 140);
+            $shortStatement = Str::limit($statement, 160);
+            $stem = $questionStems[$idx % count($questionStems)];
+            $distractors = $distractorPools[$idx % count($distractorPools)];
+            $correctPos = $idx % 4;
+
+            $options = $distractors;
+            array_splice($options, $correctPos, 0, [$shortStatement]);
+
             $generated[] = [
-                'prompt' => "Based on the uploaded PDF reference ({$docLabel}) for {$cleanTopic}, which statement accurately reflects the course material?",
-                'options' => [
-                    $shortStatement,
-                    "The PDF handout states that {$cleanTopic} is unrelated to {$cleanSubject} system design.",
-                    "According to the document, validation and structured analysis are omitted in {$cleanTopic}.",
-                    "The reference material specifies that {$cleanTopic} requires no testing or verification.",
-                ],
-                'correct_index' => 0,
-                'skill' => "{$cleanTopic} (PDF Reference #".($idx + 1).')',
+                'prompt' => $stem,
+                'options' => array_values($options),
+                'correct_index' => $correctPos,
+                'skill' => "{$cleanTopic} Concept #".($idx + 1),
             ];
             if (count($generated) >= $targetCount) {
                 return $generated;
             }
         }
 
-        $baseQuestions = $this->sampleQuestions($cleanTopic, $cleanSubject, $targetCount);
+        // Topic-aware intelligible academic questions (including Secure Data Storage, Database, Networking, Programming, etc.)
+        $baseQuestions = $this->sampleQuestions($cleanTopic.' '.$cleanPdfTitle, $cleanSubject, $targetCount);
         foreach ($baseQuestions as $baseQuestion) {
-            $generated[] = [
-                'prompt' => "[{$docLabel}] ".$baseQuestion['prompt'],
-                'options' => $baseQuestion['options'],
-                'correct_index' => $baseQuestion['correct_index'],
-                'skill' => $baseQuestion['skill'],
-            ];
+            $generated[] = $baseQuestion;
             if (count($generated) >= $targetCount) {
                 break;
             }
@@ -403,8 +609,14 @@ class LmsAiService
     /** @return array<int, string> */
     private function candidateModels(): array
     {
-        $primary = (string) config('services.gemini.model', 'gemini-3.5-flash');
-        $pool = [$primary, 'gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-3.8-flash'];
+        $configured = (string) config('services.gemini.model', 'gemini-2.5-flash');
+        $pool = [
+            'gemini-2.5-flash',
+            'gemini-2.0-flash',
+            'gemini-2.0-flash-lite',
+            'gemini-1.5-flash',
+            $configured,
+        ];
         return array_values(array_unique(array_filter($pool)));
     }
 
@@ -497,6 +709,20 @@ class LmsAiService
                 ['Which fraction is greatest?', ['1/5', '1/2', '1/4', '1/8'], 1, 'Comparing fractions'],
                 ['What is 3/6 in simplest form?', ['1/2', '1/3', '2/3', '3/5'], 0, 'Simplifying fractions'],
                 ['What is 2/3 of 12?', ['6', '8', '9', '10'], 1, 'Fraction of a quantity'],
+            ],
+            'secure data storage' => [
+                ['What is the primary purpose of encryption at rest in secure data storage?', ['To protect stored data on disks or databases from unauthorized access if physical or storage media is compromised', 'To increase the file size of stored documents for faster network routing', 'To bypass user authentication during database queries', 'To disable automatic backups on cloud servers'], 0, 'Encryption at Rest'],
+                ['Which security principle ensures that stored data has not been tampered with or altered by unauthorized users?', ['Data Integrity (using cryptographic hashes, checksums, or digital signatures)', 'Data Redundancy without access controls', 'Open public read-write file permissions', 'Storing passwords in plain text configuration files'], 0, 'Data Integrity'],
+                ['In secure data storage architecture, what does the Principle of Least Privilege require?', ['Users and services are granted only the minimum storage access permissions needed to perform their authorized tasks', 'Every user account is given full administrator access to all storage buckets', 'Encryption keys are shared publicly across all client devices', 'Database logs are disabled to save disk space'], 0, 'Access Control & Least Privilege'],
+                ['Which strategy best protects an organization against data loss from ransomware or hardware failure?', ['Maintaining regular, isolated, and encrypted 3-2-1 backups with tested recovery procedures', 'Storing a single copy of all production files on the local web server', 'Disabling firewall rules on the database server', 'Allowing anonymous FTP uploads to the storage volume'], 0, 'Backup & Disaster Recovery'],
+                ['How should sensitive credentials and encryption keys be managed in a secure storage system?', ['Stored in a dedicated Key Management Service (KMS) or Hardware Security Module (HSM) with key rotation', 'Hardcoded directly inside frontend JavaScript source files', 'Sent in plain text inside URL query parameters', 'Written in public repository README files'], 0, 'Key Management'],
+            ],
+            'storage' => [
+                ['What is the primary purpose of encryption at rest in secure data storage?', ['To protect stored data on disks or databases from unauthorized access if storage media is compromised', 'To increase the file size of stored documents for faster network routing', 'To bypass user authentication during database queries', 'To disable automatic backups on cloud servers'], 0, 'Encryption at Rest'],
+                ['Which security principle ensures that stored data has not been tampered with or altered by unauthorized users?', ['Data Integrity (using cryptographic hashes, checksums, or digital signatures)', 'Data Redundancy without access controls', 'Open public read-write file permissions', 'Storing passwords in plain text configuration files'], 1 === 1 ? 0 : 1, 'Data Integrity'],
+                ['In secure data storage architecture, what does the Principle of Least Privilege require?', ['Users and services are granted only the minimum storage access permissions needed to perform their tasks', 'Every user account is given full administrator access to all storage buckets', 'Encryption keys are shared publicly across all client devices', 'Database logs are disabled to save disk space'], 0, 'Access Control & Least Privilege'],
+                ['Which strategy best protects an organization against data loss from ransomware or hardware failure?', ['Maintaining regular, isolated, and encrypted backups with tested recovery procedures', 'Storing a single copy of all production files on the local web server', 'Disabling firewall rules on the database server', 'Allowing anonymous uploads to the storage volume'], 0, 'Backup & Disaster Recovery'],
+                ['How should sensitive credentials and encryption keys be managed in a secure storage system?', ['Stored in a dedicated Key Management Service (KMS) or Hardware Security Module (HSM) with key rotation', 'Hardcoded directly inside frontend JavaScript source files', 'Sent in plain text inside URL query parameters', 'Written in public repository README files'], 0, 'Key Management'],
             ],
         ];
         $targetCount = max(1, min(50, $count));

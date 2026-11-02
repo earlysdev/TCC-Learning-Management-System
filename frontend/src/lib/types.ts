@@ -22,6 +22,8 @@ export interface Quiz {
   instructions: string | null;
   reference_pdf_name?: string | null;
   reference_pdf_text?: string | null;
+  reference_pdf_data?: string | null;
+  has_pdf_data?: boolean;
   question_count: number;
   time_limit_minutes?: number;
   shuffle_questions?: boolean;

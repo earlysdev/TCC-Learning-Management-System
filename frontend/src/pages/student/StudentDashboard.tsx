@@ -7,13 +7,14 @@ import { getYearLevelFromBlock } from '../../lib/constants';
 import { 
   BookOpen, CheckCircle2, Award, Sparkles, Send, 
   ArrowRight, ArrowLeft, Clock, AlertCircle, FileQuestion, Calendar, Trophy,
-  ExternalLink, Loader2
+  ExternalLink, Loader2, FileText, Info, Eye
 } from 'lucide-react';
 import GlassCard from '../../components/ui/GlassCard';
 import StatCard from '../../components/ui/StatCard';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import ProfileUpdateCard from '../../components/ui/ProfileUpdateCard';
+import QuizDetailsPdfModal from '../../components/ui/QuizDetailsPdfModal';
 
 export default function StudentDashboard() {
   const user = getLmsUser();
@@ -28,6 +29,7 @@ export default function StudentDashboard() {
 
   // Taking a quiz state
   const [selectedQuiz, setSelectedQuiz] = useState<Quiz | null>(null);
+  const [detailsModalQuiz, setDetailsModalQuiz] = useState<Quiz | null>(null);
   const [answers, setAnswers] = useState<number[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [takingQuizId, setTakingQuizId] = useState<number | null>(null);
@@ -229,43 +231,134 @@ export default function StudentDashboard() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.25rem' }}>
             {quizzes.slice(0, 4).map(quiz => (
               <GlassCard key={quiz.id} hoverable style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', gap: '0.5rem', flexWrap: 'wrap' }}>
                   <span style={{ fontSize: '0.75rem', color: 'var(--primary-300)', fontWeight: 600, textTransform: 'uppercase' }}>
                     {quiz.subject}
                   </span>
-                  <Badge variant={quiz.attempted ? 'success' : 'primary'}>
-                    {quiz.attempted ? 'Completed' : 'Ready'}
-                  </Badge>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    {quiz.reference_pdf_name && (
+                      <span
+                        onClick={() => setDetailsModalQuiz(quiz)}
+                        title={`Click to view attached PDF: ${quiz.reference_pdf_name}`}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.25rem',
+                          fontSize: '0.7rem',
+                          padding: '0.18rem 0.5rem',
+                          borderRadius: '999px',
+                          background: 'rgba(139, 92, 246, 0.2)',
+                          border: '1px solid rgba(139, 92, 246, 0.45)',
+                          color: '#ddd6fe',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <FileText size={11} /> PDF
+                      </span>
+                    )}
+                    <Badge variant={quiz.attempted ? 'success' : 'primary'}>
+                      {quiz.attempted ? 'Completed' : 'Ready'}
+                    </Badge>
+                  </div>
                 </div>
-                <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'white', marginBottom: '0.4rem' }}>{quiz.title}</h3>
-                <p style={{ color: 'var(--neutral-300)', fontSize: '0.85rem', marginBottom: '1rem', flex: 1 }}>
+                <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'white', marginBottom: '0.35rem' }}>{quiz.title}</h3>
+                <p style={{ color: 'var(--neutral-300)', fontSize: '0.84rem', marginBottom: '0.65rem' }}>
                   {quiz.topic && quiz.topic.trim().toLowerCase() !== quiz.title.trim().toLowerCase()
-                    ? `${quiz.topic} • ${quiz.question_count} questions`
-                    : `${quiz.question_count} questions`}
+                    ? `${quiz.topic} • ${quiz.question_count} questions • ${quiz.time_limit_minutes || 15} mins`
+                    : `${quiz.question_count} questions • ${quiz.time_limit_minutes || 15} mins`}
                 </p>
+
+                {quiz.instructions && (
+                  <div
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.04)',
+                      border: '1px solid rgba(255, 255, 255, 0.08)',
+                      borderRadius: '8px',
+                      padding: '0.55rem 0.7rem',
+                      marginBottom: '0.75rem',
+                      fontSize: '0.8rem',
+                      color: 'var(--neutral-300)',
+                      lineHeight: 1.45,
+                      flex: 1,
+                    }}
+                  >
+                    <div style={{ fontSize: '0.68rem', color: '#93c5fd', fontWeight: 700, textTransform: 'uppercase', marginBottom: '0.2rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                      <Info size={11} /> Instructions
+                    </div>
+                    <div style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                      {quiz.instructions}
+                    </div>
+                  </div>
+                )}
+
+                {quiz.reference_pdf_name && (
+                  <button
+                    type="button"
+                    onClick={() => setDetailsModalQuiz(quiz)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.45rem',
+                      width: '100%',
+                      textAlign: 'left',
+                      background: 'rgba(139, 92, 246, 0.12)',
+                      border: '1px solid rgba(139, 92, 246, 0.35)',
+                      borderRadius: '8px',
+                      padding: '0.48rem 0.7rem',
+                      marginBottom: '0.75rem',
+                      color: '#ddd6fe',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <FileText size={14} style={{ flexShrink: 0, color: '#c4b5fd' }} />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                      {quiz.reference_pdf_name}
+                    </span>
+                    <span style={{ fontSize: '0.72rem', color: '#c4b5fd', textDecoration: 'underline', flexShrink: 0 }}>
+                      View PDF
+                    </span>
+                  </button>
+                )}
+
                 {quiz.attempted && (
                   <div style={{ background: 'rgba(67, 160, 71, 0.15)', border: '1px solid rgba(67, 160, 71, 0.3)', padding: '0.5rem 0.75rem', borderRadius: 'var(--radius-md)', marginBottom: '0.75rem', fontSize: '0.85rem', color: '#a5d6a7' }}>
                     Score: <strong>{quiz.score}/{quiz.max_score}</strong> ({Number(quiz.percentage).toFixed(0)}%)
                   </div>
                 )}
-                <Button 
-                  variant={quiz.attempted ? 'outline' : 'primary'} 
-                  disabled={!quiz.attempted && takingQuizId === quiz.id}
-                  onClick={() => {
-                    if (quiz.attempted) {
-                      openQuiz(quiz);
-                      setActiveSection('quizzes');
-                    } else {
-                      openQuizWindow(quiz);
-                    }
-                  }}
-                >
-                  {!quiz.attempted && takingQuizId === quiz.id ? (
-                    <><Loader2 size={14} className="spin-icon" /> Opening Quiz...</>
-                  ) : (
-                    <>{quiz.attempted ? 'View Result & Recs' : 'Take Quiz'} <ArrowRight size={14} /></>
-                  )}
-                </Button>
+
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: 'auto', flexWrap: 'wrap' }}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setDetailsModalQuiz(quiz)}
+                    style={{ flex: 1 }}
+                  >
+                    <Eye size={14} /> {quiz.reference_pdf_name ? 'Details & PDF' : 'View Details'}
+                  </Button>
+                  <Button 
+                    variant={quiz.attempted ? 'outline' : 'primary'} 
+                    size="sm"
+                    disabled={!quiz.attempted && takingQuizId === quiz.id}
+                    style={{ flex: 1 }}
+                    onClick={() => {
+                      if (quiz.attempted) {
+                        openQuiz(quiz);
+                        setActiveSection('quizzes');
+                      } else {
+                        openQuizWindow(quiz);
+                      }
+                    }}
+                  >
+                    {!quiz.attempted && takingQuizId === quiz.id ? (
+                      <><Loader2 size={14} className="spin-icon" /> Opening...</>
+                    ) : (
+                      <>{quiz.attempted ? 'Results' : 'Take Quiz'} <ArrowRight size={14} /></>
+                    )}
+                  </Button>
+                </div>
               </GlassCard>
             ))}
           </div>
@@ -526,23 +619,100 @@ export default function StudentDashboard() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
             {quizzes.map(quiz => (
               <GlassCard key={quiz.id} hoverable style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', gap: '0.5rem', flexWrap: 'wrap' }}>
                   <Badge variant="primary">{quiz.subject}</Badge>
-                  <Badge variant={quiz.attempted ? 'success' : 'warning'}>
-                    {quiz.attempted ? 'Completed' : 'Pending'}
-                  </Badge>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    {quiz.reference_pdf_name && (
+                      <span
+                        onClick={() => setDetailsModalQuiz(quiz)}
+                        title={`Click to view attached PDF: ${quiz.reference_pdf_name}`}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.25rem',
+                          fontSize: '0.72rem',
+                          padding: '0.2rem 0.55rem',
+                          borderRadius: '999px',
+                          background: 'rgba(139, 92, 246, 0.2)',
+                          border: '1px solid rgba(139, 92, 246, 0.45)',
+                          color: '#ddd6fe',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <FileText size={11} /> PDF Handout
+                      </span>
+                    )}
+                    <Badge variant={quiz.attempted ? 'success' : 'warning'}>
+                      {quiz.attempted ? 'Completed' : 'Pending'}
+                    </Badge>
+                  </div>
                 </div>
-                <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: 'white', marginBottom: '0.4rem' }}>{quiz.title}</h3>
-                <p style={{ color: 'var(--neutral-300)', fontSize: '0.9rem', marginBottom: '1rem', flex: 1 }}>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: 'white', marginBottom: '0.35rem' }}>{quiz.title}</h3>
+                <p style={{ color: 'var(--neutral-300)', fontSize: '0.88rem', marginBottom: '0.75rem' }}>
                   {quiz.topic && quiz.topic.trim().toLowerCase() !== quiz.title.trim().toLowerCase() ? (
-                    <>Topic: <strong>{quiz.topic}</strong> • {quiz.question_count} Questions</>
+                    <>Topic: <strong>{quiz.topic}</strong> • {quiz.question_count} Questions • {quiz.time_limit_minutes || 15} mins</>
                   ) : (
-                    <>{quiz.question_count} Questions</>
+                    <>{quiz.question_count} Questions • {quiz.time_limit_minutes || 15} mins</>
                   )}
                 </p>
 
+                {quiz.instructions && (
+                  <div
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.04)',
+                      border: '1px solid rgba(255, 255, 255, 0.08)',
+                      borderRadius: '8px',
+                      padding: '0.6rem 0.75rem',
+                      marginBottom: '0.8rem',
+                      fontSize: '0.82rem',
+                      color: 'var(--neutral-300)',
+                      lineHeight: 1.45,
+                      flex: 1,
+                    }}
+                  >
+                    <div style={{ fontSize: '0.7rem', color: '#93c5fd', fontWeight: 700, textTransform: 'uppercase', marginBottom: '0.2rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                      <Info size={12} /> Instructions
+                    </div>
+                    <div style={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                      {quiz.instructions}
+                    </div>
+                  </div>
+                )}
+
+                {quiz.reference_pdf_name && (
+                  <button
+                    type="button"
+                    onClick={() => setDetailsModalQuiz(quiz)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      width: '100%',
+                      textAlign: 'left',
+                      background: 'rgba(139, 92, 246, 0.12)',
+                      border: '1px solid rgba(139, 92, 246, 0.35)',
+                      borderRadius: '8px',
+                      padding: '0.55rem 0.75rem',
+                      marginBottom: '0.85rem',
+                      color: '#ddd6fe',
+                      fontSize: '0.82rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <FileText size={15} style={{ flexShrink: 0, color: '#c4b5fd' }} />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                      {quiz.reference_pdf_name}
+                    </span>
+                    <span style={{ fontSize: '0.75rem', color: '#c4b5fd', textDecoration: 'underline', flexShrink: 0 }}>
+                      Open PDF
+                    </span>
+                  </button>
+                )}
+
                 {quiz.attempted && (
-                  <div style={{ background: 'rgba(67, 160, 71, 0.15)', border: '1px solid rgba(67, 160, 71, 0.3)', padding: '0.6rem 0.85rem', borderRadius: 'var(--radius-md)', marginBottom: '1rem' }}>
+                  <div style={{ background: 'rgba(67, 160, 71, 0.15)', border: '1px solid rgba(67, 160, 71, 0.3)', padding: '0.6rem 0.85rem', borderRadius: 'var(--radius-md)', marginBottom: '0.85rem' }}>
                     <div style={{ fontSize: '0.75rem', color: '#a5d6a7', textTransform: 'uppercase', fontWeight: 600 }}>Recorded Score</div>
                     <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'white' }}>
                       {quiz.score}/{quiz.max_score} <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#a5d6a7' }}>({Number(quiz.percentage).toFixed(0)}%)</span>
@@ -550,17 +720,27 @@ export default function StudentDashboard() {
                   </div>
                 )}
 
-                <Button 
-                  variant={quiz.attempted ? 'outline' : 'accent'}
-                  disabled={!quiz.attempted && takingQuizId === quiz.id}
-                  onClick={() => quiz.attempted ? openQuiz(quiz) : openQuizWindow(quiz)}
-                >
-                  {!quiz.attempted && takingQuizId === quiz.id ? (
-                    <><Loader2 size={16} className="spin-icon" /> Opening Quiz...</>
-                  ) : (
-                    <>{quiz.attempted ? 'Review Result & AI Recommendations' : 'Start Quiz'} <ArrowRight size={16} /></>
-                  )}
-                </Button>
+                <div style={{ display: 'flex', gap: '0.6rem', marginTop: 'auto', flexWrap: 'wrap' }}>
+                  <Button
+                    variant="outline"
+                    onClick={() => setDetailsModalQuiz(quiz)}
+                    style={{ flex: 1 }}
+                  >
+                    <Eye size={15} /> {quiz.reference_pdf_name ? 'View Details & PDF' : 'View Details'}
+                  </Button>
+                  <Button 
+                    variant={quiz.attempted ? 'outline' : 'accent'}
+                    disabled={!quiz.attempted && takingQuizId === quiz.id}
+                    style={{ flex: 1 }}
+                    onClick={() => quiz.attempted ? openQuiz(quiz) : openQuizWindow(quiz)}
+                  >
+                    {!quiz.attempted && takingQuizId === quiz.id ? (
+                      <><Loader2 size={16} className="spin-icon" /> Opening...</>
+                    ) : (
+                      <>{quiz.attempted ? 'View Result' : 'Start Quiz'} <ArrowRight size={16} /></>
+                    )}
+                  </Button>
+                </div>
               </GlassCard>
             ))}
           </div>
@@ -869,6 +1049,21 @@ export default function StudentDashboard() {
         {activeSection === 'recommendations' && renderRecommendations()}
         {activeSection === 'settings' && renderSettings()}
       </div>
+
+      {detailsModalQuiz && (
+        <QuizDetailsPdfModal
+          quiz={detailsModalQuiz}
+          onClose={() => setDetailsModalQuiz(null)}
+          onStartQuiz={(q) => {
+            if (q.attempted) {
+              openQuiz(q);
+              setActiveSection('quizzes');
+            } else {
+              openQuizWindow(q);
+            }
+          }}
+        />
+      )}
     </DashboardLayout>
   );
 }

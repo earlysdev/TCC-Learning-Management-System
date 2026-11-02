@@ -51,6 +51,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // Student Quiz Routes
     Route::get('/student/quizzes', [QuizController::class, 'studentQuizzes']);
     Route::get('/student/quizzes/{quiz}', [QuizController::class, 'showForStudent']);
+    Route::get('/student/quizzes/{quiz}/pdf', [QuizController::class, 'showPdf']);
+    Route::get('/quizzes/{quiz}/pdf', [QuizController::class, 'showPdf']);
     Route::post('/student/quizzes/{quiz}/violation', [QuizController::class, 'logViolation'])->middleware('throttle:60,1');
     Route::post('/student/quizzes/{quiz}/integrity-events', [QuizController::class, 'logViolation'])->middleware('throttle:60,1');
     Route::post('/student/quizzes/{quiz}/submit', [QuizController::class, 'submit'])->middleware('throttle:20,1');

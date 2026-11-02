@@ -10,6 +10,8 @@ import {
   Eye,
   ExternalLink,
   FileQuestion,
+  FileText,
+  Info,
   LockKeyhole,
   MonitorOff,
   Send,
@@ -20,6 +22,7 @@ import {
 import { lmsFetch } from '../../lmsApi';
 import type { Quiz, Recommendation } from '../../lib/types';
 import Button from '../../components/ui/Button';
+import QuizDetailsPdfModal from '../../components/ui/QuizDetailsPdfModal';
 
 type QuizResult = {
   score: number;
@@ -137,8 +140,14 @@ export default function StudentQuizTakePage() {
   const [integrityIncidentCount, setIntegrityIncidentCount] = useState(0);
   const [violationsList, setViolationsList] = useState<Array<{ type: string; label: string; timestamp: string }>>([]);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  const [showPdfModal, setShowPdfModal] = useState(false);
+  const showPdfModalRef = useRef(false);
   const startTimeRef = useRef<string>(new Date().toISOString());
   const lastIntegrityEvent = useRef<{ eventType: IntegrityEventType; occurredAt: number } | null>(null);
+
+  useEffect(() => {
+    showPdfModalRef.current = showPdfModal;
+  }, [showPdfModal]);
 
   const reportIntegrityEvent = useCallback((eventType: IntegrityEventType, details: Record<string, unknown>) => {
     if (!quizId) return;
@@ -270,6 +279,10 @@ export default function StudentQuizTakePage() {
     };
 
     const handleWindowBlur = () => {
+      // Do not trigger anti-cheat blur when focus moves into the in-window PDF viewer iframe
+      if (showPdfModalRef.current || document.activeElement?.tagName === 'IFRAME') {
+        return;
+      }
       // Window lost focus (alt-tabbed, clicked other monitor, or opened snipping tool)
       reportIntegrityEvent('assessment_window_blurred', { source: 'window_blur' });
     };
@@ -599,6 +612,37 @@ export default function StudentQuizTakePage() {
             <div><span>Progress</span><strong>{answeredCount} / {quiz.questions?.length ?? 0}</strong></div>
             <div className="quiz-progress-track"><span style={{ width: `${(answeredCount / Math.max(quiz.questions?.length ?? 1, 1)) * 100}%` }} /></div>
           </div>
+
+          <button
+            type="button"
+            onClick={() => setShowPdfModal(true)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.6rem',
+              width: '100%',
+              textAlign: 'left',
+              background: quiz.reference_pdf_name ? 'rgba(139, 92, 246, 0.16)' : 'rgba(255, 255, 255, 0.05)',
+              border: quiz.reference_pdf_name ? '1px solid rgba(139, 92, 246, 0.42)' : '1px solid rgba(255, 255, 255, 0.14)',
+              borderRadius: '10px',
+              padding: '0.7rem 0.85rem',
+              marginBottom: '0.9rem',
+              color: 'white',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+            }}
+          >
+            <FileText size={18} style={{ color: quiz.reference_pdf_name ? '#c4b5fd' : '#93c5fd', flexShrink: 0 }} />
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontSize: '0.7rem', color: quiz.reference_pdf_name ? '#c4b5fd' : '#93c5fd', textTransform: 'uppercase', fontWeight: 700 }}>
+                {quiz.reference_pdf_name ? 'Attached PDF Handout' : 'Quiz Details & Instructions'}
+              </div>
+              <div style={{ fontSize: '0.84rem', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {quiz.reference_pdf_name || 'View Instructions & Details'}
+              </div>
+            </div>
+          </button>
+
           <div className="quiz-integrity-info">
             <LockKeyhole size={19} aria-hidden="true" />
             <div>
@@ -616,6 +660,21 @@ export default function StudentQuizTakePage() {
               <h2>Answer each question</h2>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+              {quiz.reference_pdf_name && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowPdfModal(true)}
+                  style={{
+                    borderColor: 'rgba(139, 92, 246, 0.5)',
+                    background: 'rgba(139, 92, 246, 0.16)',
+                    color: '#ddd6fe',
+                  }}
+                >
+                  <FileText size={15} /> View PDF Handout
+                </Button>
+              )}
               <div className="quiz-question-count"><FileQuestion size={18} /> {quiz.questions?.length ?? 0} questions</div>
               <Button
                 type="button"
@@ -629,7 +688,47 @@ export default function StudentQuizTakePage() {
             </div>
           </div>
 
-          {quiz.instructions && <p className="quiz-instructions">{quiz.instructions}</p>}
+          {quiz.instructions && (
+            <div
+              className="quiz-instructions"
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '1rem',
+                flexWrap: 'wrap',
+              }}
+            >
+              <div style={{ flex: 1, minWidth: '240px' }}>
+                <div style={{ fontSize: '0.72rem', color: '#93c5fd', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  <Info size={13} /> Instructions for Students
+                </div>
+                <div>{quiz.instructions}</div>
+              </div>
+              {quiz.reference_pdf_name && (
+                <button
+                  type="button"
+                  onClick={() => setShowPdfModal(true)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.45rem',
+                    padding: '0.5rem 0.9rem',
+                    borderRadius: '8px',
+                    background: 'rgba(139, 92, 246, 0.24)',
+                    border: '1px solid rgba(139, 92, 246, 0.5)',
+                    color: '#ede9fe',
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    flexShrink: 0,
+                  }}
+                >
+                  <FileText size={15} /> Open Attached PDF ({quiz.reference_pdf_name})
+                </button>
+              )}
+            </div>
+          )}
           {error && <div className="quiz-inline-error" role="alert"><AlertTriangle size={18} /> {error}</div>}
 
           <form onSubmit={submitQuiz} className="quiz-question-form">
@@ -755,6 +854,13 @@ export default function StudentQuizTakePage() {
             Keep this window active and focused at all times to avoid further penalties.
           </p>
         </div>
+      )}
+      {showPdfModal && !isBlocked && (
+        <QuizDetailsPdfModal
+          quiz={quiz}
+          onClose={() => setShowPdfModal(false)}
+          inAssessmentWindow
+        />
       )}
     </main>
   );
