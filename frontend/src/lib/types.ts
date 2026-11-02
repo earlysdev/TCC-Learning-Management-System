@@ -63,6 +63,8 @@ export interface Question {
   points?: number;
 }
 
+export type QuizQuestion = Question;
+
 export interface ReviewQuestion {
   prompt: string;
   options: string[];

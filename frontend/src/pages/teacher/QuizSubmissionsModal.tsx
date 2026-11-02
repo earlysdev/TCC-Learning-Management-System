@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { 
   ShieldAlert, ShieldCheck, AlertTriangle, Users, 
-  ChevronDown, ChevronUp, EyeOff, Search, Radio, Clock, Lock
+  ChevronDown, ChevronUp, Eye, EyeOff, Search, Radio, Clock, Lock, Monitor, MousePointer2
 } from 'lucide-react';
-import type { Quiz } from '../../lib/types';
+import type { Quiz, QuizQuestion } from '../../lib/types';
 import Modal from '../../components/ui/Modal';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
@@ -54,6 +54,20 @@ interface LiveSessionRecord {
   max_score: number;
   cheating_attempts_count: number;
   time_remaining_seconds?: number | null;
+  answers?: number[];
+  question_order?: number[];
+  cursor_x?: number;
+  cursor_y?: number;
+  cursor_trail?: Array<{ x: number; y: number }>;
+  hovered_element?: string | null;
+  scroll_y_pct?: number;
+  device_label?: string;
+  viewport_width?: number;
+  viewport_height?: number;
+  is_fullscreen?: boolean;
+  is_blocked?: boolean;
+  interruption_title?: string | null;
+  ip_address?: string;
   started_at?: string;
   last_active_at?: string;
 }
@@ -74,6 +88,8 @@ function formatRemainingTime(secs: number | null | undefined): string {
 export default function QuizSubmissionsModal({ quiz, isOpen, onClose }: QuizSubmissionsModalProps) {
   const [submissions, setSubmissions] = useState<SubmissionRecord[]>([]);
   const [liveSessions, setLiveSessions] = useState<LiveSessionRecord[]>([]);
+  const [liveQuestions, setLiveQuestions] = useState<QuizQuestion[]>([]);
+  const [monitoredStudentId, setMonitoredStudentId] = useState<number | null>(null);
   const [quizType, setQuizType] = useState<'formative' | 'summative'>('formative');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -89,9 +105,11 @@ export default function QuizSubmissionsModal({ quiz, isOpen, onClose }: QuizSubm
     setSearch('');
     setExpandedId(null);
     setQuizType(quiz.quiz_type === 'summative' ? 'summative' : 'formative');
+    setLiveQuestions(Array.isArray(quiz.questions) ? quiz.questions : []);
 
     const fetchMonitorData = (isInitial: boolean) => {
       lmsFetch<{
+        quiz?: { questions?: QuizQuestion[]; quiz_type?: 'formative' | 'summative' };
         quiz_type?: 'formative' | 'summative';
         live_monitoring_enabled?: boolean;
         live_sessions?: LiveSessionRecord[];
@@ -102,7 +120,15 @@ export default function QuizSubmissionsModal({ quiz, isOpen, onClose }: QuizSubm
           if (data.quiz_type) {
             setQuizType(data.quiz_type === 'summative' ? 'summative' : 'formative');
           }
-          setLiveSessions(Array.isArray(data.live_sessions) ? data.live_sessions : []);
+          if (Array.isArray(data.quiz?.questions) && data.quiz.questions.length > 0) {
+            setLiveQuestions(data.quiz.questions);
+          }
+          const sessions = Array.isArray(data.live_sessions) ? data.live_sessions : [];
+          setLiveSessions(sessions);
+          setMonitoredStudentId(prev => {
+            if (prev && sessions.some(s => s.student_id === prev)) return prev;
+            return sessions.length > 0 ? sessions[0].student_id : null;
+          });
           setSubmissions(data.submissions || []);
         })
         .catch(err => {
@@ -115,7 +141,7 @@ export default function QuizSubmissionsModal({ quiz, isOpen, onClose }: QuizSubm
     };
 
     fetchMonitorData(true);
-    const interval = window.setInterval(() => fetchMonitorData(false), 4000);
+    const interval = window.setInterval(() => fetchMonitorData(false), 1500);
 
     return () => {
       mounted = false;
@@ -149,6 +175,10 @@ export default function QuizSubmissionsModal({ quiz, isOpen, onClose }: QuizSubm
     );
   });
 
+  const monitoredSession = filteredLiveSessions.find(s => s.student_id === monitoredStudentId)
+    || filteredLiveSessions[0]
+    || null;
+
   const totalCount = submissions.length;
   const flaggedCount = submissions.filter(s => s.cheating_attempts_count > 0).length;
   const cleanCount = totalCount - flaggedCount;
@@ -167,7 +197,7 @@ export default function QuizSubmissionsModal({ quiz, isOpen, onClose }: QuizSubm
         </Button>
       }
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', maxHeight: '72vh', overflowY: 'auto', paddingRight: '0.25rem' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', maxHeight: '76vh', overflowY: 'auto', paddingRight: '0.25rem' }}>
         
         {/* Metrics Overview Header */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(135px, 1fr))', gap: '0.75rem' }}>
@@ -207,7 +237,7 @@ export default function QuizSubmissionsModal({ quiz, isOpen, onClose }: QuizSubm
               padding: '1rem 1.1rem',
               display: 'flex',
               flexDirection: 'column',
-              gap: '0.85rem',
+              gap: '0.9rem',
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
@@ -218,75 +248,410 @@ export default function QuizSubmissionsModal({ quiz, isOpen, onClose }: QuizSubm
                 </strong>
               </div>
               <span style={{ fontSize: '0.76rem', color: '#a7f3d0', background: 'rgba(16, 185, 129, 0.16)', border: '1px solid rgba(16, 185, 129, 0.35)', padding: '0.18rem 0.6rem', borderRadius: '999px', fontWeight: 600 }}>
-                Auto-refreshing every 4s
+                Real-Time Stream (1.5s) • Device, Cursor & Answers
               </span>
             </div>
 
             {filteredLiveSessions.length === 0 ? (
               <div style={{ fontSize: '0.85rem', color: 'var(--neutral-300)', padding: '0.5rem 0' }}>
-                No students are actively taking this Formative quiz right now. As soon as a student opens the quiz, their live progress, current question, score, and timer will appear here in real time.
+                No students are actively taking this Formative quiz right now. As soon as a student clicks Start Quiz, their actual device telemetry, live cursor movement, and selected answers will stream here in real time.
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                {filteredLiveSessions.map((live) => (
+              <>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                  {filteredLiveSessions.map((live) => {
+                    const isSelected = monitoredSession?.student_id === live.student_id;
+                    return (
+                      <div
+                        key={live.id}
+                        style={{
+                          background: isSelected ? 'rgba(59, 130, 246, 0.16)' : 'rgba(0, 0, 0, 0.28)',
+                          border: isSelected
+                            ? '1.5px solid rgba(59, 130, 246, 0.65)'
+                            : live.cheating_attempts_count > 0
+                              ? '1px solid rgba(244, 67, 54, 0.4)'
+                              : '1px solid rgba(255, 255, 255, 0.1)',
+                          borderRadius: 'var(--radius-sm)',
+                          padding: '0.85rem 1rem',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '0.55rem',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <strong style={{ color: 'white', fontSize: '0.95rem' }}>{live.student_name}</strong>
+                            <Badge variant="primary" style={{ fontSize: '0.7rem' }}>{live.student_section}</Badge>
+                            <span style={{ fontSize: '0.76rem', color: '#cbd5e1', background: 'rgba(255,255,255,0.07)', padding: '0.12rem 0.5rem', borderRadius: '6px' }}>
+                              💻 {live.device_label || 'Desktop Browser'} ({live.viewport_width || 1920}×{live.viewport_height || 1080})
+                            </span>
+                            <span style={{ fontSize: '0.78rem', color: '#93c5fd', fontWeight: 600 }}>
+                              On Question {live.current_question} of {live.total_questions}
+                            </span>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '0.82rem', color: 'var(--neutral-200)' }}>
+                              Answered: <strong style={{ color: 'white' }}>{live.answered_count}/{live.total_questions}</strong>
+                            </span>
+                            <span style={{ fontSize: '0.82rem', color: '#a5d6a7', fontWeight: 700 }}>
+                              Live Score: {live.current_score}/{live.max_score}
+                            </span>
+                            {live.time_remaining_seconds !== null && live.time_remaining_seconds !== undefined && (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.8rem', color: '#fbbf24', fontWeight: 700 }}>
+                                <Clock size={13} /> {formatRemainingTime(live.time_remaining_seconds)}
+                              </span>
+                            )}
+                            {live.is_blocked ? (
+                              <span style={{ fontSize: '0.75rem', color: '#ffcdd2', background: 'rgba(239, 68, 68, 0.28)', border: '1px solid rgba(239, 68, 68, 0.55)', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 700 }}>
+                                🛑 Screen Blacked Out
+                              </span>
+                            ) : live.is_fullscreen === false ? (
+                              <span style={{ fontSize: '0.75rem', color: '#fde68a', background: 'rgba(245, 158, 11, 0.22)', border: '1px solid rgba(245, 158, 11, 0.5)', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 700 }}>
+                                ⚠️ Outside Fullscreen
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: '0.75rem', color: '#a5d6a7', background: 'rgba(76, 175, 80, 0.16)', border: '1px solid rgba(76, 175, 80, 0.35)', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 600 }}>
+                                🔒 Full-Screen Locked
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setMonitoredStudentId(live.student_id)}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.35rem',
+                                padding: '0.28rem 0.7rem',
+                                borderRadius: '8px',
+                                background: isSelected ? '#2563eb' : 'rgba(59, 130, 246, 0.18)',
+                                border: '1px solid rgba(96, 165, 250, 0.55)',
+                                color: 'white',
+                                fontSize: '0.76rem',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <Eye size={13} /> {isSelected ? 'Watching Device Live' : 'Watch Device & Cursor'}
+                            </button>
+                          </div>
+                        </div>
+
+                        <div style={{ width: '100%', height: '6px', background: 'rgba(255, 255, 255, 0.1)', borderRadius: '999px', overflow: 'hidden' }}>
+                          <div
+                            style={{
+                              width: `${Math.min(100, Math.max(4, live.progress_percentage))}%`,
+                              height: '100%',
+                              background: 'linear-gradient(90deg, #3b82f6, #10b981)',
+                              transition: 'width 0.3s ease',
+                            }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* REAL-TIME STUDENT DEVICE, LIVE CURSOR & ANSWERS VIEWPORT */}
+                {monitoredSession && (
                   <div
-                    key={live.id}
                     style={{
-                      background: 'rgba(0, 0, 0, 0.28)',
-                      border: live.cheating_attempts_count > 0 ? '1px solid rgba(244, 67, 54, 0.4)' : '1px solid rgba(255, 255, 255, 0.1)',
-                      borderRadius: 'var(--radius-sm)',
-                      padding: '0.85rem 1rem',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '0.55rem',
+                      marginTop: '0.35rem',
+                      background: '#090d16',
+                      border: '1.5px solid rgba(59, 130, 246, 0.5)',
+                      borderRadius: '12px',
+                      overflow: 'hidden',
+                      boxShadow: '0 12px 32px rgba(0, 0, 0, 0.45)',
                     }}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                        <strong style={{ color: 'white', fontSize: '0.95rem' }}>{live.student_name}</strong>
-                        <Badge variant="primary" style={{ fontSize: '0.7rem' }}>{live.student_section}</Badge>
-                        <span style={{ fontSize: '0.78rem', color: '#93c5fd', fontWeight: 600 }}>
-                          On Question {live.current_question} of {live.total_questions}
+                    {/* Top Device Telemetry Bar */}
+                    <div
+                      style={{
+                        background: 'linear-gradient(90deg, rgba(30, 58, 138, 0.65), rgba(15, 23, 42, 0.9))',
+                        borderBottom: '1px solid rgba(255, 255, 255, 0.12)',
+                        padding: '0.75rem 1rem',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: '0.65rem',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', flexWrap: 'wrap' }}>
+                        <Monitor size={17} style={{ color: '#60a5fa' }} />
+                        <strong style={{ color: 'white', fontSize: '0.9rem' }}>
+                          Live Device Mirror: {monitoredSession.student_name}
+                        </strong>
+                        <span style={{ fontSize: '0.75rem', color: '#93c5fd', background: 'rgba(59, 130, 246, 0.2)', border: '1px solid rgba(59, 130, 246, 0.4)', padding: '0.12rem 0.5rem', borderRadius: '6px', fontWeight: 600 }}>
+                          {monitoredSession.device_label || 'Windows PC • Chrome'} • {monitoredSession.viewport_width || 1920}×{monitoredSession.viewport_height || 1080}
                         </span>
+                        {monitoredSession.ip_address && (
+                          <span style={{ fontSize: '0.73rem', color: '#94a3b8' }}>
+                            IP: {monitoredSession.ip_address}
+                          </span>
+                        )}
                       </div>
 
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: '0.82rem', color: 'var(--neutral-200)' }}>
-                          Answered: <strong style={{ color: 'white' }}>{live.answered_count}/{live.total_questions}</strong>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.3rem',
+                            fontSize: '0.75rem',
+                            color: '#67e8f9',
+                            background: 'rgba(6, 182, 212, 0.16)',
+                            border: '1px solid rgba(6, 182, 212, 0.4)',
+                            padding: '0.16rem 0.55rem',
+                            borderRadius: '999px',
+                            fontWeight: 700,
+                          }}
+                        >
+                          <MousePointer2 size={12} />
+                          Cursor ({Math.round(monitoredSession.cursor_x ?? 50)}%, {Math.round(monitoredSession.cursor_y ?? 35)}%)
+                          {monitoredSession.hovered_element ? ` • ${monitoredSession.hovered_element}` : ''}
                         </span>
-                        <span style={{ fontSize: '0.82rem', color: '#a5d6a7', fontWeight: 700 }}>
-                          Live Score: {live.current_score}/{live.max_score}
+                        <span style={{ fontSize: '0.74rem', color: '#cbd5e1' }}>
+                          Scroll: {Math.round(monitoredSession.scroll_y_pct ?? 0)}%
                         </span>
-                        {live.time_remaining_seconds !== null && live.time_remaining_seconds !== undefined && (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.8rem', color: '#fbbf24', fontWeight: 700 }}>
-                            <Clock size={13} /> {formatRemainingTime(live.time_remaining_seconds)}
-                          </span>
-                        )}
-                        {live.cheating_attempts_count > 0 ? (
-                          <span style={{ fontSize: '0.76rem', color: '#ff8a80', background: 'rgba(244, 67, 54, 0.2)', border: '1px solid rgba(244, 67, 54, 0.45)', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 700 }}>
-                            ⚠️ {live.cheating_attempts_count} Alert{live.cheating_attempts_count === 1 ? '' : 's'}
-                          </span>
-                        ) : (
-                          <span style={{ fontSize: '0.76rem', color: '#a5d6a7', background: 'rgba(76, 175, 80, 0.16)', border: '1px solid rgba(76, 175, 80, 0.35)', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 600 }}>
-                            ✓ Focused
-                          </span>
-                        )}
                       </div>
                     </div>
 
-                    <div style={{ width: '100%', height: '6px', background: 'rgba(255, 255, 255, 0.1)', borderRadius: '999px', overflow: 'hidden' }}>
+                    {/* Mirrored Student Screen Viewport with Animated Live Cursor & Real-Time Answers */}
+                    <div
+                      style={{
+                        position: 'relative',
+                        padding: '1.1rem',
+                        minHeight: '340px',
+                        maxHeight: '460px',
+                        overflowY: 'auto',
+                        background: 'radial-gradient(circle at top right, rgba(30, 41, 59, 0.55), #090d16 70%)',
+                      }}
+                    >
+                      {/* Animated Live Student Cursor Overlay + Cursor Trail */}
                       <div
+                        aria-hidden="true"
                         style={{
-                          width: `${Math.min(100, Math.max(4, live.progress_percentage))}%`,
-                          height: '100%',
-                          background: 'linear-gradient(90deg, #3b82f6, #10b981)',
-                          transition: 'width 0.3s ease',
+                          position: 'sticky',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          height: 0,
+                          overflow: 'visible',
+                          zIndex: 30,
+                          pointerEvents: 'none',
                         }}
-                      />
+                      >
+                        {Array.isArray(monitoredSession.cursor_trail) && monitoredSession.cursor_trail.map((pt, idx) => (
+                          <span
+                            key={idx}
+                            style={{
+                              position: 'absolute',
+                              left: `${Math.max(2, Math.min(96, pt.x))}%`,
+                              top: `${Math.max(12, Math.min(310, (pt.y / 100) * 310))}px`,
+                              width: '7px',
+                              height: '7px',
+                              borderRadius: '50%',
+                              background: 'rgba(34, 211, 238, 0.35)',
+                              transform: 'translate(-50%, -50%)',
+                              opacity: (idx + 1) / (monitoredSession.cursor_trail?.length || 1) * 0.55,
+                              transition: 'all 0.25s linear',
+                            }}
+                          />
+                        ))}
+                        <div
+                          style={{
+                            position: 'absolute',
+                            left: `${Math.max(2, Math.min(92, monitoredSession.cursor_x ?? 50))}%`,
+                            top: `${Math.max(10, Math.min(300, ((monitoredSession.cursor_y ?? 35) / 100) * 300))}px`,
+                            transition: 'left 0.45s cubic-bezier(0.22, 1, 0.36, 1), top 0.45s cubic-bezier(0.22, 1, 0.36, 1)',
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: '0.25rem',
+                            filter: 'drop-shadow(0 4px 10px rgba(0,0,0,0.85))',
+                          }}
+                        >
+                          <MousePointer2
+                            size={22}
+                            style={{
+                              color: '#22d3ee',
+                              fill: '#0891b2',
+                              flexShrink: 0,
+                              transform: 'rotate(-8deg)',
+                            }}
+                          />
+                          <div
+                            style={{
+                              background: 'rgba(8, 145, 178, 0.95)',
+                              border: '1px solid #67e8f9',
+                              color: 'white',
+                              padding: '0.16rem 0.5rem',
+                              borderRadius: '999px',
+                              fontSize: '0.7rem',
+                              fontWeight: 800,
+                              whiteSpace: 'nowrap',
+                              marginTop: '10px',
+                            }}
+                          >
+                            {monitoredSession.student_name.split(' ')[0]}&apos;s Cursor
+                            {monitoredSession.hovered_element ? ` • ${monitoredSession.hovered_element}` : ''}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* If student's screen is currently blacked out due to anti-cheat violation */}
+                      {monitoredSession.is_blocked && (
+                        <div
+                          style={{
+                            marginBottom: '0.9rem',
+                            padding: '0.75rem 1rem',
+                            borderRadius: '8px',
+                            background: 'rgba(239, 68, 68, 0.2)',
+                            border: '1px solid rgba(239, 68, 68, 0.55)',
+                            color: '#fecaca',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.65rem',
+                            fontSize: '0.84rem',
+                            fontWeight: 700,
+                          }}
+                        >
+                          <ShieldAlert size={18} style={{ color: '#f87171', flexShrink: 0 }} />
+                          <div>
+                            BLACKOUT SHIELD CURRENTLY ENGAGED ON STUDENT DEVICE:{' '}
+                            <span style={{ color: 'white' }}>
+                              {monitoredSession.interruption_title || 'Focus / Full-Screen Violation'}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Live Questions & Student's Selected Answers in Real Time */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                        {(() => {
+                          const order = Array.isArray(monitoredSession.question_order) && monitoredSession.question_order.length === liveQuestions.length
+                            ? monitoredSession.question_order
+                            : liveQuestions.map((_, i) => i);
+                          const studentAnswers = Array.isArray(monitoredSession.answers) ? monitoredSession.answers : [];
+
+                          return order.map((origIdx, displayIdx) => {
+                            const q = liveQuestions[origIdx];
+                            if (!q) return null;
+                            const pickedIdx = studentAnswers[origIdx] !== undefined ? Number(studentAnswers[origIdx]) : -1;
+                            const isAnswered = pickedIdx >= 0;
+                            const isCorrect = isAnswered && pickedIdx === Number(q.correct_index ?? 0);
+                            const isHoveredQuestion = Boolean(
+                              monitoredSession.hovered_element?.startsWith(`Question ${displayIdx + 1}`)
+                            );
+
+                            return (
+                              <div
+                                key={origIdx}
+                                style={{
+                                  padding: '0.85rem 1rem',
+                                  borderRadius: '10px',
+                                  background: isHoveredQuestion ? 'rgba(6, 182, 212, 0.1)' : 'rgba(255, 255, 255, 0.03)',
+                                  border: isHoveredQuestion
+                                    ? '1.5px solid rgba(34, 211, 238, 0.6)'
+                                    : isAnswered
+                                      ? isCorrect
+                                        ? '1px solid rgba(76, 175, 80, 0.4)'
+                                        : '1px solid rgba(239, 83, 80, 0.4)'
+                                      : '1px solid rgba(255, 255, 255, 0.08)',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: '0.5rem',
+                                }}
+                              >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.6rem', flexWrap: 'wrap' }}>
+                                  <div style={{ fontWeight: 700, color: 'white', fontSize: '0.88rem', flex: 1 }}>
+                                    Q{displayIdx + 1}. {q.prompt}
+                                  </div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0 }}>
+                                    {isHoveredQuestion && (
+                                      <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '0.12rem 0.5rem', borderRadius: '999px', background: 'rgba(6, 182, 212, 0.22)', color: '#67e8f9', border: '1px solid rgba(6, 182, 212, 0.45)' }}>
+                                        🖱️ Cursor Here
+                                      </span>
+                                    )}
+                                    <span
+                                      style={{
+                                        fontSize: '0.72rem',
+                                        fontWeight: 700,
+                                        padding: '0.14rem 0.55rem',
+                                        borderRadius: '999px',
+                                        background: !isAnswered
+                                          ? 'rgba(255,255,255,0.07)'
+                                          : isCorrect
+                                            ? 'rgba(76, 175, 80, 0.22)'
+                                            : 'rgba(239, 83, 80, 0.22)',
+                                        color: !isAnswered ? '#94a3b8' : isCorrect ? '#a5d6a7' : '#ff8a80',
+                                      }}
+                                    >
+                                      {!isAnswered
+                                        ? 'Not answered yet'
+                                        : `Selected ${String.fromCharCode(65 + pickedIdx)} • ${isCorrect ? '✓ Correct' : '✗ Incorrect'}`}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '0.4rem' }}>
+                                  {q.options.map((opt, optIdx) => {
+                                    const letter = String.fromCharCode(65 + optIdx);
+                                    const isStudentPick = pickedIdx === optIdx;
+                                    const isCorrectKey = Number(q.correct_index ?? 0) === optIdx;
+                                    const isHoveredOption = monitoredSession.hovered_element === `Question ${displayIdx + 1} — Option ${letter}`;
+                                    return (
+                                      <div
+                                        key={optIdx}
+                                        style={{
+                                          padding: '0.42rem 0.65rem',
+                                          borderRadius: '7px',
+                                          fontSize: '0.8rem',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'space-between',
+                                          gap: '0.4rem',
+                                          background: isStudentPick
+                                            ? isCorrectKey
+                                              ? 'rgba(76, 175, 80, 0.22)'
+                                              : 'rgba(239, 83, 80, 0.22)'
+                                            : isHoveredOption
+                                              ? 'rgba(6, 182, 212, 0.16)'
+                                              : 'rgba(255, 255, 255, 0.03)',
+                                          border: isStudentPick
+                                            ? isCorrectKey
+                                              ? '1px solid rgba(76, 175, 80, 0.55)'
+                                              : '1px solid rgba(239, 83, 80, 0.55)'
+                                            : isHoveredOption
+                                              ? '1px solid rgba(34, 211, 238, 0.55)'
+                                              : isCorrectKey
+                                                ? '1px dashed rgba(76, 175, 80, 0.35)'
+                                                : '1px solid rgba(255, 255, 255, 0.06)',
+                                          color: isStudentPick ? 'white' : '#cbd5e1',
+                                          fontWeight: isStudentPick ? 700 : 400,
+                                        }}
+                                      >
+                                        <span>
+                                          <strong>{letter}.</strong> {opt}
+                                        </span>
+                                        {isStudentPick && (
+                                          <span style={{ fontSize: '0.68rem', padding: '0.08rem 0.4rem', borderRadius: '999px', background: 'rgba(255,255,255,0.16)', color: 'white', flexShrink: 0 }}>
+                                            Student Answer
+                                          </span>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
                     </div>
                   </div>
-                ))}
-              </div>
+                )}
+              </>
             )}
           </div>
         ) : (

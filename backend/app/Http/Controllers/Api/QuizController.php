@@ -362,6 +362,7 @@ class QuizController extends Controller
                 'question_count' => count($quiz->questions ?? []),
                 'target_type' => $quiz->target_type,
                 'time_limit_minutes' => $quiz->time_limit_minutes,
+                'questions' => $quiz->questions ?? [],
             ],
             'live_sessions' => $liveSessions,
             'submissions' => $attempts->map(fn (QuizAttempt $attempt) => [
@@ -534,9 +535,21 @@ class QuizController extends Controller
 
         $input = $request->validate([
             'answers' => ['nullable', 'array'],
+            'question_order' => ['nullable', 'array'],
             'current_question' => ['nullable', 'integer', 'min:1'],
             'time_remaining_seconds' => ['nullable', 'integer', 'min:0'],
             'cheating_attempts_count' => ['nullable', 'integer', 'min:0'],
+            'cursor_x' => ['nullable', 'numeric'],
+            'cursor_y' => ['nullable', 'numeric'],
+            'cursor_trail' => ['nullable', 'array'],
+            'hovered_element' => ['nullable', 'string', 'max:255'],
+            'scroll_y_pct' => ['nullable', 'numeric'],
+            'device_label' => ['nullable', 'string', 'max:180'],
+            'viewport_width' => ['nullable', 'integer', 'min:100', 'max:10000'],
+            'viewport_height' => ['nullable', 'integer', 'min:100', 'max:10000'],
+            'is_fullscreen' => ['nullable', 'boolean'],
+            'is_blocked' => ['nullable', 'boolean'],
+            'interruption_title' => ['nullable', 'string', 'max:255'],
         ]);
 
         try {
@@ -564,6 +577,30 @@ class QuizController extends Controller
                     ->where('student_id', $student->id)
                     ->first();
 
+                $telemetryEnvelope = [
+                    'answers' => array_map(
+                        fn ($a) => $a !== null && is_numeric($a) ? (int) $a : -1,
+                        $rawAnswers
+                    ),
+                    'question_order' => is_array($input['question_order'] ?? null)
+                        ? array_values(array_map('intval', $input['question_order']))
+                        : [],
+                    'cursor_x' => isset($input['cursor_x']) ? round(max(0, min(100, (float) $input['cursor_x'])), 2) : 50.0,
+                    'cursor_y' => isset($input['cursor_y']) ? round(max(0, min(100, (float) $input['cursor_y'])), 2) : 50.0,
+                    'cursor_trail' => is_array($input['cursor_trail'] ?? null)
+                        ? array_slice($input['cursor_trail'], -12)
+                        : [],
+                    'hovered_element' => isset($input['hovered_element']) ? (string) $input['hovered_element'] : null,
+                    'scroll_y_pct' => isset($input['scroll_y_pct']) ? round(max(0, min(100, (float) $input['scroll_y_pct'])), 2) : 0.0,
+                    'device_label' => isset($input['device_label']) ? (string) $input['device_label'] : null,
+                    'viewport_width' => isset($input['viewport_width']) ? (int) $input['viewport_width'] : 1366,
+                    'viewport_height' => isset($input['viewport_height']) ? (int) $input['viewport_height'] : 768,
+                    'is_fullscreen' => array_key_exists('is_fullscreen', $input) ? (bool) $input['is_fullscreen'] : true,
+                    'is_blocked' => array_key_exists('is_blocked', $input) ? (bool) $input['is_blocked'] : false,
+                    'interruption_title' => isset($input['interruption_title']) ? (string) $input['interruption_title'] : null,
+                    'ip_address' => $request->ip(),
+                ];
+
                 $payload = [
                     'status' => 'in_progress',
                     'current_question' => (int) ($input['current_question'] ?? max(1, $answeredCount)),
@@ -571,7 +608,7 @@ class QuizController extends Controller
                     'total_questions' => count($questions),
                     'current_score' => $currentScore,
                     'max_score' => max(1, $maxScore),
-                    'answers' => json_encode($rawAnswers),
+                    'answers' => json_encode($telemetryEnvelope),
                     'cheating_attempts_count' => (int) ($input['cheating_attempts_count'] ?? 0),
                     'time_remaining_seconds' => isset($input['time_remaining_seconds']) ? (int) $input['time_remaining_seconds'] : null,
                     'last_active_at' => Carbon::now(),
@@ -859,6 +896,44 @@ class QuizController extends Controller
                 $totalQ = max(1, (int) ($row->total_questions ?: count($quiz->questions ?? [])));
                 $answered = max(0, (int) $row->answered_count);
                 $progressPct = round(($answered / $totalQ) * 100);
+
+                $decoded = is_string($row->answers) ? json_decode($row->answers, true) : (is_array($row->answers) ? $row->answers : []);
+                $liveAnswers = [];
+                $questionOrder = [];
+                $cursorX = 50.0;
+                $cursorY = 50.0;
+                $cursorTrail = [];
+                $hoveredElement = null;
+                $scrollYPct = 0.0;
+                $deviceLabel = 'Desktop Browser';
+                $viewportWidth = 1366;
+                $viewportHeight = 768;
+                $isFullscreen = true;
+                $isBlocked = false;
+                $interruptionTitle = null;
+                $ipAddress = null;
+
+                if (is_array($decoded)) {
+                    if (array_key_exists('answers', $decoded) && is_array($decoded['answers'])) {
+                        $liveAnswers = array_values(array_map(fn ($a) => is_numeric($a) ? (int) $a : -1, $decoded['answers']));
+                        $questionOrder = is_array($decoded['question_order'] ?? null) ? array_values(array_map('intval', $decoded['question_order'])) : [];
+                        $cursorX = isset($decoded['cursor_x']) ? (float) $decoded['cursor_x'] : 50.0;
+                        $cursorY = isset($decoded['cursor_y']) ? (float) $decoded['cursor_y'] : 50.0;
+                        $cursorTrail = is_array($decoded['cursor_trail'] ?? null) ? $decoded['cursor_trail'] : [];
+                        $hoveredElement = isset($decoded['hovered_element']) ? (string) $decoded['hovered_element'] : null;
+                        $scrollYPct = isset($decoded['scroll_y_pct']) ? (float) $decoded['scroll_y_pct'] : 0.0;
+                        $deviceLabel = !empty($decoded['device_label']) ? (string) $decoded['device_label'] : 'Desktop Browser';
+                        $viewportWidth = isset($decoded['viewport_width']) ? (int) $decoded['viewport_width'] : 1366;
+                        $viewportHeight = isset($decoded['viewport_height']) ? (int) $decoded['viewport_height'] : 768;
+                        $isFullscreen = array_key_exists('is_fullscreen', $decoded) ? (bool) $decoded['is_fullscreen'] : true;
+                        $isBlocked = array_key_exists('is_blocked', $decoded) ? (bool) $decoded['is_blocked'] : false;
+                        $interruptionTitle = isset($decoded['interruption_title']) ? (string) $decoded['interruption_title'] : null;
+                        $ipAddress = isset($decoded['ip_address']) ? (string) $decoded['ip_address'] : null;
+                    } elseif (array_is_list($decoded)) {
+                        $liveAnswers = array_values(array_map(fn ($a) => is_numeric($a) ? (int) $a : -1, $decoded));
+                    }
+                }
+
                 $result[] = [
                     'id' => (int) $row->id,
                     'student_id' => (int) $row->student_id,
@@ -875,6 +950,20 @@ class QuizController extends Controller
                     'max_score' => max(1, (int) $row->max_score),
                     'cheating_attempts_count' => (int) ($row->cheating_attempts_count ?? 0),
                     'time_remaining_seconds' => $row->time_remaining_seconds !== null ? (int) $row->time_remaining_seconds : null,
+                    'answers' => $liveAnswers,
+                    'question_order' => $questionOrder,
+                    'cursor_x' => $cursorX,
+                    'cursor_y' => $cursorY,
+                    'cursor_trail' => $cursorTrail,
+                    'hovered_element' => $hoveredElement,
+                    'scroll_y_pct' => $scrollYPct,
+                    'device_label' => $deviceLabel,
+                    'viewport_width' => $viewportWidth,
+                    'viewport_height' => $viewportHeight,
+                    'is_fullscreen' => $isFullscreen,
+                    'is_blocked' => $isBlocked,
+                    'interruption_title' => $interruptionTitle,
+                    'ip_address' => $ipAddress,
                     'started_at' => $row->started_at,
                     'last_active_at' => $row->last_active_at,
                 ];
@@ -1087,6 +1176,10 @@ class QuizController extends Controller
                     $table->timestamp('completed_at')->nullable();
                     $table->timestamps();
                     $table->unique(['quiz_id', 'student_id']);
+                });
+            } elseif (! Schema::hasColumn('quiz_live_sessions', 'answers')) {
+                Schema::table('quiz_live_sessions', function (Blueprint $table): void {
+                    $table->json('answers')->nullable()->after('total_questions');
                 });
             }
             return Schema::hasColumn('quizzes', 'reference_pdf_name');

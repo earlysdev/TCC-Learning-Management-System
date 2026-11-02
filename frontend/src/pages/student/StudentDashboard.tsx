@@ -95,25 +95,26 @@ export default function StudentDashboard() {
   };
 
   const openQuizWindow = (quiz: Quiz) => {
-    if (takingQuizId === quiz.id) return; // Already opening this quiz
+    if (takingQuizId === quiz.id) return;
     setTakingQuizId(quiz.id);
 
-    const quizUrl = `/student/quizzes/${quiz.id}/take`;
-    const quizWindow = window.open(
-      quizUrl,
-      `tcc_quiz_${quiz.id}`,
-      'popup=yes,width=1180,height=820,noopener=no',
-    );
-
-    if (quizWindow) {
-      quizWindow.focus();
-      // Re-enable button after 3 seconds so user can retry if window closed
-      setTimeout(() => setTakingQuizId(null), 3000);
-      return;
+    // Immediately enter Full-Screen Exam Lock within the user click gesture to prevent alt-tabbing or window switching
+    const docEl = document.documentElement as HTMLElement & {
+      webkitRequestFullscreen?: () => Promise<void>;
+    };
+    if (!document.fullscreenElement) {
+      if (typeof docEl.requestFullscreen === 'function') {
+        docEl.requestFullscreen().catch(() => {});
+      } else if (typeof docEl.webkitRequestFullscreen === 'function') {
+        docEl.webkitRequestFullscreen().catch(() => {});
+      }
     }
+    const navWithKeyboard = navigator as Navigator & {
+      keyboard?: { lock?: (keys?: string[]) => Promise<void> };
+    };
+    navWithKeyboard.keyboard?.lock?.(['Escape', 'F11']).catch(() => {});
 
-    // The separate assessment route still works if the browser blocks a popup.
-    setTakingQuizId(null);
+    const quizUrl = `/student/quizzes/${quiz.id}/take`;
     navigate(quizUrl);
   };
 

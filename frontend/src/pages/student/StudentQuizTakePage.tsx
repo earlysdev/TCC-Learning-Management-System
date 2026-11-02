@@ -38,6 +38,7 @@ type QuizResult = {
 type IntegrityEventType =
   | 'assessment_tab_hidden'
   | 'assessment_window_blurred'
+  | 'fullscreen_exited'
   | 'developer_tools_shortcut'
   | 'print_shortcut'
   | 'screenshot_shortcut'
@@ -57,6 +58,10 @@ const interruptionCopy: Record<IntegrityEventType, Interruption> = {
   assessment_window_blurred: {
     title: 'Focus Lost (Alt-Tab / Window Blur)',
     detail: 'This assessment window lost focus. The screen has been blacked out to prevent unauthorized viewing or capturing.',
+  },
+  fullscreen_exited: {
+    title: 'Full-Screen Exam Lock Exited',
+    detail: 'You exited full-screen examination mode. Assessments must remain in full-screen lock at all times to prevent alt-tabbing or cheating.',
   },
   developer_tools_shortcut: {
     title: 'Developer Tools Attempt (F12)',
@@ -79,6 +84,68 @@ const interruptionCopy: Record<IntegrityEventType, Interruption> = {
     detail: 'Right-clicking and context menus are disabled in the secure exam environment.',
   },
 };
+
+function detectDeviceLabel(): string {
+  if (typeof navigator === 'undefined') return 'Desktop Browser';
+  const ua = navigator.userAgent || '';
+  const os = /Windows/i.test(ua)
+    ? 'Windows PC'
+    : /Android/i.test(ua)
+      ? 'Android Device'
+      : /iPhone|iPad|iPod/i.test(ua)
+        ? 'iOS Device'
+        : /Mac OS X|Macintosh/i.test(ua)
+          ? 'Mac'
+          : /Linux/i.test(ua)
+            ? 'Linux PC'
+            : 'Device';
+  const browser = /Edg\//i.test(ua)
+    ? 'Edge'
+    : /Chrome\//i.test(ua)
+      ? 'Chrome'
+      : /Firefox\//i.test(ua)
+        ? 'Firefox'
+        : /Safari\//i.test(ua)
+          ? 'Safari'
+          : 'Browser';
+  return `${os} • ${browser}`;
+}
+
+async function enterExamFullscreen(): Promise<boolean> {
+  try {
+    const docEl = document.documentElement as HTMLElement & {
+      webkitRequestFullscreen?: () => Promise<void>;
+    };
+    if (!document.fullscreenElement) {
+      if (typeof docEl.requestFullscreen === 'function') {
+        await docEl.requestFullscreen();
+      } else if (typeof docEl.webkitRequestFullscreen === 'function') {
+        await docEl.webkitRequestFullscreen();
+      }
+    }
+    const navWithKeyboard = navigator as Navigator & {
+      keyboard?: { lock?: (keys?: string[]) => Promise<void> };
+    };
+    await navWithKeyboard.keyboard?.lock?.(['Escape', 'F11']).catch(() => {});
+    return Boolean(document.fullscreenElement);
+  } catch {
+    return Boolean(document.fullscreenElement);
+  }
+}
+
+function exitExamFullscreen(): void {
+  try {
+    const navWithKeyboard = navigator as Navigator & {
+      keyboard?: { unlock?: () => void };
+    };
+    navWithKeyboard.keyboard?.unlock?.();
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    }
+  } catch {
+    // Non-blocking
+  }
+}
 
 function quizWindowCanResume() {
   return !document.hidden && document.hasFocus();
@@ -146,6 +213,18 @@ export default function StudentQuizTakePage() {
   const [autoSubmittedByTimer, setAutoSubmittedByTimer] = useState(false);
   const [currentQuestionNum, setCurrentQuestionNum] = useState(1);
   const [showPdfModal, setShowPdfModal] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(() => (
+    typeof document !== 'undefined' && Boolean(document.fullscreenElement)
+  ));
+  const hasEnteredFullscreenRef = useRef<boolean>(
+    typeof document !== 'undefined' && Boolean(document.fullscreenElement)
+  );
+  const cursorPosRef = useRef<{ x: number; y: number }>({ x: 50, y: 35 });
+  const cursorTrailRef = useRef<Array<{ x: number; y: number }>>([]);
+  const hoveredElementRef = useRef<string | null>(null);
+  const scrollPctRef = useRef<number>(0);
+  const deviceLabelRef = useRef<string>(detectDeviceLabel());
+  const timeLeftRef = useRef<number | null>(null);
   const showPdfModalRef = useRef(false);
   const startTimeRef = useRef<string>(new Date().toISOString());
   const lastIntegrityEvent = useRef<{ eventType: IntegrityEventType; occurredAt: number } | null>(null);
@@ -153,6 +232,10 @@ export default function StudentQuizTakePage() {
   useEffect(() => {
     showPdfModalRef.current = showPdfModal;
   }, [showPdfModal]);
+
+  useEffect(() => {
+    timeLeftRef.current = timeLeft;
+  }, [timeLeft]);
 
   const reportIntegrityEvent = useCallback((eventType: IntegrityEventType, details: Record<string, unknown>) => {
     if (!quizId) return;
@@ -243,6 +326,73 @@ export default function StudentQuizTakePage() {
 
   const isAssessmentActive = Boolean(quiz && !result && !loading);
 
+  // Automatically enter fullscreen when assessment starts, and exit fullscreen when finished
+  useEffect(() => {
+    if (isAssessmentActive) {
+      void enterExamFullscreen().then((entered) => {
+        if (entered) {
+          hasEnteredFullscreenRef.current = true;
+          setIsFullscreen(true);
+        } else {
+          setIsFullscreen(Boolean(document.fullscreenElement));
+        }
+      });
+    } else if (result) {
+      exitExamFullscreen();
+    }
+  }, [isAssessmentActive, result]);
+
+  // Track student cursor coordinates, cursor trail, hovered element, scroll position, and fullscreen lock changes
+  useEffect(() => {
+    if (!isAssessmentActive) return;
+
+    let lastTrailTime = 0;
+
+    const handleMouseMove = (event: MouseEvent) => {
+      const vw = Math.max(window.innerWidth, 1);
+      const vh = Math.max(window.innerHeight, 1);
+      const x = Number(Math.max(0, Math.min(100, (event.clientX / vw) * 100)).toFixed(1));
+      const y = Number(Math.max(0, Math.min(100, (event.clientY / vh) * 100)).toFixed(1));
+      cursorPosRef.current = { x, y };
+
+      const now = Date.now();
+      if (now - lastTrailTime > 110) {
+        lastTrailTime = now;
+        cursorTrailRef.current = [...cursorTrailRef.current.slice(-7), { x, y }];
+      }
+
+      const target = event.target as HTMLElement | null;
+      const labeledEl = target?.closest?.('[data-proctor-label]');
+      hoveredElementRef.current = labeledEl ? labeledEl.getAttribute('data-proctor-label') : null;
+    };
+
+    const handleScroll = () => {
+      const docHeight = Math.max(document.documentElement.scrollHeight - window.innerHeight, 1);
+      const pct = Number(Math.max(0, Math.min(100, (window.scrollY / docHeight) * 100)).toFixed(1));
+      scrollPctRef.current = pct;
+    };
+
+    const handleFullscreenChange = () => {
+      const active = Boolean(document.fullscreenElement);
+      setIsFullscreen(active);
+      if (active) {
+        hasEnteredFullscreenRef.current = true;
+      } else if (hasEnteredFullscreenRef.current) {
+        reportIntegrityEvent('fullscreen_exited', { source: 'fullscreenchange' });
+      }
+    };
+
+    window.addEventListener('mousemove', handleMouseMove, { passive: true });
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('scroll', handleScroll);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, [isAssessmentActive, reportIntegrityEvent]);
+
   useEffect(() => {
     if (!isAssessmentActive || timeLeft === null || submitting) return;
     if (timeLeft <= 0) {
@@ -272,7 +422,7 @@ export default function StudentQuizTakePage() {
     return () => window.clearInterval(timer);
   }, [isAssessmentActive, timeLeft, submitting, quiz, quizId, answers, integrityIncidentCount, violationsList]);
 
-  // Send real-time progress heartbeats so teachers can monitor Formative quizzes live
+  // Send real-time progress, device, cursor, and answer heartbeats (1.5s) so teachers can monitor live
   useEffect(() => {
     if (!isAssessmentActive || !quizId || !quiz) return;
 
@@ -283,17 +433,40 @@ export default function StudentQuizTakePage() {
         method: 'POST',
         body: JSON.stringify({
           answers: normalizedAnswers,
+          question_order: questionOrder,
           current_question: currentQuestionNum,
-          time_remaining_seconds: timeLeft,
+          time_remaining_seconds: timeLeftRef.current,
           cheating_attempts_count: integrityIncidentCount,
+          cursor_x: cursorPosRef.current.x,
+          cursor_y: cursorPosRef.current.y,
+          cursor_trail: cursorTrailRef.current,
+          hovered_element: hoveredElementRef.current,
+          scroll_y_pct: scrollPctRef.current,
+          device_label: deviceLabelRef.current,
+          viewport_width: typeof window !== 'undefined' ? window.innerWidth : 1920,
+          viewport_height: typeof window !== 'undefined' ? window.innerHeight : 1080,
+          is_fullscreen: typeof document !== 'undefined' && Boolean(document.fullscreenElement),
+          is_blocked: isBlocked,
+          interruption_title: isBlocked ? (interruption?.title ?? 'Screen Blacked Out') : null,
         }),
       }).catch(() => undefined);
     };
 
     sendHeartbeat();
-    const interval = window.setInterval(sendHeartbeat, 5000);
+    const interval = window.setInterval(sendHeartbeat, 1500);
     return () => window.clearInterval(interval);
-  }, [isAssessmentActive, quizId, quiz, answers, currentQuestionNum, integrityIncidentCount]);
+  }, [
+    isAssessmentActive,
+    quizId,
+    quiz,
+    answers,
+    questionOrder,
+    currentQuestionNum,
+    integrityIncidentCount,
+    isBlocked,
+    isFullscreen,
+    interruption,
+  ]);
 
   useEffect(() => {
     if (!isAssessmentActive) return;
@@ -427,6 +600,7 @@ export default function StudentQuizTakePage() {
   };
 
   const closeAssessment = () => {
+    exitExamFullscreen();
     if (window.opener) {
       window.close();
       return;
@@ -439,8 +613,14 @@ export default function StudentQuizTakePage() {
       setCanResume(false);
       return;
     }
-    setIsBlocked(false);
-    setCanResume(false);
+    void enterExamFullscreen().then((entered) => {
+      if (entered) {
+        hasEnteredFullscreenRef.current = true;
+      }
+      setIsFullscreen(Boolean(document.fullscreenElement));
+      setIsBlocked(false);
+      setCanResume(false);
+    });
   };
 
   const answeredCount = answers.filter((answer) => answer !== undefined).length;
@@ -749,22 +929,39 @@ export default function StudentQuizTakePage() {
     >
       <header className="quiz-take-header">
         <div className="quiz-take-brand"><ShieldCheck size={22} /> TCC Assessment</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', flexWrap: 'wrap' }}>
           {timeLeft !== null && (
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.35rem 0.75rem', borderRadius: '999px', background: timeLeft < 60 ? 'rgba(239, 83, 80, 0.25)' : 'rgba(255, 255, 255, 0.08)', border: `1px solid ${timeLeft < 60 ? '#ef5350' : 'rgba(255,255,255,0.14)'}`, color: timeLeft < 60 ? '#ff8a80' : '#fbbf24', fontWeight: 800, fontFamily: 'monospace', fontSize: '0.95rem' }}>
               <Clock3 size={16} />
               <span>{Math.floor(timeLeft / 60).toString().padStart(2, '0')}:{(timeLeft % 60).toString().padStart(2, '0')}</span>
             </div>
           )}
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+              padding: '0.32rem 0.75rem',
+              borderRadius: '999px',
+              background: isFullscreen ? 'rgba(76, 175, 80, 0.2)' : 'rgba(245, 158, 11, 0.2)',
+              border: `1px solid ${isFullscreen ? 'rgba(76, 175, 80, 0.45)' : 'rgba(245, 158, 11, 0.45)'}`,
+              color: isFullscreen ? '#a5d6a7' : '#fde68a',
+              fontSize: '0.78rem',
+              fontWeight: 700,
+            }}
+          >
+            <LockKeyhole size={14} />
+            <span>{isFullscreen ? 'Full-Screen Exam Lock Active' : 'Full-Screen Lock Required'}</span>
+          </div>
           <div className="quiz-take-status"><span aria-hidden="true" /> Proctoring active (Anti-Cheat)</div>
         </div>
         <Button variant="outline" size="sm" onClick={closeAssessment}>Exit Assessment</Button>
       </header>
 
-      {/* When isBlocked is true, completely hide the quiz questions so nothing can be seen or captured */}
+      {/* When isBlocked is true or Fullscreen Lock is not active, hide the quiz questions */}
       <div 
         className="quiz-take-shell"
-        style={{ display: isBlocked ? 'none' : 'grid' }}
+        style={{ display: isBlocked || !isFullscreen ? 'none' : 'grid' }}
       >
         <aside className="quiz-take-sidebar">
           <div className="quiz-take-subject">{quiz.subject}</div>
@@ -779,6 +976,7 @@ export default function StudentQuizTakePage() {
 
           <button
             type="button"
+            data-proctor-label="Attached PDF Handout / Instructions Button"
             onClick={() => setShowPdfModal(true)}
             style={{
               display: 'flex',
@@ -810,17 +1008,17 @@ export default function StudentQuizTakePage() {
           <div className="quiz-integrity-info">
             <LockKeyhole size={19} aria-hidden="true" />
             <div>
-              <strong>Anti-Cheat Active</strong>
-              <p>Keep this window focused. Alt-tabbing, taking screenshots, or opening developer tools will black out the screen and be recorded.</p>
+              <strong>Full-Screen Anti-Cheat Active</strong>
+              <p>Keep this window in full-screen and focused. Exiting full-screen, alt-tabbing, taking screenshots, or opening developer tools will black out the screen and be recorded.</p>
             </div>
           </div>
-          <p className="quiz-integrity-limit">Anti-cheat shield turns screen black on blur or screenshot attempts.</p>
+          <p className="quiz-integrity-limit">Teacher live-monitors your device, cursor, and answers in real time.</p>
         </aside>
 
         <section className="quiz-question-area">
           <div className="quiz-question-heading">
             <div>
-              <p className="quiz-result-eyebrow">Secure Assessment Window</p>
+              <p className="quiz-result-eyebrow">Secure Full-Screen Assessment Window</p>
               <h2>Answer each question</h2>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
@@ -900,20 +1098,29 @@ export default function StudentQuizTakePage() {
               const question = quiz.questions?.[originalIndex];
               if (!question) return null;
               return (
-                <fieldset key={originalIndex} className="quiz-question-card">
+                <fieldset
+                  key={originalIndex}
+                  className="quiz-question-card"
+                  data-proctor-label={`Question ${displayIndex + 1}`}
+                >
                   <legend><span>{displayIndex + 1}</span>{question.prompt}</legend>
                   <div className="quiz-options">
                     {question.options.map((option, optionIndex) => {
                       const selected = answers[originalIndex] === optionIndex;
+                      const letter = String.fromCharCode(65 + optionIndex);
                       return (
-                        <label className={`quiz-option ${selected ? 'is-selected' : ''}`} key={optionIndex}>
+                        <label
+                          className={`quiz-option ${selected ? 'is-selected' : ''}`}
+                          key={optionIndex}
+                          data-proctor-label={`Question ${displayIndex + 1} — Option ${letter}`}
+                        >
                           <input
                             type="radio"
                             name={`question-${originalIndex}`}
                             checked={selected}
                             onChange={() => handleAnswer(originalIndex, optionIndex, displayIndex + 1)}
                           />
-                          <span className="quiz-option-letter">{String.fromCharCode(65 + optionIndex)}</span>
+                          <span className="quiz-option-letter">{letter}</span>
                           <span>{option}</span>
                         </label>
                       );
@@ -922,7 +1129,7 @@ export default function StudentQuizTakePage() {
                 </fieldset>
               );
             })}
-            <div className="quiz-submit-row">
+            <div className="quiz-submit-row" data-proctor-label="Submit Assessment Section">
               <span><Clock3 size={17} /> Review your answers before submitting.</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
                 <Button
@@ -942,6 +1149,74 @@ export default function StudentQuizTakePage() {
           </form>
         </section>
       </div>
+
+      {/* FULL-SCREEN EXAM LOCK GATE (If browser was refreshed or opened directly outside fullscreen) */}
+      {!isFullscreen && !isBlocked && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="fullscreen-lock-title"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'radial-gradient(circle at center, #1a0911 0%, #060609 100%)',
+            zIndex: 9999990,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '2rem',
+            textAlign: 'center',
+            color: 'white',
+          }}
+        >
+          <div
+            style={{
+              background: 'rgba(139, 92, 246, 0.18)',
+              border: '2px solid rgba(139, 92, 246, 0.55)',
+              borderRadius: '50%',
+              padding: '1.25rem',
+              marginBottom: '1.15rem',
+              color: '#c4b5fd',
+            }}
+          >
+            <LockKeyhole size={54} aria-hidden="true" />
+          </div>
+
+          <span style={{ fontSize: '0.8rem', color: '#c4b5fd', fontWeight: 800, letterSpacing: '1.8px', textTransform: 'uppercase' }}>
+            MANDATORY FULL-SCREEN PROCTORING LOCK
+          </span>
+
+          <h1 id="fullscreen-lock-title" style={{ fontSize: '1.9rem', fontWeight: 800, color: 'white', margin: '0.55rem 0' }}>
+            Full-Screen Mode Required to Take Quiz
+          </h1>
+
+          <p style={{ maxWidth: '520px', color: '#cbd5e1', fontSize: '1rem', lineHeight: 1.6, margin: '0 0 1.5rem' }}>
+            To prevent alt-tabbing, window switching, and unauthorized assistance, this assessment is locked to full-screen mode. Exiting full-screen during the quiz will immediately trigger an anti-cheat blackout violation.
+          </p>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+            <Button
+              variant="accent"
+              size="lg"
+              onClick={() => {
+                void enterExamFullscreen().then((entered) => {
+                  hasEnteredFullscreenRef.current = true;
+                  setIsFullscreen(entered || true);
+                });
+              }}
+              style={{ minWidth: '250px', padding: '0.85rem 1.8rem' }}
+            >
+              <LockKeyhole size={18} /> Enter Full-Screen & Start Quiz
+            </Button>
+            <Button variant="outline" size="lg" onClick={closeAssessment}>
+              Cancel & Exit
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* FULL BLACKOUT SCREEN: PITCH BLACK OVERLAY COVERING 100% OF THE VIEWPORT */}
       {isBlocked && (
@@ -1011,11 +1286,11 @@ export default function StudentQuizTakePage() {
             disabled={!canResume}
             style={{ minWidth: '220px', padding: '0.85rem 1.75rem' }}
           >
-            <Eye size={18} /> {canResume ? 'Resume Assessment' : 'Click Window to Focus First'}
+            <Eye size={18} /> {canResume ? 'Re-Enter Full-Screen & Resume' : 'Click Window to Focus First'}
           </Button>
 
           <p style={{ marginTop: '1.25rem', color: '#78909c', fontSize: '0.8rem' }}>
-            Keep this window active and focused at all times to avoid further penalties.
+            Keep this window active and in full-screen lock at all times to avoid further penalties.
           </p>
         </div>
       )}
