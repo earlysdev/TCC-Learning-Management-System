@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   BookOpen, Sparkles, BarChart2,
@@ -120,11 +120,41 @@ export default function LandingPage() {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  const scrollToSection = (e: MouseEvent<HTMLAnchorElement>, sectionId: string) => {
+    e.preventDefault();
+    setMobileMenuOpen(false);
+    const target = document.getElementById(sectionId);
+    if (!target) return;
+    const navbar = document.querySelector('.navbar') as HTMLElement | null;
+    const navHeight = navbar ? navbar.getBoundingClientRect().height : 60;
+    const targetTop = target.getBoundingClientRect().top + window.scrollY - navHeight;
+    window.scrollTo({
+      top: Math.max(0, Math.round(targetTop)),
+      behavior: 'smooth',
+    });
+    window.history.replaceState(null, '', `#${sectionId}`);
+  };
+
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentSlide(prev => (prev + 1) % slides.length);
     }, 6000);
     return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (window.location.hash) {
+      const id = window.location.hash.replace('#', '');
+      const target = document.getElementById(id);
+      if (target) {
+        requestAnimationFrame(() => {
+          const navbar = document.querySelector('.navbar') as HTMLElement | null;
+          const navHeight = navbar ? navbar.getBoundingClientRect().height : 60;
+          const targetTop = target.getBoundingClientRect().top + window.scrollY - navHeight;
+          window.scrollTo({ top: Math.max(0, Math.round(targetTop)), behavior: 'smooth' });
+        });
+      }
+    }
   }, []);
 
   return (
@@ -142,10 +172,10 @@ export default function LandingPage() {
             </Link>
 
             <nav className="nav-buttons desktop-nav">
-              <a href="#about" className="nav-btn">About TCC</a>
-              <a href="#programs" className="nav-btn">Colleges</a>
-              <a href="#features" className="nav-btn">Features</a>
-              <a href="#download-app" className="nav-btn">
+              <a href="#about" className="nav-btn" onClick={(e) => scrollToSection(e, 'about')}>About TCC</a>
+              <a href="#programs" className="nav-btn" onClick={(e) => scrollToSection(e, 'programs')}>Colleges</a>
+              <a href="#features" className="nav-btn" onClick={(e) => scrollToSection(e, 'features')}>Features</a>
+              <a href="#download-app" className="nav-btn" onClick={(e) => scrollToSection(e, 'download-app')}>
                 <Smartphone size={15} /> Mobile App
               </a>
               <Link to="/login" className="nav-btn nav-btn-primary">
@@ -166,16 +196,16 @@ export default function LandingPage() {
           {/* Mobile Navigation Drawer */}
           {mobileMenuOpen && (
             <nav className="mobile-nav-drawer">
-              <a href="#about" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
+              <a href="#about" className="mobile-nav-link" onClick={(e) => scrollToSection(e, 'about')}>
                 About TCC
               </a>
-              <a href="#programs" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
+              <a href="#programs" className="mobile-nav-link" onClick={(e) => scrollToSection(e, 'programs')}>
                 Colleges & Programs
               </a>
-              <a href="#features" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
+              <a href="#features" className="mobile-nav-link" onClick={(e) => scrollToSection(e, 'features')}>
                 Platform Features
               </a>
-              <a href="#download-app" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
+              <a href="#download-app" className="mobile-nav-link" onClick={(e) => scrollToSection(e, 'download-app')}>
                 <Smartphone size={16} /> Mobile App (.apk)
               </a>
               <Link to="/login" className="mobile-nav-link mobile-nav-link-primary" onClick={() => setMobileMenuOpen(false)}>
@@ -203,10 +233,20 @@ export default function LandingPage() {
                 <h1 className="hero-title">{slide.title}</h1>
                 <p className="hero-subtitle">{slide.subtitle}</p>
                 <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-                  <Link to={slide.ctaLink} className="btn btn-accent btn-lg">
-                    {slide.ctaText} <ArrowRight size={18} />
-                  </Link>
-                  <a href="#about" className="btn btn-glass btn-lg">
+                  {slide.ctaLink.startsWith('#') ? (
+                    <a
+                      href={slide.ctaLink}
+                      className="btn btn-accent btn-lg"
+                      onClick={(e) => scrollToSection(e, slide.ctaLink.replace('#', ''))}
+                    >
+                      {slide.ctaText} <ArrowRight size={18} />
+                    </a>
+                  ) : (
+                    <Link to={slide.ctaLink} className="btn btn-accent btn-lg">
+                      {slide.ctaText} <ArrowRight size={18} />
+                    </Link>
+                  )}
+                  <a href="#about" className="btn btn-glass btn-lg" onClick={(e) => scrollToSection(e, 'about')}>
                     About TCC
                   </a>
                 </div>
@@ -243,7 +283,7 @@ export default function LandingPage() {
         </div>
 
         {/* Scroll down prompt */}
-        <a href="#about" className="hero-scroll-down" aria-label="Scroll to about section">
+        <a href="#about" className="hero-scroll-down" aria-label="Scroll to about section" onClick={(e) => scrollToSection(e, 'about')}>
           <span>Explore</span>
           <ChevronDown size={18} className="scroll-arrow" />
         </a>
@@ -252,7 +292,7 @@ export default function LandingPage() {
       {/* About Section - Vision, Mission, Philosophy, Core Values (High-Contrast White Cards) */}
       <section id="about" className="section section-about">
         <div className="container">
-          <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+          <div style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
             <span style={{ fontSize: '0.8rem', color: '#fbbf24', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
               VINCIT OMNIA VERITAS · ESTABLISHED 2003
             </span>
@@ -314,7 +354,7 @@ export default function LandingPage() {
       {/* Academic Colleges & Programs Section */}
       <section id="programs" className="section section-programs">
         <div className="container">
-          <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+          <div style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
             <span style={{ fontSize: '0.8rem', color: '#fbbf24', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
               MEMBER: ASSOCIATION OF LOCAL COLLEGES AND UNIVERSITIES · COMMISSION ON ACCREDITATION (ALCUCOA)
             </span>
@@ -358,7 +398,7 @@ export default function LandingPage() {
       {/* Features Section */}
       <section id="features" className="section section-features">
         <div className="container">
-          <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+          <div style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
             <span style={{ fontSize: '0.8rem', color: '#fbbf24', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
               INNOVATIVE HIGHER EDUCATION TECHNOLOGY
             </span>
@@ -511,10 +551,10 @@ export default function LandingPage() {
 
             <div className="footer-section">
               <h4>Quick Links</h4>
-              <p><a href="#about" style={{ color: 'rgba(255,255,255,0.85)' }}>About TCC</a></p>
-              <p><a href="#programs" style={{ color: 'rgba(255,255,255,0.85)' }}>Colleges & Programs</a></p>
-              <p><a href="#features" style={{ color: 'rgba(255,255,255,0.85)' }}>Platform Features</a></p>
-              <p><a href="#download-app" style={{ color: 'rgba(255,255,255,0.85)' }}>Mobile App</a></p>
+              <p><a href="#about" style={{ color: 'rgba(255,255,255,0.85)' }} onClick={(e) => scrollToSection(e, 'about')}>About TCC</a></p>
+              <p><a href="#programs" style={{ color: 'rgba(255,255,255,0.85)' }} onClick={(e) => scrollToSection(e, 'programs')}>Colleges & Programs</a></p>
+              <p><a href="#features" style={{ color: 'rgba(255,255,255,0.85)' }} onClick={(e) => scrollToSection(e, 'features')}>Platform Features</a></p>
+              <p><a href="#download-app" style={{ color: 'rgba(255,255,255,0.85)' }} onClick={(e) => scrollToSection(e, 'download-app')}>Mobile App</a></p>
               <p><Link to="/login" style={{ color: '#fbbf24', fontWeight: 600 }}>Sign In to Portal</Link></p>
             </div>
           </div>

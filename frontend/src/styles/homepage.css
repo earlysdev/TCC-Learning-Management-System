@@ -3,9 +3,13 @@
    Optimized for crisp scaling, perfect fit, and seamless mobile responsiveness
    ======================================== */
 
+:root {
+  --navbar-height: 60px;
+}
+
 html {
   scroll-behavior: smooth;
-  scroll-padding-top: 75px;
+  scroll-padding-top: 0;
 }
 
 /* NAVBAR */
@@ -14,12 +18,16 @@ html {
   top: 0;
   left: 0;
   right: 0;
-  background: rgba(38, 6, 11, 0.94);
+  min-height: var(--navbar-height);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background: rgba(38, 6, 11, 0.96);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-bottom: 1px solid rgba(245, 158, 11, 0.25);
   z-index: 1000;
-  padding: 0.6rem 0;
+  padding: 0.5rem 0;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
   transition: all 0.3s ease;
 }
@@ -207,8 +215,9 @@ html {
   z-index: 2;
   text-align: center;
   color: white;
-  padding: 1.5rem 1rem;
-  max-width: 760px;
+  padding: 1.5rem 1.25rem;
+  max-width: 980px;
+  width: 100%;
   margin: 0 auto;
 }
 
@@ -224,14 +233,15 @@ html {
 }
 
 .hero-subtitle {
-  font-size: clamp(0.95rem, 1.6vw, 1.15rem);
-  color: rgba(255, 255, 255, 0.92);
+  font-size: clamp(0.92rem, 1.45vw, 1.12rem);
+  color: rgba(255, 255, 255, 0.94);
   margin-bottom: 1.6rem;
   font-weight: 400;
   line-height: 1.5;
-  max-width: 580px;
+  max-width: 920px;
   margin-left: auto;
   margin-right: auto;
+  white-space: nowrap;
 }
 
 /* Slider Controls */
@@ -330,9 +340,19 @@ html {
 
 /* SECTIONS */
 .section {
-  padding: clamp(2.75rem, 5vw, 4rem) 0;
+  min-height: calc(100vh - var(--navbar-height, 60px));
+  min-height: calc(100dvh - var(--navbar-height, 60px));
+  padding: clamp(2.25rem, 4vh, 3.5rem) 0;
   position: relative;
-  scroll-margin-top: 75px;
+  scroll-margin-top: var(--navbar-height, 60px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.section > .container {
+  max-width: 1260px;
+  width: 100%;
 }
 
 .section-title {
@@ -347,24 +367,24 @@ html {
   font-size: clamp(0.85rem, 1.3vw, 0.96rem);
   color: rgba(255, 255, 255, 0.88);
   max-width: 680px;
-  margin: 0 auto 2rem;
+  margin: 0 auto 1.6rem;
   line-height: 1.6;
 }
 
 .section-about {
-  background: linear-gradient(180deg, rgba(50, 7, 12, 0.45) 0%, rgba(18, 2, 4, 0.75) 100%);
-}
-
-.section-features {
-  background: linear-gradient(180deg, rgba(18, 2, 4, 0.75) 0%, rgba(50, 7, 12, 0.5) 100%);
+  background: linear-gradient(180deg, rgba(28, 4, 7, 0.82) 0%, rgba(44, 7, 11, 0.78) 100%);
 }
 
 .section-programs {
-  background: linear-gradient(180deg, rgba(50, 7, 12, 0.5) 0%, rgba(20, 3, 5, 0.8) 100%);
+  background: linear-gradient(180deg, rgba(44, 7, 11, 0.78) 0%, rgba(24, 4, 7, 0.84) 100%);
+}
+
+.section-features {
+  background: linear-gradient(180deg, rgba(24, 4, 7, 0.84) 0%, rgba(44, 7, 11, 0.78) 100%);
 }
 
 .section-download {
-  background: transparent;
+  background: linear-gradient(180deg, rgba(44, 7, 11, 0.78) 0%, rgba(22, 4, 7, 0.92) 100%);
 }
 
 /* CARDS - WHITE FROSTED */
@@ -468,9 +488,9 @@ html {
 /* ACADEMIC COLLEGES & PROGRAMS CARDS */
 .programs-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(265px, 1fr));
-  gap: 1.35rem;
-  margin-top: 2rem;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.15rem;
+  margin-top: 0.25rem;
 }
 
 .program-card {
@@ -479,7 +499,7 @@ html {
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(245, 158, 11, 0.22);
   border-radius: var(--radius-lg);
-  padding: 1.5rem 1.35rem;
+  padding: 1.25rem 1.2rem;
   transition: all 0.3s ease;
   display: flex;
   flex-direction: column;
@@ -833,12 +853,21 @@ html {
 
 /* RESPONSIVE BREAKPOINTS */
 @media (max-width: 1100px) {
-  .grid-4 {
+  .grid-4,
+  .programs-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 }
 
 @media (max-width: 992px) {
+  .hero-subtitle {
+    white-space: normal;
+    max-width: 680px;
+  }
+  .section {
+    min-height: auto;
+    padding: 3.5rem 0;
+  }
   .grid-3 {
     grid-template-columns: 1fr;
     gap: 1.25rem;
@@ -870,8 +899,11 @@ html {
 }
 
 @media (max-width: 768px) {
+  :root {
+    --navbar-height: 56px;
+  }
   .navbar {
-    padding: 0.5rem 0;
+    padding: 0.45rem 0;
   }
   .desktop-nav {
     display: none !important;
@@ -927,7 +959,8 @@ html {
 }
 
 @media (max-width: 640px) {
-  .grid-4 {
+  .grid-4,
+  .programs-grid {
     grid-template-columns: 1fr;
   }
   .hero {
