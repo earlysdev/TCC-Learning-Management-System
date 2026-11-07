@@ -45,7 +45,7 @@ export default function CaptchaVerification({ onVerified }: CaptchaVerificationP
   if (isCorrect === false) inputClass = '!border-error';
 
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '1rem', marginBottom: '1rem' }}>
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.75rem', marginBottom: '1.15rem', textAlign: 'left' }}>
       <div style={{ flex: 1 }}>
         <Input
           label={`What is ${num1} + ${num2}?`}
@@ -60,18 +60,21 @@ export default function CaptchaVerification({ onVerified }: CaptchaVerificationP
       <button 
         type="button" 
         onClick={generateCaptcha}
+        title="Refresh security question"
+        aria-label="Refresh security question"
         style={{ 
-          background: 'rgba(255,255,255,0.1)', 
+          background: 'rgba(255, 255, 255, 0.08)', 
           border: '1px solid var(--glass-border)', 
           borderRadius: 'var(--radius-md)', 
-          height: '42px', 
-          width: '42px', 
+          height: '44px', 
+          width: '44px', 
           display: 'flex', 
           alignItems: 'center', 
           justifyContent: 'center',
           color: 'white',
           cursor: 'pointer',
-          marginBottom: '1rem'
+          flexShrink: 0,
+          transition: 'all 150ms ease',
         }}
       >
         <RefreshCw size={18} />
