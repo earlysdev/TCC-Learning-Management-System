@@ -15,6 +15,7 @@ import Badge from '../../components/ui/Badge';
 import Input from '../../components/ui/Input';
 import Select from '../../components/ui/Select';
 import ProfileUpdateCard from '../../components/ui/ProfileUpdateCard';
+import { useToastContext } from '../../contexts/ToastContext';
 
 interface DeanMetrics {
   active_users: number;
@@ -50,6 +51,7 @@ const sectionToPath: Record<string, string> = {
 
 export default function PrincipalDashboard() {
   const user = getLmsUser();
+  const { showToast } = useToastContext();
   const { subpage } = useParams<{ subpage?: string }>();
   const navigate = useNavigate();
   const initialSection = subpage ? (pathToSection[subpage] || 'overview') : 'overview';
@@ -132,10 +134,14 @@ export default function PrincipalDashboard() {
     setError(null);
     try {
       await lmsFetch(`/security-logs/${logId}/resolve`, { method: 'PATCH' });
-      setNotice('Security log marked as resolved.');
+      const msg = 'Security log marked as resolved.';
+      setNotice(msg);
+      showToast(msg, 'success');
       setSecurityLogs(prev => prev.map(l => l.id === logId ? { ...l, is_resolved: true, resolved_at: new Date().toISOString() } : l));
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Could not resolve security log');
+      const msg = err instanceof Error ? err.message : 'Could not resolve security log';
+      setError(msg);
+      showToast(msg, 'error');
     } finally {
       setBusy(false);
     }
@@ -149,10 +155,14 @@ export default function PrincipalDashboard() {
         method: 'PATCH',
         body: JSON.stringify({ status: newStatus }),
       });
-      setNotice(`Updated ${targetUser.name}'s status to ${newStatus}.`);
+      const msg = `Updated ${targetUser.name}'s status to ${newStatus}.`;
+      setNotice(msg);
+      showToast(msg, 'success');
       await loadDeanData();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Could not update user status');
+      const msg = err instanceof Error ? err.message : 'Could not update user status';
+      setError(msg);
+      showToast(msg, 'error');
     } finally {
       setBusy(false);
     }
@@ -176,10 +186,14 @@ export default function PrincipalDashboard() {
       });
       setAnnouncementTitle('');
       setAnnouncementContent('');
-      setNotice('Campus-wide announcement broadcasted to all portals and notification bells.');
+      const msg = 'Campus-wide announcement broadcasted to all portals and notification bells.';
+      setNotice(msg);
+      showToast(msg, 'success');
       await loadDeanData();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Could not broadcast announcement');
+      const msg = err instanceof Error ? err.message : 'Could not broadcast announcement';
+      setError(msg);
+      showToast(msg, 'error');
     } finally {
       setBusy(false);
     }

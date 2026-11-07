@@ -20,6 +20,7 @@ import ProfileUpdateCard from '../../components/ui/ProfileUpdateCard';
 import QuizEditorModal, { type QuizEditorValues } from './QuizEditorModal';
 import PublishQuizModal, { type PublishAudience, type SectionOption } from './PublishQuizModal';
 import QuizSubmissionsModal from './QuizSubmissionsModal';
+import { useToastContext } from '../../contexts/ToastContext';
 
 interface TeacherMetrics {
   quizzes: number;
@@ -95,6 +96,7 @@ function hasDistinctTopic(quiz: Pick<Quiz, 'title' | 'topic'>): boolean {
 
 export default function TeacherDashboard() {
   const user = getLmsUser();
+  const { showToast } = useToastContext();
   const { subpage } = useParams<{ subpage?: string }>();
   const navigate = useNavigate();
   const initialSection = subpage === 'dashboard' ? 'overview' : (subpage || 'overview');
@@ -198,7 +200,9 @@ export default function TeacherDashboard() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
-      setError('Please select a valid PDF (.pdf) document.');
+      const msg = 'Please select a valid PDF (.pdf) document.';
+      setError(msg);
+      showToast(msg, 'warning');
       return;
     }
     try {
@@ -206,12 +210,15 @@ export default function TeacherDashboard() {
       const parsed = await readPdfFile(file);
       setUploadedPdf(parsed);
       setGenerateWithAi(true);
+      showToast(`PDF "${parsed.name}" uploaded and ready.`, 'success');
       if (!topic.trim() && !quizTitle.trim()) {
         const cleanFileName = parsed.name.replace(/\.pdf$/i, '').replace(/[_-]+/g, ' ').trim();
         if (cleanFileName) setTopic(cleanFileName);
       }
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to read PDF file.');
+      const msg = err instanceof Error ? err.message : 'Failed to read PDF file.';
+      setError(msg);
+      showToast(msg, 'error');
     } finally {
       if (createPdfInputRef.current) createPdfInputRef.current.value = '';
     }
@@ -254,7 +261,9 @@ export default function TeacherDashboard() {
         : generateWithAi
           ? `with ${questionCount} AI-generated questions based on topic "${cleanTopic}"`
           : `with ${questionCount} question ${questionCount === 1 ? 'slot' : 'slots'}`;
-      setNotice(`Quiz draft "${data.quiz.title}" created ${sourceNote}. Review and customize in the editor.`);
+      const msg = `Quiz draft "${data.quiz.title}" created ${sourceNote}. Review and customize in the editor.`;
+      setNotice(msg);
+      showToast(`Quiz draft "${data.quiz.title}" created!`, 'success');
       setQuizTitle('');
       setTopic('');
       setUploadedPdf(null);
@@ -264,7 +273,9 @@ export default function TeacherDashboard() {
       void loadDashboard();
       setActiveSection('quizzes');
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to create quiz');
+      const msg = err instanceof Error ? err.message : 'Failed to create quiz';
+      setError(msg);
+      showToast(msg, 'error');
     } finally {
       setBusy(false);
     }
@@ -273,6 +284,7 @@ export default function TeacherDashboard() {
   const handleTogglePublish = async (quiz: Quiz) => {
     if (!quiz.is_published) {
       setPublishingQuiz(quiz);
+      showToast(`Configure publish settings for "${quiz.title}".`, 'info');
       return;
     }
 
@@ -285,10 +297,14 @@ export default function TeacherDashboard() {
       });
       const updated = extractQuiz(response);
       setQuizzes((current) => current.map((item) => item.id === quiz.id ? updated : item));
-      setNotice(`"${quiz.title}" is unpublished and no longer available to students.`);
+      const msg = `"${quiz.title}" is unpublished and no longer available to students.`;
+      setNotice(msg);
+      showToast(msg, 'info');
       void loadDashboard();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to update quiz status');
+      const msg = err instanceof Error ? err.message : 'Failed to update quiz status';
+      setError(msg);
+      showToast(msg, 'error');
     } finally {
       setBusy(false);
     }
@@ -323,10 +339,14 @@ export default function TeacherDashboard() {
       const updated = extractQuiz(response || fallback);
       setQuizzes((current) => current.map((quiz) => quiz.id === draft.id ? updated : quiz));
       setEditingQuiz(null);
-      setNotice(`"${draft.title}" was saved. Choose Publish when you are ready to assign it.`);
+      const msg = `"${draft.title}" was saved. Choose Publish when you are ready to assign it.`;
+      setNotice(msg);
+      showToast(`"${draft.title}" saved successfully!`, 'success');
       void loadDashboard();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Could not save quiz changes');
+      const msg = err instanceof Error ? err.message : 'Could not save quiz changes';
+      setError(msg);
+      showToast(msg, 'error');
     } finally {
       setBusy(false);
     }
@@ -366,10 +386,14 @@ export default function TeacherDashboard() {
       const updated = extractQuiz(response || fallback);
       setQuizzes((current) => current.map((quiz) => quiz.id === publishingQuiz.id ? updated : quiz));
       setPublishingQuiz(null);
-      setNotice(`"${publishingQuiz.title}" is published to ${audience.type === 'all' ? 'all students' : audience.type === 'section' ? 'the selected blocks' : 'the selected students'} (${audience.time_limit_minutes} mins${audience.shuffle_questions ? ', Shuffled' : ''}).`);
+      const msg = `"${publishingQuiz.title}" is published to ${audience.type === 'all' ? 'all students' : audience.type === 'section' ? 'the selected blocks' : 'the selected students'} (${audience.time_limit_minutes} mins${audience.shuffle_questions ? ', Shuffled' : ''}).`;
+      setNotice(msg);
+      showToast(msg, 'success');
       void loadDashboard();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Could not publish this quiz');
+      const msg = err instanceof Error ? err.message : 'Could not publish this quiz';
+      setError(msg);
+      showToast(msg, 'error');
     } finally {
       setBusy(false);
     }

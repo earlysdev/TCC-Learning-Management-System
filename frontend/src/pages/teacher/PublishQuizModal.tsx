@@ -3,6 +3,7 @@ import { Check, Clock3, Layers, Shuffle, UserRoundCheck, UsersRound } from 'luci
 import type { Quiz, User } from '../../lib/types';
 import Modal from '../../components/ui/Modal';
 import Button from '../../components/ui/Button';
+import { useToastContext } from '../../contexts/ToastContext';
 
 export type AudienceType = 'all' | 'section' | 'individual';
 
@@ -41,6 +42,7 @@ const audienceChoices: Array<{ type: AudienceType; label: string; detail: string
 const presetMinutes = [5, 10, 15, 20, 30, 45, 60];
 
 export default function PublishQuizModal({ quiz, isOpen, students, sections, busy = false, onClose, onPublish }: PublishQuizModalProps) {
+  const { showToast } = useToastContext();
   const [audienceType, setAudienceType] = useState<AudienceType>('all');
   const [sectionIds, setSectionIds] = useState<Array<string | number>>([]);
   const [studentIds, setStudentIds] = useState<number[]>([]);
@@ -84,11 +86,19 @@ export default function PublishQuizModal({ quiz, isOpen, students, sections, bus
   ) && timeLimitMinutes >= 1 && timeLimitMinutes <= 300;
 
   const toggleSection = (id: string | number) => {
-    setSectionIds((current) => current.includes(id) ? current.filter((selected) => selected !== id) : [...current, id]);
+    setSectionIds((current) => {
+      const next = current.includes(id) ? current.filter((selected) => selected !== id) : [...current, id];
+      showToast(`Selected ${next.length} block${next.length === 1 ? '' : 's'}.`, 'info');
+      return next;
+    });
   };
 
   const toggleStudent = (id: number) => {
-    setStudentIds((current) => current.includes(id) ? current.filter((selected) => selected !== id) : [...current, id]);
+    setStudentIds((current) => {
+      const next = current.includes(id) ? current.filter((selected) => selected !== id) : [...current, id];
+      showToast(`Selected ${next.length} student${next.length === 1 ? '' : 's'}.`, 'info');
+      return next;
+    });
   };
 
   const audienceSummary = audienceType === 'all'

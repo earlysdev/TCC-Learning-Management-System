@@ -2,6 +2,7 @@ import type { UserRole } from '../../lib/types';
 import { ROLE_CONFIGS } from '../../lib/constants';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuthContext } from '../../contexts/AuthContext';
+import { useToastContext } from '../../contexts/ToastContext';
 import { LogOut } from 'lucide-react';
 import Badge from '../ui/Badge';
 
@@ -13,11 +14,13 @@ interface SidebarProps {
 
 export default function Sidebar({ role, isOpen, onClose }: SidebarProps) {
   const { user, logout } = useAuthContext();
+  const { showToast } = useToastContext();
   const config = ROLE_CONFIGS[role];
   const navigate = useNavigate();
 
   const handleLogout = () => {
     logout();
+    showToast('You have signed out safely.', 'info');
     navigate('/login');
   };
 
@@ -43,6 +46,7 @@ export default function Sidebar({ role, isOpen, onClose }: SidebarProps) {
               to={item.path}
               className={({ isActive }) => `sidebar-item ${isActive ? 'sidebar-item-active' : ''}`}
               onClick={() => {
+                showToast(`Switched to ${item.label}.`, 'info');
                 if (window.innerWidth <= 1024) onClose();
               }}
             >

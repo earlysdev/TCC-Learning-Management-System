@@ -4,9 +4,11 @@ import { ChevronLeft, Eye, EyeOff, ArrowRight, CheckCircle2, AlertCircle } from 
 import { API_BASE } from '../lmsApi';
 import CaptchaVerification from '../components/auth/CaptchaVerification';
 import Button from '../components/ui/Button';
+import { useToastContext } from '../contexts/ToastContext';
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const { showToast } = useToastContext();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -45,11 +47,14 @@ export default function LoginPage() {
         storage.setItem('lms-user', JSON.stringify(data.user));
       }
 
+      showToast(`Signed in successfully. Welcome, ${data.user?.name || 'User'}!`, 'success');
       const rawRole = String(data.user?.role || 'student').toLowerCase();
       const role = rawRole === 'principal' ? 'dean' : rawRole;
       navigate(`/${role}`);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Unable to sign in. Please verify your connection.');
+      const msg = err instanceof Error ? err.message : 'Unable to sign in. Please verify your connection.';
+      setError(msg);
+      showToast(msg, 'error');
     } finally {
       setBusy(false);
     }
@@ -57,7 +62,9 @@ export default function LoginPage() {
 
   const handleForgotPassword = async () => {
     if (!identifier) {
-      setError('Please enter your email or ID first to request password reset instructions.');
+      const msg = 'Please enter your email or ID first to request password reset instructions.';
+      setError(msg);
+      showToast(msg, 'warning');
       return;
     }
     setBusy(true);
@@ -71,9 +78,13 @@ export default function LoginPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Could not request password reset.');
-      setNotice(data.message || 'Reset instructions have been processed.');
+      const msg = data.message || 'Reset instructions have been processed.';
+      setNotice(msg);
+      showToast(msg, 'success');
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to request password reset.');
+      const msg = err instanceof Error ? err.message : 'Failed to request password reset.';
+      setError(msg);
+      showToast(msg, 'error');
     } finally {
       setBusy(false);
     }
@@ -156,7 +167,11 @@ export default function LoginPage() {
               <button 
                 type="button" 
                 className="password-toggle-btn"
-                onClick={() => setShowPassword(!showPassword)}
+                onClick={() => {
+                  const next = !showPassword;
+                  setShowPassword(next);
+                  showToast(next ? 'Password visible.' : 'Password hidden.', 'info');
+                }}
                 aria-label={showPassword ? 'Hide password' : 'Show password'}
               >
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -174,7 +189,11 @@ export default function LoginPage() {
               <input 
                 type="checkbox" 
                 checked={remember} 
-                onChange={e => setRemember(e.target.checked)}
+                onChange={e => {
+                  const checked = e.target.checked;
+                  setRemember(checked);
+                  showToast(checked ? 'Session will remain active on this device.' : 'Session will end when browser closes.', 'info');
+                }}
                 style={{ accentColor: 'var(--primary-400)', width: '16px', height: '16px' }}
               />
               <span>Keep me signed in</span>

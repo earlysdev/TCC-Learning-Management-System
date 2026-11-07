@@ -4,6 +4,7 @@ import NotificationBell from '../ui/NotificationBell';
 import NotificationPanel from '../ui/NotificationPanel';
 import { useNotifications } from '../../hooks/useNotifications';
 import { useAuthContext } from '../../contexts/AuthContext';
+import { useToastContext } from '../../contexts/ToastContext';
 
 interface TopbarProps {
   roleLabel: string;
@@ -13,6 +14,17 @@ export default function Topbar({ roleLabel }: TopbarProps) {
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const { notifications, unreadCount, markRead, markAllRead } = useNotifications();
   const { user } = useAuthContext();
+  const { showToast } = useToastContext();
+
+  const handleMarkRead = (id: number) => {
+    markRead(id);
+    showToast('Notification marked as read.', 'info');
+  };
+
+  const handleMarkAllRead = () => {
+    markAllRead();
+    showToast('All notifications marked as read.', 'success');
+  };
 
   return (
     <header className="dashboard-header">
@@ -50,8 +62,8 @@ export default function Topbar({ roleLabel }: TopbarProps) {
             isOpen={isNotifOpen}
             onClose={() => setIsNotifOpen(false)}
             notifications={notifications}
-            onMarkRead={markRead}
-            onMarkAllRead={markAllRead}
+            onMarkRead={handleMarkRead}
+            onMarkAllRead={handleMarkAllRead}
           />
         </div>
 

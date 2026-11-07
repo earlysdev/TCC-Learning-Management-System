@@ -15,6 +15,7 @@ import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import Input from '../../components/ui/Input';
 import ProfileUpdateCard from '../../components/ui/ProfileUpdateCard';
+import { useToastContext } from '../../contexts/ToastContext';
 
 interface SecretaryMetrics {
   total_students: number;
@@ -52,6 +53,7 @@ const sectionToPath: Record<string, string> = {
 
 export default function SecretaryDashboard() {
   const user = getLmsUser();
+  const { showToast } = useToastContext();
   const { subpage } = useParams<{ subpage?: string }>();
   const navigate = useNavigate();
   const initialSection = subpage ? (pathToSection[subpage] || 'overview') : 'overview';
@@ -144,7 +146,9 @@ export default function SecretaryDashboard() {
     setNotice(null);
 
     if (newUserRole === 'student' && lrn.trim().length < 4) {
-      setError('Student ID is required (e.g. 20273710).');
+      const msg = 'Student ID is required (e.g. 20273710).';
+      setError(msg);
+      showToast(msg, 'warning');
       setBusy(false);
       return;
     }
@@ -167,7 +171,9 @@ export default function SecretaryDashboard() {
         }),
       });
 
-      setNotice(`Account for ${fullName} (${newUserRole}) created successfully!`);
+      const msg = `Account for ${fullName} (${newUserRole}) created successfully!`;
+      setNotice(msg);
+      showToast(msg, 'success');
       // Reset form
       setFirstName('');
       setLastName('');
@@ -177,7 +183,9 @@ export default function SecretaryDashboard() {
       await loadSecretaryData();
       setActiveSection('student_records');
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to create user account');
+      const msg = err instanceof Error ? err.message : 'Failed to create user account';
+      setError(msg);
+      showToast(msg, 'error');
     } finally {
       setBusy(false);
     }
@@ -191,10 +199,14 @@ export default function SecretaryDashboard() {
         method: 'PATCH',
         body: JSON.stringify({ status: newStatus }),
       });
-      setNotice(`Status for ${student.name} updated to "${newStatus}".`);
+      const msg = `Status for ${student.name} updated to "${newStatus}".`;
+      setNotice(msg);
+      showToast(msg, 'success');
       await loadSecretaryData();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to update student status');
+      const msg = err instanceof Error ? err.message : 'Failed to update student status';
+      setError(msg);
+      showToast(msg, 'error');
     } finally {
       setBusy(false);
     }
@@ -718,7 +730,7 @@ export default function SecretaryDashboard() {
           <p style={{ color: 'var(--neutral-300)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
             Export full student roster including ID, block, and status.
           </p>
-          <Button variant="outline" size="sm" onClick={() => alert('Exporting student masterlist CSV...')}>
+          <Button variant="outline" size="sm" onClick={() => showToast('Exporting Student Masterlist CSV...', 'success')}>
             <Download size={14} /> Export CSV
           </Button>
         </GlassCard>
@@ -731,7 +743,7 @@ export default function SecretaryDashboard() {
           <p style={{ color: 'var(--neutral-300)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
             Summary of 4th Year graduating students (Blocks 4A–4E) for S.Y. 2025–2026.
           </p>
-          <Button variant="outline" size="sm" onClick={() => alert('Generating Graduating Students Report...')}>
+          <Button variant="outline" size="sm" onClick={() => showToast('Generating Graduating Students Report PDF...', 'success')}>
             <Download size={14} /> Export PDF
           </Button>
         </GlassCard>

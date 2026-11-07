@@ -1,12 +1,14 @@
 import { useState, type FormEvent } from 'react';
 import { CheckCircle2, AlertCircle, Save } from 'lucide-react';
 import { getLmsUser, lmsFetch } from '../../lmsApi';
+import { useToastContext } from '../../contexts/ToastContext';
 import GlassCard from './GlassCard';
 import Input from './Input';
 import Button from './Button';
 
 export default function ProfileUpdateCard() {
   const currentUser = getLmsUser();
+  const { showToast } = useToastContext();
   const [name, setName] = useState(currentUser?.name || '');
   const [email, setEmail] = useState(currentUser?.email || '');
   const [password, setPassword] = useState('');
@@ -40,9 +42,13 @@ export default function ProfileUpdateCard() {
         }
       }
       setPassword('');
-      setNotice(res.message || 'Profile information updated successfully.');
+      const msg = res.message || 'Profile information updated successfully.';
+      setNotice(msg);
+      showToast(msg, 'success');
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Could not update profile information.');
+      const msg = err instanceof Error ? err.message : 'Could not update profile information.';
+      setError(msg);
+      showToast(msg, 'error');
     } finally {
       setSaving(false);
     }

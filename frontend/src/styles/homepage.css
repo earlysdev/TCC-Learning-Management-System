@@ -24,6 +24,15 @@ html {
   transition: all 0.3s ease;
 }
 
+.navbar > .container,
+.navbar .container {
+  max-width: 100% !important;
+  width: 100% !important;
+  margin: 0 !important;
+  padding-left: clamp(1.25rem, 2.5vw, 2.5rem) !important;
+  padding-right: clamp(1.25rem, 2.5vw, 2.5rem) !important;
+}
+
 .navbar-content {
   display: flex;
   align-items: center;
@@ -38,6 +47,7 @@ html {
   gap: 0.75rem;
   text-decoration: none;
   min-width: 0;
+  margin-right: auto;
 }
 
 .logo-img {
@@ -85,6 +95,7 @@ html {
   gap: 0.5rem;
   align-items: center;
   flex-shrink: 0;
+  margin-left: auto;
 }
 
 .nav-btn {

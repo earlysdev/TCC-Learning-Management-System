@@ -23,6 +23,7 @@ import { lmsFetch, getLmsUser } from '../../lmsApi';
 import type { Question, Quiz, Recommendation, ReviewQuestion, StudentAnswerValue } from '../../lib/types';
 import Button from '../../components/ui/Button';
 import QuizDetailsPdfModal from '../../components/ui/QuizDetailsPdfModal';
+import { useToastContext } from '../../contexts/ToastContext';
 
 type QuizResult = {
   score: number;
@@ -216,6 +217,7 @@ function getShortcutEvent(event: KeyboardEvent): IntegrityEventType | null {
 export default function StudentQuizTakePage() {
   const { quizId } = useParams<{ quizId: string }>();
   const navigate = useNavigate();
+  const { showToast } = useToastContext();
   const [quiz, setQuiz] = useState<Quiz | null>(null);
   const [questionOrder, setQuestionOrder] = useState<number[]>([]);
   const [result, setResult] = useState<QuizResult | null>(null);
@@ -273,6 +275,7 @@ export default function StudentQuizTakePage() {
     setInterruption(interruptionCopy[eventType]);
     setIntegrityIncidentCount((count) => count + 1);
     setCanResume(quizWindowCanResume());
+    showToast(`Security Warning: ${label}`, 'warning');
 
     // Record violation locally
     setViolationsList((curr) => [
@@ -611,6 +614,9 @@ export default function StudentQuizTakePage() {
       next[questionIndex] = value;
       return next;
     });
+    if (typeof value === 'number') {
+      showToast(`Question #${displayQuestionNum} answer selected.`, 'info');
+    }
   };
 
   const handleToggleMultiAnswer = (questionIndex: number, optionIndex: number, displayQuestionNum = questionIndex + 1) => {
@@ -628,6 +634,7 @@ export default function StudentQuizTakePage() {
       next[questionIndex] = existing;
       return next;
     });
+    showToast(`Question #${displayQuestionNum} options updated.`, 'info');
   };
 
   const submitQuiz = async (event: FormEvent<HTMLFormElement>) => {
@@ -638,7 +645,9 @@ export default function StudentQuizTakePage() {
     const questionCount = questions.length;
     const hasUnanswered = questions.some((q, idx) => !isAnswerProvided(answers[idx], q));
     if (hasUnanswered) {
-      setError('Answer every question before submitting the quiz.');
+      const msg = 'Answer every question before submitting the quiz.';
+      setError(msg);
+      showToast(msg, 'warning');
       return;
     }
 
@@ -661,8 +670,11 @@ export default function StudentQuizTakePage() {
         }),
       });
       setResult(data.attempt);
+      showToast(`Assessment submitted! Score: ${data.attempt.score}/${data.attempt.max_score}`, 'success');
     } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : 'Your answers could not be submitted.');
+      const msg = reason instanceof Error ? reason.message : 'Your answers could not be submitted.';
+      setError(msg);
+      showToast(msg, 'error');
     } finally {
       setSubmitting(false);
     }

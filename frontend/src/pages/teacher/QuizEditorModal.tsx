@@ -10,6 +10,7 @@ import { lmsFetch } from '../../lmsApi';
 import Modal from '../../components/ui/Modal';
 import Button from '../../components/ui/Button';
 import Select from '../../components/ui/Select';
+import { useToastContext } from '../../contexts/ToastContext';
 
 export interface QuizEditorQuestion extends Required<Pick<Question, 'prompt' | 'options' | 'correct_index'>> {
   type: QuestionType;
@@ -168,6 +169,7 @@ function toEditorValues(quiz: Quiz): QuizEditorValues {
 }
 
 export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects = [], onClose, onSave }: QuizEditorModalProps) {
+  const { showToast } = useToastContext();
   const [draft, setDraft] = useState<QuizEditorValues | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [aiNotice, setAiNotice] = useState<string | null>(null);
@@ -469,7 +471,9 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
       });
       return { ...current, questions: updatedQuestions };
     });
-    setAiNotice('Answer choices have been randomized across multiple-choice questions while preserving each true answer.');
+    const msg = 'Answer choices have been randomized across multiple-choice questions while preserving each true answer.';
+    setAiNotice(msg);
+    showToast('Answer choices randomized.', 'info');
   };
 
   const setQuestionCount = (nextCount: number) => {
@@ -483,13 +487,16 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
       }
       return { ...current, questions: current.questions.slice(0, safeCount) };
     });
+    showToast(`Question count set to ${safeCount}.`, 'info');
   };
 
   const handleSelectPdf = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
-      setValidationError('Please upload a valid PDF (.pdf) document.');
+      const msg = 'Please upload a valid PDF (.pdf) document.';
+      setValidationError(msg);
+      showToast(msg, 'warning');
       return;
     }
     try {
@@ -508,9 +515,13 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
           instructions: nextInstructions,
         };
       });
-      setAiNotice(`PDF "${parsed.name}" attached for quiz instructions, AI question generation, and post-quiz study feedback.`);
+      const msg = `PDF "${parsed.name}" attached for quiz instructions, AI question generation, and post-quiz study feedback.`;
+      setAiNotice(msg);
+      showToast(`PDF "${parsed.name}" attached.`, 'success');
     } catch (err: unknown) {
-      setValidationError(err instanceof Error ? err.message : 'Could not read the selected PDF file.');
+      const msg = err instanceof Error ? err.message : 'Could not read the selected PDF file.';
+      setValidationError(msg);
+      showToast(msg, 'error');
     } finally {
       if (pdfInputRef.current) pdfInputRef.current.value = '';
     }
@@ -521,7 +532,9 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
     const cleanTopic = draft.topic.trim() || draft.title.trim();
     const cleanSubject = draft.subject.trim();
     if (!cleanTopic || !cleanSubject) {
-      setValidationError('Enter a Subject and Topic / Unit before generating questions with AI.');
+      const msg = 'Enter a Subject and Topic / Unit before generating questions with AI.';
+      setValidationError(msg);
+      showToast(msg, 'warning');
       return;
     }
     setAiGenerating(true);
@@ -567,14 +580,16 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
             ),
           };
         });
-        setAiNotice(
-          draft.reference_pdf_name
-            ? `Generated ${res.questions.length} questions from PDF "${draft.reference_pdf_name}". Review and save when ready.`
-            : `Generated ${res.questions.length} questions based on topic "${cleanTopic}". Review and save when ready.`
-        );
+        const msg = draft.reference_pdf_name
+          ? `Generated ${res.questions.length} questions from PDF "${draft.reference_pdf_name}". Review and save when ready.`
+          : `Generated ${res.questions.length} questions based on topic "${cleanTopic}". Review and save when ready.`;
+        setAiNotice(msg);
+        showToast(`Generated ${res.questions.length} AI questions!`, 'success');
       }
     } catch (err: unknown) {
-      setValidationError(err instanceof Error ? err.message : 'Could not generate AI questions.');
+      const msg = err instanceof Error ? err.message : 'Could not generate AI questions.';
+      setValidationError(msg);
+      showToast(msg, 'error');
     } finally {
       setAiGenerating(false);
     }

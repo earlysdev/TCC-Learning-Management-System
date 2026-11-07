@@ -16,9 +16,11 @@ import Badge from '../../components/ui/Badge';
 import ProfileUpdateCard from '../../components/ui/ProfileUpdateCard';
 import QuizDetailsPdfModal from '../../components/ui/QuizDetailsPdfModal';
 import QuizPrivacyRulesModal from '../../components/ui/QuizPrivacyRulesModal';
+import { useToastContext } from '../../contexts/ToastContext';
 
 export default function StudentDashboard() {
   const user = getLmsUser();
+  const { showToast } = useToastContext();
   const { subpage } = useParams<{ subpage?: string }>();
   const navigate = useNavigate();
   const initialSection = subpage === 'dashboard' ? 'overview' : (subpage || 'overview');
@@ -111,8 +113,11 @@ export default function StudentDashboard() {
       const data = await lmsFetch<{ quiz: Quiz; attempt: typeof quizResult }>(`/student/quizzes/${quiz.id}`);
       setSelectedQuiz(data.quiz);
       setQuizResult(data.attempt);
+      showToast(`Opened "${quiz.title}" review.`, 'info');
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Could not open this quiz');
+      const msg = err instanceof Error ? err.message : 'Could not open this quiz';
+      setError(msg);
+      showToast(msg, 'error');
     } finally {
       setSubmitting(false);
     }
@@ -142,8 +147,12 @@ export default function StudentDashboard() {
   };
 
   const requestTakeQuiz = (quiz: Quiz) => {
-    if (isQuizAttemptLocked(quiz)) return;
+    if (isQuizAttemptLocked(quiz)) {
+      showToast('This assessment is already completed or locked.', 'warning');
+      return;
+    }
     setPrivacyModalQuiz(quiz);
+    showToast('Review assessment rules before starting.', 'info');
   };
 
   const openQuizWindow = (quiz: Quiz) => {
@@ -154,6 +163,7 @@ export default function StudentDashboard() {
     setQuizzes((prev) =>
       prev.map((q) => (q.id === quiz.id ? { ...q, started: true, is_locked: true } : q))
     );
+    showToast(`Launching secure assessment: "${quiz.title}"`, 'success');
 
     // Immediately enter Full-Screen Exam Lock within the user click gesture to prevent alt-tabbing or window switching
     const docEl = document.documentElement as HTMLElement & {
@@ -181,7 +191,9 @@ export default function StudentDashboard() {
     
     const questions = selectedQuiz.questions || [];
     if (questions.some((q, idx) => !isAnswerProvided(answers[idx], q))) {
-      setError('Please answer all questions before submitting.');
+      const msg = 'Please answer all questions before submitting.';
+      setError(msg);
+      showToast(msg, 'warning');
       return;
     }
 
@@ -196,9 +208,12 @@ export default function StudentDashboard() {
         }
       );
       setQuizResult(data.attempt);
+      showToast('Quiz submitted successfully!', 'success');
       await fetchQuizzes();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to submit quiz');
+      const msg = err instanceof Error ? err.message : 'Failed to submit quiz';
+      setError(msg);
+      showToast(msg, 'error');
     } finally {
       setSubmitting(false);
     }
