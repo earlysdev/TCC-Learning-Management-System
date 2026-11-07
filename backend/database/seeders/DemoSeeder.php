@@ -116,7 +116,7 @@ class DemoSeeder extends Seeder
 
         // Seed Official BSIT Subject Codes & Descriptions
         $subjects = [
-            // 2024-2025 1st — BSIT Year 1st
+            // 2024-2025 1st · BSIT Year 1st
             ['code' => 'PATH FIT 1', 'name' => 'Movement Competency Training', 'grade' => '1st Year', 'department' => 'BSIT'],
             ['code' => 'GEC 1', 'name' => 'Understanding the Self', 'grade' => '1st Year', 'department' => 'BSIT'],
             ['code' => 'IT 101', 'name' => 'Introduction To Computing', 'grade' => '1st Year', 'department' => 'BSIT'],
@@ -126,7 +126,7 @@ class DemoSeeder extends Seeder
             ['code' => 'Math 2', 'name' => 'Plane Trigonometry', 'grade' => '1st Year', 'department' => 'BSIT'],
             ['code' => 'NSTP 1', 'name' => 'CWTS/ROTC 1', 'grade' => '1st Year', 'department' => 'BSIT'],
 
-            // 2024-2025 2nd — BSIT Year 1st
+            // 2024-2025 2nd · BSIT Year 1st
             ['code' => 'ROTC/CWTS 102', 'name' => 'Reserved Officer Training Corps/CWTS', 'grade' => '1st Year', 'department' => 'BSIT'],
             ['code' => 'IT 105', 'name' => 'Computer Programming 2', 'grade' => '1st Year', 'department' => 'BSIT'],
             ['code' => 'IT 106', 'name' => 'Digital Logic Design', 'grade' => '1st Year', 'department' => 'BSIT'],
@@ -135,7 +135,7 @@ class DemoSeeder extends Seeder
             ['code' => 'Math 3', 'name' => 'Pre-Calculus', 'grade' => '1st Year', 'department' => 'BSIT'],
             ['code' => 'GEC 2', 'name' => 'READING IN PHILIPPINE HISTORY', 'grade' => '1st Year', 'department' => 'BSIT'],
 
-            // 2025-2026 1st — BSIT Year 2nd
+            // 2025-2026 1st · BSIT Year 2nd
             ['code' => 'PATH FIT 3', 'name' => 'DANCE SPORTS & INDIVIDUAL/GROUP EXERCISE/OUTDOOR', 'grade' => '2nd Year', 'department' => 'BSIT'],
             ['code' => 'GEC 3', 'name' => 'The Contemporary World', 'grade' => '2nd Year', 'department' => 'BSIT'],
             ['code' => 'IT 107', 'name' => 'Application Development & Emerging Technologies', 'grade' => '2nd Year', 'department' => 'BSIT'],
@@ -144,7 +144,7 @@ class DemoSeeder extends Seeder
             ['code' => 'IT 110', 'name' => 'Object Oriented Programming (OOP)', 'grade' => '2nd Year', 'department' => 'BSIT'],
             ['code' => 'IT 111', 'name' => 'Social Issues & Professional Issues', 'grade' => '2nd Year', 'department' => 'BSIT'],
 
-            // 2025-2026 2nd — BSIT Year 2nd
+            // 2025-2026 2nd · BSIT Year 2nd
             ['code' => 'IT 112', 'name' => 'Information Management 1', 'grade' => '2nd Year', 'department' => 'BSIT'],
             ['code' => 'IT 113', 'name' => 'Event-Driven Programming', 'grade' => '2nd Year', 'department' => 'BSIT'],
             ['code' => 'IT 114', 'name' => 'Integrative Programming & Technologies 1', 'grade' => '2nd Year', 'department' => 'BSIT'],
@@ -155,12 +155,12 @@ class DemoSeeder extends Seeder
             ['code' => 'GEE 6', 'name' => 'Art Appreciation', 'grade' => '2nd Year', 'department' => 'BSIT'],
             ['code' => 'GEE 8', 'name' => 'Ethics', 'grade' => '2nd Year', 'department' => 'BSIT'],
 
-            // 2025-2026 Summer — BSIT Year 2nd
+            // 2025-2026 Summer · BSIT Year 2nd
             ['code' => 'IT 117', 'name' => 'QualitativeMethods(Modeling&Simulation)', 'grade' => '2nd Year', 'department' => 'BSIT'],
             ['code' => 'IT 118', 'name' => 'Human Computer Interaction 2', 'grade' => '2nd Year', 'department' => 'BSIT'],
             ['code' => 'IT Elec 1', 'name' => 'System Analysis and Design (SAD)', 'grade' => '2nd Year', 'department' => 'BSIT'],
 
-            // 2026-2027 1st — BSIT Year 3rd
+            // 2026-2027 1st · BSIT Year 3rd
             ['code' => 'IT 119', 'name' => 'System Integration & Architecture 1', 'grade' => '3rd Year', 'department' => 'BSIT'],
             ['code' => 'IT 120', 'name' => 'Research1 (Methods of Research in Computing)', 'grade' => '3rd Year', 'department' => 'BSIT'],
             ['code' => 'IT 121', 'name' => 'Information Management 2', 'grade' => '3rd Year', 'department' => 'BSIT'],

@@ -79,7 +79,7 @@ interface QuizSubmissionsModalProps {
 }
 
 function formatRemainingTime(secs: number | null | undefined): string {
-  if (secs === null || secs === undefined || secs < 0) return '—';
+  if (secs === null || secs === undefined || secs < 0) return 'N/A';
   const m = Math.floor(secs / 60);
   const s = secs % 60;
   return `${m}:${s < 10 ? '0' : ''}${s}`;
@@ -244,7 +244,7 @@ export default function QuizSubmissionsModal({ quiz, isOpen, onClose }: QuizSubm
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
                 <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#34d399', boxShadow: '0 0 8px #34d399', display: 'inline-block' }} />
                 <strong style={{ color: 'white', fontSize: '0.96rem' }}>
-                  Formative Live View — Students Currently Taking the Quiz ({filteredLiveSessions.length})
+                  Formative Live View · Students Currently Taking the Quiz ({filteredLiveSessions.length})
                 </strong>
               </div>
               <span style={{ fontSize: '0.76rem', color: '#a7f3d0', background: 'rgba(16, 185, 129, 0.16)', border: '1px solid rgba(16, 185, 129, 0.35)', padding: '0.18rem 0.6rem', borderRadius: '999px', fontWeight: 600 }}>
@@ -662,7 +662,7 @@ export default function QuizSubmissionsModal({ quiz, isOpen, onClose }: QuizSubm
                                       const isCorrectKey = qType === 'multiple_answer'
                                         ? (Array.isArray(q.correct_indices) ? q.correct_indices.includes(optIdx) : Number(q.correct_index ?? 0) === optIdx)
                                         : Number(q.correct_index ?? 0) === optIdx;
-                                      const isHoveredOption = monitoredSession.hovered_element === `Question ${displayIdx + 1} — Option ${letter}`;
+                                      const isHoveredOption = monitoredSession.hovered_element === `Question ${displayIdx + 1} · Option ${letter}` || monitoredSession.hovered_element === `Question ${displayIdx + 1} - Option ${letter}`;
                                       return (
                                         <div
                                           key={optIdx}
@@ -735,7 +735,7 @@ export default function QuizSubmissionsModal({ quiz, isOpen, onClose }: QuizSubm
             <Lock size={18} style={{ color: '#fbbf24', flexShrink: 0 }} />
             <div>
               <strong style={{ color: 'white', display: 'block', marginBottom: '0.15rem' }}>
-                Summative Quiz Mode — Final Submission Only
+                Summative Quiz Mode · Final Submission Only
               </strong>
               Live student monitoring is disabled for Summative exams. Student scores and proctoring logs appear below as soon as each student finishes and submits the quiz.
             </div>

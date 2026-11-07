@@ -7,7 +7,7 @@ import { getYearLevelFromBlock } from '../../lib/constants';
 import { 
   BookOpen, CheckCircle2, Award, Sparkles, Send, 
   ArrowRight, ArrowLeft, Clock, AlertCircle, FileQuestion, Calendar, Trophy,
-  ExternalLink, Loader2, FileText, Info, Eye
+  ExternalLink, Loader2, FileText, Info, Eye, Lock
 } from 'lucide-react';
 import GlassCard from '../../components/ui/GlassCard';
 import StatCard from '../../components/ui/StatCard';
@@ -35,6 +35,16 @@ export default function StudentDashboard() {
   const [answers, setAnswers] = useState<StudentAnswerValue[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [takingQuizId, setTakingQuizId] = useState<number | null>(null);
+  const [lockedQuizIds, setLockedQuizIds] = useState<number[]>(() => {
+    try {
+      const key = `lms_locked_quizzes_${user?.id ?? 'student'}`;
+      const raw = localStorage.getItem(key);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed.map((id) => Number(id)).filter((id) => id > 0) : [];
+    } catch {
+      return [];
+    }
+  });
   const [quizResult, setQuizResult] = useState<{
     score: number;
     max_score: number;
@@ -108,15 +118,42 @@ export default function StudentDashboard() {
     }
   };
 
+  const markQuizLockedLocally = (quizId: number) => {
+    setLockedQuizIds((prev) => {
+      if (prev.includes(quizId)) return prev;
+      const next = [...prev, quizId];
+      try {
+        localStorage.setItem(`lms_locked_quizzes_${user?.id ?? 'student'}`, JSON.stringify(next));
+      } catch {
+        // Ignore storage errors
+      }
+      return next;
+    });
+  };
+
+  const isQuizAttemptLocked = (quiz: Quiz): boolean => {
+    return Boolean(
+      quiz.attempted ||
+      quiz.started ||
+      quiz.is_locked ||
+      takingQuizId === quiz.id ||
+      lockedQuizIds.includes(quiz.id)
+    );
+  };
+
   const requestTakeQuiz = (quiz: Quiz) => {
-    if (takingQuizId === quiz.id) return;
+    if (isQuizAttemptLocked(quiz)) return;
     setPrivacyModalQuiz(quiz);
   };
 
   const openQuizWindow = (quiz: Quiz) => {
-    if (takingQuizId === quiz.id) return;
+    if (isQuizAttemptLocked(quiz)) return;
     setTakingQuizId(quiz.id);
+    markQuizLockedLocally(quiz.id);
     setPrivacyModalQuiz(null);
+    setQuizzes((prev) =>
+      prev.map((q) => (q.id === quiz.id ? { ...q, started: true, is_locked: true } : q))
+    );
 
     // Immediately enter Full-Screen Exam Lock within the user click gesture to prevent alt-tabbing or window switching
     const docEl = document.documentElement as HTMLElement & {
@@ -281,8 +318,8 @@ export default function StudentDashboard() {
                         <FileText size={11} /> PDF
                       </span>
                     )}
-                    <Badge variant={quiz.attempted ? 'success' : 'primary'}>
-                      {quiz.attempted ? 'Completed' : 'Ready'}
+                    <Badge variant={quiz.attempted ? 'success' : isQuizAttemptLocked(quiz) ? 'warning' : 'primary'}>
+                      {quiz.attempted ? 'Completed • Locked' : isQuizAttemptLocked(quiz) ? 'Started • Locked' : 'Ready'}
                     </Badge>
                   </div>
                 </div>
@@ -362,26 +399,51 @@ export default function StudentDashboard() {
                   >
                     <Eye size={14} /> {quiz.reference_pdf_name ? 'Details & PDF' : 'View Details'}
                   </Button>
-                  <Button 
-                    variant={quiz.attempted ? 'outline' : 'primary'} 
-                    size="sm"
-                    disabled={!quiz.attempted && takingQuizId === quiz.id}
-                    style={{ flex: 1 }}
-                    onClick={() => {
-                      if (quiz.attempted) {
+                  {quiz.attempted && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
                         openQuiz(quiz);
                         setActiveSection('quizzes');
-                      } else {
-                        requestTakeQuiz(quiz);
-                      }
-                    }}
-                  >
-                    {!quiz.attempted && takingQuizId === quiz.id ? (
-                      <><Loader2 size={14} className="spin-icon" /> Opening...</>
-                    ) : (
-                      <>{quiz.attempted ? 'Results' : 'Take Quiz'} <ArrowRight size={14} /></>
-                    )}
-                  </Button>
+                      }}
+                      style={{ flex: 1 }}
+                    >
+                      <Award size={14} /> View Result
+                    </Button>
+                  )}
+                  {isQuizAttemptLocked(quiz) ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled
+                      title="Single-attempt policy: You have already started or completed this quiz and cannot click Take Quiz a second time."
+                      style={{
+                        flex: 1,
+                        opacity: 0.72,
+                        cursor: 'not-allowed',
+                        background: 'rgba(239, 68, 68, 0.12)',
+                        borderColor: 'rgba(239, 68, 68, 0.35)',
+                        color: '#fca5a5',
+                      }}
+                    >
+                      <Lock size={14} /> Take Quiz (Locked)
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      disabled={takingQuizId === quiz.id}
+                      style={{ flex: 1 }}
+                      onClick={() => requestTakeQuiz(quiz)}
+                    >
+                      {takingQuizId === quiz.id ? (
+                        <><Loader2 size={14} className="spin-icon" /> Locking...</>
+                      ) : (
+                        <>Take Quiz <ArrowRight size={14} /></>
+                      )}
+                    </Button>
+                  )}
                 </div>
               </GlassCard>
             ))}
@@ -1004,8 +1066,8 @@ export default function StudentDashboard() {
                         <FileText size={11} /> PDF Handout
                       </span>
                     )}
-                    <Badge variant={quiz.attempted ? 'success' : 'warning'}>
-                      {quiz.attempted ? 'Completed' : 'Pending'}
+                    <Badge variant={quiz.attempted ? 'success' : isQuizAttemptLocked(quiz) ? 'warning' : 'warning'}>
+                      {quiz.attempted ? 'Completed • Locked' : isQuizAttemptLocked(quiz) ? 'Attempt Locked' : 'Pending'}
                     </Badge>
                   </div>
                 </div>
@@ -1089,18 +1151,45 @@ export default function StudentDashboard() {
                   >
                     <Eye size={15} /> {quiz.reference_pdf_name ? 'View Details & PDF' : 'View Details'}
                   </Button>
-                  <Button 
-                    variant={quiz.attempted ? 'outline' : 'accent'}
-                    disabled={!quiz.attempted && takingQuizId === quiz.id}
-                    style={{ flex: 1 }}
-                    onClick={() => quiz.attempted ? openQuiz(quiz) : requestTakeQuiz(quiz)}
-                  >
-                    {!quiz.attempted && takingQuizId === quiz.id ? (
-                      <><Loader2 size={16} className="spin-icon" /> Opening...</>
-                    ) : (
-                      <>{quiz.attempted ? (quiz.allow_review ? 'View Result & Review' : 'View Result') : 'Take Quiz'} <ArrowRight size={16} /></>
-                    )}
-                  </Button>
+                  {quiz.attempted && (
+                    <Button
+                      variant="outline"
+                      onClick={() => openQuiz(quiz)}
+                      style={{ flex: 1 }}
+                    >
+                      <Award size={15} /> {quiz.allow_review ? 'Result & Review' : 'View Result'}
+                    </Button>
+                  )}
+                  {isQuizAttemptLocked(quiz) ? (
+                    <Button
+                      variant="outline"
+                      disabled
+                      title="Single-attempt policy: You have already started or completed this quiz and cannot click Take Quiz a second time."
+                      style={{
+                        flex: 1,
+                        opacity: 0.72,
+                        cursor: 'not-allowed',
+                        background: 'rgba(239, 68, 68, 0.12)',
+                        borderColor: 'rgba(239, 68, 68, 0.35)',
+                        color: '#fca5a5',
+                      }}
+                    >
+                      <Lock size={15} /> Take Quiz (Locked)
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="accent"
+                      disabled={takingQuizId === quiz.id}
+                      style={{ flex: 1 }}
+                      onClick={() => requestTakeQuiz(quiz)}
+                    >
+                      {takingQuizId === quiz.id ? (
+                        <><Loader2 size={16} className="spin-icon" /> Locking...</>
+                      ) : (
+                        <>Take Quiz <ArrowRight size={16} /></>
+                      )}
+                    </Button>
+                  )}
                 </div>
               </GlassCard>
             ))}
@@ -1182,7 +1271,7 @@ export default function StudentDashboard() {
         <StatCard label="Overall Average" value={`${avgScore}%`} icon={<Award size={24} />} detail="Calculated score percentage" />
         <StatCard 
           label="Highest Score" 
-          value={completedQuizzes.length > 0 ? `${Math.max(...completedQuizzes.map(q => Number(q.percentage || 0))).toFixed(0)}%` : '—'} 
+          value={completedQuizzes.length > 0 ? `${Math.max(...completedQuizzes.map(q => Number(q.percentage || 0))).toFixed(0)}%` : '0%'} 
           icon={<Trophy size={24} />} 
           detail="Personal best" 
         />
@@ -1264,7 +1353,7 @@ export default function StudentDashboard() {
 
                 {isPerfect ? (
                   <p style={{ color: '#a5d6a7', fontSize: '0.95rem', lineHeight: 1.6, margin: 0, fontWeight: 600 }}>
-                    ✓ Perfect Score Achieved (100% Mastery) — You answered every question correctly. No further study improvements or external reference links are required.
+                    ✓ Perfect Score Achieved (100% Mastery) · You answered every question correctly. No further study improvements or external reference links are required.
                   </p>
                 ) : (
                   <>

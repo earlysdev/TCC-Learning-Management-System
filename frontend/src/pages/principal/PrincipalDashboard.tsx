@@ -375,7 +375,7 @@ export default function PrincipalDashboard() {
                     {u.lrn && <div style={{ fontSize: '0.78rem', color: 'var(--neutral-400)', fontFamily: 'monospace' }}>ID: {u.lrn}</div>}
                   </td>
                   <td style={{ padding: '0.85rem 1.25rem', color: 'var(--neutral-300)' }}>
-                    {u.section ? `${u.section}${u.grade ? ` (${u.grade})` : ''}` : '—'}
+                    {u.section ? `${u.section}${u.grade ? ` (${u.grade})` : ''}` : 'Not Assigned'}
                   </td>
                   <td style={{ padding: '0.85rem 1.25rem' }}>
                     <Badge variant={u.status === 'inactive' ? 'warning' : 'success'}>
@@ -599,7 +599,7 @@ export default function PrincipalDashboard() {
                 <tr key={log.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                   <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: 'var(--primary-300)' }}>{log.action}</td>
                   <td style={{ padding: '0.75rem 1rem' }}>{log.user?.name || `User #${log.user_id || 'System'}`}</td>
-                  <td style={{ padding: '0.75rem 1rem', color: 'var(--neutral-300)' }}>{log.description || '—'}</td>
+                  <td style={{ padding: '0.75rem 1rem', color: 'var(--neutral-300)' }}>{log.description || 'No description'}</td>
                   <td style={{ padding: '0.75rem 1rem', fontFamily: 'monospace' }}>{log.ip_address || '127.0.0.1'}</td>
                   <td style={{ padding: '0.75rem 1rem', color: 'var(--neutral-400)' }}>
                     {new Date(log.created_at).toLocaleString()}

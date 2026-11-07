@@ -149,7 +149,7 @@ export default function PublishQuizModal({ quiz, isOpen, students, sections, bus
               }}
             >
               <strong style={{ display: 'block', fontSize: '0.9rem', color: quizType === 'formative' ? '#a5d6a7' : 'white' }}>
-                Formative — Live Student View
+                Formative · Live Student View
               </strong>
               <span style={{ display: 'block', color: 'var(--neutral-300)', fontSize: '0.78rem', lineHeight: 1.4, marginTop: '0.25rem' }}>
                 Watch a live real-time view of students currently taking the quiz.
@@ -170,10 +170,10 @@ export default function PublishQuizModal({ quiz, isOpen, students, sections, bus
               }}
             >
               <strong style={{ display: 'block', fontSize: '0.9rem', color: quizType === 'summative' ? '#fbbf24' : 'white' }}>
-                Summative — Wait Until Submitted
+                Summative · Wait Until Submitted
               </strong>
               <span style={{ display: 'block', color: 'var(--neutral-300)', fontSize: '0.78rem', lineHeight: 1.4, marginTop: '0.25rem' }}>
-                Formal exam mode — results appear only after students finish and submit.
+                Formal exam mode: results appear only after students finish and submit.
               </span>
             </button>
           </div>
@@ -334,7 +334,7 @@ export default function PublishQuizModal({ quiz, isOpen, students, sections, bus
           </label>
         </div>
 
-        {/* Shuffle Questions Toggle — Visible only when the quiz has 3 or more questions */}
+        {/* Shuffle Questions Toggle · Visible only when the quiz has 3 or more questions */}
         {canShuffle && (
           <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: '1rem' }}>
             <label

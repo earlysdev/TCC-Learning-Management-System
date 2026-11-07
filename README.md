@@ -1,4 +1,4 @@
-# 🏛️ Tagoloan Community College (TCC) — Web-Based Learning Management System
+# 🏛️ Tagoloan Community College (TCC) · Web-Based Learning Management System
 
 A full-stack **Web-Based Learning Management System (LMS)** built for **Tagoloan Community College (TCC)** using **React 19 + TypeScript + Vite** on the frontend and **Laravel 12 + Sanctum** on the backend.
 
@@ -55,9 +55,9 @@ TccPortal!2026
 | Role | Email Address | Student ID Login | Assigned Block | Portal Route |
 | :--- | :--- | :--- | :--- | :--- |
 | **Student** | `student@tcc.edu.ph` | `20273710` | `Block - 1A` (1st Year) | `/student/dashboard` |
-| **Teacher** | `teacher@tcc.edu.ph` | — | BSIT Faculty | `/teacher/dashboard` |
-| **Secretary** | `secretary@tcc.edu.ph` | — | Secretary's Office | `/secretary/dashboard` |
-| **College Dean** | `dean@tcc.edu.ph` | — | Office of the Dean | `/dean/dashboard` |
+| **Teacher** | `teacher@tcc.edu.ph` | N/A | BSIT Faculty | `/teacher/dashboard` |
+| **Secretary** | `secretary@tcc.edu.ph` | N/A | Secretary's Office | `/secretary/dashboard` |
+| **College Dean** | `dean@tcc.edu.ph` | N/A | Office of the Dean | `/dean/dashboard` |
 
 ---
 

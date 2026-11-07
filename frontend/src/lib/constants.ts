@@ -57,7 +57,7 @@ export interface CurriculumSubjectItem {
 }
 
 export const BSIT_SUBJECTS: CurriculumSubjectItem[] = [
-  // 2024-2025 1st (BSIT — Year 1st)
+  // 2024-2025 1st (BSIT · Year 1st)
   { code: 'PATH FIT 1', name: 'Movement Competency Training', yearLevel: '1st Year', semester: '1st Semester' },
   { code: 'GEC 1', name: 'Understanding the Self', yearLevel: '1st Year', semester: '1st Semester' },
   { code: 'IT 101', name: 'Introduction To Computing', yearLevel: '1st Year', semester: '1st Semester' },
@@ -67,7 +67,7 @@ export const BSIT_SUBJECTS: CurriculumSubjectItem[] = [
   { code: 'Math 2', name: 'Plane Trigonometry', yearLevel: '1st Year', semester: '1st Semester' },
   { code: 'NSTP 1', name: 'CWTS/ROTC 1', yearLevel: '1st Year', semester: '1st Semester' },
 
-  // 2024-2025 2nd (BSIT — Year 1st)
+  // 2024-2025 2nd (BSIT · Year 1st)
   { code: 'ROTC/CWTS 102', name: 'Reserved Officer Training Corps/CWTS', yearLevel: '1st Year', semester: '2nd Semester' },
   { code: 'IT 105', name: 'Computer Programming 2', yearLevel: '1st Year', semester: '2nd Semester' },
   { code: 'IT 106', name: 'Digital Logic Design', yearLevel: '1st Year', semester: '2nd Semester' },
@@ -76,7 +76,7 @@ export const BSIT_SUBJECTS: CurriculumSubjectItem[] = [
   { code: 'Math 3', name: 'Pre-Calculus', yearLevel: '1st Year', semester: '2nd Semester' },
   { code: 'GEC 2', name: 'READING IN PHILIPPINE HISTORY', yearLevel: '1st Year', semester: '2nd Semester' },
 
-  // 2025-2026 1st (BSIT — Year 2nd)
+  // 2025-2026 1st (BSIT · Year 2nd)
   { code: 'PATH FIT 3', name: 'DANCE SPORTS & INDIVIDUAL/GROUP EXERCISE/OUTDOOR', yearLevel: '2nd Year', semester: '1st Semester' },
   { code: 'GEC 3', name: 'The Contemporary World', yearLevel: '2nd Year', semester: '1st Semester' },
   { code: 'IT 107', name: 'Application Development & Emerging Technologies', yearLevel: '2nd Year', semester: '1st Semester' },
@@ -85,7 +85,7 @@ export const BSIT_SUBJECTS: CurriculumSubjectItem[] = [
   { code: 'IT 110', name: 'Object Oriented Programming (OOP)', yearLevel: '2nd Year', semester: '1st Semester' },
   { code: 'IT 111', name: 'Social Issues & Professional Issues', yearLevel: '2nd Year', semester: '1st Semester' },
 
-  // 2025-2026 2nd (BSIT — Year 2nd)
+  // 2025-2026 2nd (BSIT · Year 2nd)
   { code: 'IT 112', name: 'Information Management 1', yearLevel: '2nd Year', semester: '2nd Semester' },
   { code: 'IT 113', name: 'Event-Driven Programming', yearLevel: '2nd Year', semester: '2nd Semester' },
   { code: 'IT 114', name: 'Integrative Programming & Technologies 1', yearLevel: '2nd Year', semester: '2nd Semester' },
@@ -96,12 +96,12 @@ export const BSIT_SUBJECTS: CurriculumSubjectItem[] = [
   { code: 'GEE 6', name: 'Art Appreciation', yearLevel: '2nd Year', semester: '2nd Semester' },
   { code: 'GEE 8', name: 'Ethics', yearLevel: '2nd Year', semester: '2nd Semester' },
 
-  // 2025-2026 Summer (BSIT — Year 2nd)
+  // 2025-2026 Summer (BSIT · Year 2nd)
   { code: 'IT 117', name: 'QualitativeMethods(Modeling&Simulation)', yearLevel: '2nd Year', semester: 'Summer' },
   { code: 'IT 118', name: 'Human Computer Interaction 2', yearLevel: '2nd Year', semester: 'Summer' },
   { code: 'IT Elec 1', name: 'System Analysis and Design (SAD)', yearLevel: '2nd Year', semester: 'Summer' },
 
-  // 2026-2027 1st (BSIT — Year 3rd)
+  // 2026-2027 1st (BSIT · Year 3rd)
   { code: 'IT 119', name: 'System Integration & Architecture 1', yearLevel: '3rd Year', semester: '1st Semester' },
   { code: 'IT 120', name: 'Research1 (Methods of Research in Computing)', yearLevel: '3rd Year', semester: '1st Semester' },
   { code: 'IT 121', name: 'Information Management 2', yearLevel: '3rd Year', semester: '1st Semester' },
@@ -115,7 +115,7 @@ export const BSIT_SUBJECTS: CurriculumSubjectItem[] = [
 
 export const BSIT_SUBJECT_OPTIONS = BSIT_SUBJECTS.map((s) => ({
   value: `${s.code} - ${s.name}`,
-  label: `${s.code} — ${s.name}`,
+  label: `${s.code} · ${s.name}`,
 }));
 
 export const ROLE_CONFIGS: Record<UserRole, RoleConfig> = {

@@ -753,7 +753,7 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
           </div>
         )}
 
-        {/* Quiz Metadata — Organized & Aligned 2-Row Grid */}
+        {/* Quiz Metadata · Organized & Aligned 2-Row Grid */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', background: 'rgba(255, 255, 255, 0.02)', padding: '1.1rem', borderRadius: 'var(--radius-lg, 12px)', border: '1px solid rgba(255, 255, 255, 0.07)' }}>
           {/* Metadata Row 1: Quiz Title + Full Course Code & Subject Description */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem', alignItems: 'end' }}>
@@ -780,7 +780,7 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
                 options={subjects && subjects.length > 0
                   ? subjects.map((s) => ({
                       value: s.code && !s.name.startsWith(s.code) ? `${s.code} - ${s.name}` : s.name,
-                      label: s.code && !s.name.startsWith(s.code) ? `${s.code} — ${s.name}` : s.name,
+                      label: s.code && !s.name.startsWith(s.code) ? `${s.code} · ${s.name}` : s.name,
                     }))
                   : BSIT_SUBJECT_OPTIONS
                 }
@@ -811,8 +811,8 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
                 onChange={(val) => setDraft({ ...draft, quiz_type: (val === 'summative' ? 'summative' : 'formative') })}
                 style={{ margin: 0 }}
                 options={[
-                  { value: 'formative', label: 'Formative — Live Student Monitoring' },
-                  { value: 'summative', label: 'Summative — Final Submission Only' },
+                  { value: 'formative', label: 'Formative · Live Student Monitoring' },
+                  { value: 'summative', label: 'Summative · Final Submission Only' },
                 ]}
               />
             </div>
@@ -937,7 +937,7 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
           </div>
         </div>
 
-        {/* Settings Checkboxes Row — Equal Height & Aligned */}
+        {/* Settings Checkboxes Row · Equal Height & Aligned */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '0.85rem', alignItems: 'stretch' }}>
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.7rem', color: 'var(--neutral-200)', fontSize: '0.88rem', cursor: 'pointer', background: draft.allow_review ? 'rgba(245, 158, 11, 0.1)' : 'rgba(255,255,255,0.03)', padding: '0.85rem 1rem', borderRadius: 'var(--radius-md)', border: `1px solid ${draft.allow_review ? 'rgba(245, 158, 11, 0.4)' : 'rgba(255,255,255,0.07)'}`, margin: 0 }}>
             <input
@@ -1453,7 +1453,7 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', background: 'rgba(67, 160, 71, 0.07)', border: '1px solid rgba(76, 175, 80, 0.3)', borderRadius: 'var(--radius-md)', padding: '0.95rem 1.05rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
                       <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#a5d6a7', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <CheckCircle2 size={14} /> Identification — Expected Correct Answer
+                        <CheckCircle2 size={14} /> Identification · Expected Correct Answer
                       </span>
                       <span style={{ fontSize: '0.74rem', color: 'var(--neutral-300)' }}>
                         Case-insensitive matching • Separate acceptable synonyms with commas
@@ -1484,7 +1484,7 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
                       <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--neutral-300)' }}>
-                        Multiple Answer Choices (Check ALL correct answers — {(question.correct_indices || [question.correct_index]).length} selected):
+                        Multiple Answer Choices (Check ALL correct answers · {(question.correct_indices || [question.correct_index]).length} selected):
                       </span>
                       {question.options.length < 6 && (
                         <Button
@@ -1598,7 +1598,7 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', background: 'rgba(139, 92, 246, 0.08)', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: 'var(--radius-md)', padding: '0.95rem 1.05rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
                       <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#ddd6fe' }}>
-                        Essay Response — Model Answer / Expected Keywords (Optional)
+                        Essay Response · Model Answer / Expected Keywords (Optional)
                       </span>
                       <span style={{ fontSize: '0.74rem', color: 'var(--neutral-300)' }}>
                         Students will write an open-ended paragraph response

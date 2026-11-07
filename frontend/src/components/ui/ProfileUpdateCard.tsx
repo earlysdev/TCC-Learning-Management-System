@@ -88,7 +88,7 @@ export default function ProfileUpdateCard() {
           />
         </div>
         <Input
-          label="New Password (Optional — minimum 8 characters)"
+          label="New Password (Optional · minimum 8 characters)"
           type="password"
           placeholder="Leave blank to keep current password"
           value={password}

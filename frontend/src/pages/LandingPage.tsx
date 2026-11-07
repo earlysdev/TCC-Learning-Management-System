@@ -62,7 +62,7 @@ const academicColleges: AcademicCollege[] = [
     degrees: [
       'Bachelor of Physical Education (BPEd)',
       'Bachelor of Elementary Education (BEEd)',
-      'Bachelor of Secondary Education (BSEd) — Major in Filipino, English, and Social Studies (AP)'
+      'Bachelor of Secondary Education (BSEd) · Major in Filipino, English, and Social Studies (AP)'
     ]
   },
   {
@@ -271,9 +271,12 @@ export default function LandingPage() {
                 <Eye size={28} />
               </div>
               <h3>Vision</h3>
-              <p style={{ flex: 1, fontSize: '1.3rem', marginTop: '2rem', fontWeight: 500, color: '#2d3748' }}>
+              <p style={{ flex: 1, fontSize: '1.08rem', lineHeight: 1.75, marginTop: '0.75rem', fontWeight: 500, color: '#334155' }}>
                 To be a premiere community based institution by <b>2030</b> producing globally competent graduates.
               </p>
+              <div style={{ marginTop: 'auto', paddingTop: '1rem', borderTop: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', fontWeight: 600, color: '#7f121e' }}>
+                <CheckCircle2 size={15} /> Institutional Target · Vision 2030
+              </div>
             </div>
 
             {/* Mission Card */}
@@ -282,9 +285,12 @@ export default function LandingPage() {
                 <Target size={28} />
               </div>
               <h3>Mission</h3>
-              <p style={{ fontSize: '1.25rem', marginBottom: '0.75rem',marginTop: '2rem', fontWeight: 500, color: '#2d3748' }}>
+              <p style={{ flex: 1, fontSize: '1.05rem', lineHeight: 1.75, marginTop: '0.75rem', fontWeight: 500, color: '#334155' }}>
                 Tagoloan Community College is committed to produce competent graduates fully equipped with knowledge and skills driven by values conforming to global standards.
               </p>
+              <div style={{ marginTop: 'auto', paddingTop: '1rem', borderTop: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', fontWeight: 600, color: '#7f121e' }}>
+                <CheckCircle2 size={15} /> Global Standards & Holistic Competence
+              </div>
             </div>
 
             {/* Philosophy & Core Values Card */}
@@ -310,7 +316,7 @@ export default function LandingPage() {
         <div className="container">
           <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
             <span style={{ fontSize: '0.8rem', color: '#fbbf24', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-              MEMBER: ASSOCIATION OF LOCAL COLLEGES AND UNIVERSITIES — COMMISSION ON ACCREDITATION (ALCUCOA)
+              MEMBER: ASSOCIATION OF LOCAL COLLEGES AND UNIVERSITIES · COMMISSION ON ACCREDITATION (ALCUCOA)
             </span>
             <h2 className="section-title text-center" style={{ marginTop: '0.35rem' }}>
               Academic Colleges & Degree Programs
@@ -447,7 +453,7 @@ export default function LandingPage() {
                   userSelect: 'none',
                 }}
               >
-                <Download size={18} /> Mobile App is Not Currently Available — We&apos;re still developing the web, stay tuned for mobile updates
+                <Download size={18} /> Mobile App Coming Soon · Web Portal Currently Active
               </button>
             </div>
 
@@ -498,7 +504,7 @@ export default function LandingPage() {
 
             <div className="footer-section">
               <h4>Institutional Accreditation</h4>
-              <p>Member: Association of Local Colleges and Universities — Commission on Accreditation (ALCUCOA)</p>
+              <p>Member: Association of Local Colleges and Universities · Commission on Accreditation (ALCUCOA)</p>
               <p>Baluarte, Tagoloan, Misamis Oriental, Philippines</p>
               <p>College Programs: CIT · CED · CAS · CCJPS · CBA · CHM · COM · CLIS</p>
             </div>

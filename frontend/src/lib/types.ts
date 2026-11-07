@@ -39,6 +39,8 @@ export interface Quiz {
   attempts_count?: number;
   average?: number;
   attempted?: boolean;
+  started?: boolean;
+  is_locked?: boolean;
   score?: number | null;
   max_score?: number | null;
   percentage?: number | null;

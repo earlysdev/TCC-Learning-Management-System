@@ -19,7 +19,7 @@ import {
   ShieldCheck,
   Sparkles,
 } from 'lucide-react';
-import { lmsFetch } from '../../lmsApi';
+import { lmsFetch, getLmsUser } from '../../lmsApi';
 import type { Question, Quiz, Recommendation, ReviewQuestion, StudentAnswerValue } from '../../lib/types';
 import Button from '../../components/ui/Button';
 import QuizDetailsPdfModal from '../../components/ui/QuizDetailsPdfModal';
@@ -311,6 +311,21 @@ export default function StudentQuizTakePage() {
       .then((data) => {
         if (!mounted) return;
         setQuiz(data.quiz);
+        if (data.quiz?.id) {
+          try {
+            const currentUser = getLmsUser();
+            const key = `lms_locked_quizzes_${currentUser?.id ?? 'student'}`;
+            const raw = localStorage.getItem(key);
+            const parsed = raw ? JSON.parse(raw) : [];
+            const list = Array.isArray(parsed) ? parsed.map((id) => Number(id)).filter((id) => id > 0) : [];
+            if (!list.includes(data.quiz.id)) {
+              list.push(data.quiz.id);
+              localStorage.setItem(key, JSON.stringify(list));
+            }
+          } catch {
+            // Ignore storage errors
+          }
+        }
         const qLen = data.quiz?.questions?.length ?? 0;
         const order = Array.from({ length: qLen }, (_, idx) => idx);
         if (data.quiz?.shuffle_questions && qLen >= 3) {
@@ -654,6 +669,23 @@ export default function StudentQuizTakePage() {
   };
 
   const closeAssessment = () => {
+    if (isAssessmentActive && quiz && quizId && !result && !submitting) {
+      const qCount = quiz.questions?.length ?? 0;
+      const paddedAnswers = Array.from({ length: qCount }, (_, idx) =>
+        isAnswerProvided(answers[idx], quiz.questions?.[idx])
+          ? answers[idx]
+          : normalizeDefaultUnanswered(quiz.questions?.[idx])
+      );
+      void lmsFetch(`/student/quizzes/${quizId}/submit`, {
+        method: 'POST',
+        body: JSON.stringify({
+          answers: paddedAnswers,
+          cheating_attempts_count: integrityIncidentCount,
+          violations: violationsList,
+          started_at: startTimeRef.current,
+        }),
+      }).catch(() => undefined);
+    }
     exitExamFullscreen();
     if (window.opener) {
       window.close();
@@ -1360,7 +1392,7 @@ export default function StudentQuizTakePage() {
                         onFocus={() => setCurrentQuestionNum(displayIndex + 1)}
                         onChange={(e) => handleAnswer(originalIndex, e.target.value, displayIndex + 1)}
                         placeholder="Type your answer here..."
-                        data-proctor-label={`Question ${displayIndex + 1} — Identification Input`}
+                        data-proctor-label={`Question ${displayIndex + 1} · Identification Input`}
                         autoComplete="off"
                         spellCheck={false}
                         style={{
@@ -1386,7 +1418,7 @@ export default function StudentQuizTakePage() {
                         onFocus={() => setCurrentQuestionNum(displayIndex + 1)}
                         onChange={(e) => handleAnswer(originalIndex, e.target.value, displayIndex + 1)}
                         placeholder="Write your complete answer or explanation here..."
-                        data-proctor-label={`Question ${displayIndex + 1} — Essay Textarea`}
+                        data-proctor-label={`Question ${displayIndex + 1} · Essay Textarea`}
                         style={{
                           width: '100%',
                           padding: '0.85rem 1rem',
@@ -1414,7 +1446,7 @@ export default function StudentQuizTakePage() {
                           <label
                             className={`quiz-option ${selected ? 'is-selected' : ''}`}
                             key={optionIndex}
-                            data-proctor-label={`Question ${displayIndex + 1} — Option ${letter}`}
+                            data-proctor-label={`Question ${displayIndex + 1} · Option ${letter}`}
                           >
                             <input
                               type="checkbox"
@@ -1437,7 +1469,7 @@ export default function StudentQuizTakePage() {
                           <label
                             className={`quiz-option ${selected ? 'is-selected' : ''}`}
                             key={optionIndex}
-                            data-proctor-label={`Question ${displayIndex + 1} — Option ${letter}`}
+                            data-proctor-label={`Question ${displayIndex + 1} · Option ${letter}`}
                           >
                             <input
                               type="radio"

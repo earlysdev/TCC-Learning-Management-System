@@ -527,7 +527,7 @@ class LmsAiService
                     ? $item['concept']
                     : ($cleanSentences[$item['number'] % max(1, count($cleanSentences))] ?? "Review the {$item['skill']} section in {$pdfLabel}.");
                 $promptSnippet = Str::limit(rtrim($item['prompt'], '? '), 95);
-                $pdfLearningIdeas[] = "From {$pdfLabel} (Question #{$item['number']} — {$promptSnippet}): Key concept to remember — {$conceptText}";
+                $pdfLearningIdeas[] = "From {$pdfLabel} (Question #{$item['number']} · {$promptSnippet}): Key concept to remember: {$conceptText}";
             }
             foreach ($cleanSentences as $sentence) {
                 if (count($pdfLearningIdeas) >= 4) {

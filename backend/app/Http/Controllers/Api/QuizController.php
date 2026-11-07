@@ -407,13 +407,27 @@ class QuizController extends Controller
         // Filter eligible quizzes based on target_type
         $eligibleQuizzes = $quizzes->filter(fn (Quiz $quiz) => $this->isStudentEligible($student, $quiz));
 
-        return response()->json(['quizzes' => $eligibleQuizzes->values()->map(function (Quiz $quiz): array {
+        $startedQuizIds = [];
+        try {
+            if (Schema::hasTable('quiz_live_sessions')) {
+                $startedQuizIds = DB::table('quiz_live_sessions')
+                    ->where('student_id', $student->id)
+                    ->pluck('quiz_id')
+                    ->map(fn ($id) => (int) $id)
+                    ->all();
+            }
+        } catch (\Throwable) {
+            $startedQuizIds = [];
+        }
+
+        return response()->json(['quizzes' => $eligibleQuizzes->values()->map(function (Quiz $quiz) use ($startedQuizIds): array {
             $this->repairQuizQuestionsIfNeeded($quiz);
             $attempt = $quiz->attempts->first();
             $this->refreshAttemptRecommendationIfNeeded($quiz, $attempt);
             $cleanPdfText = !empty($quiz->reference_pdf_text)
                 ? implode(' ', $this->ai->extractCleanSentences((string) $quiz->reference_pdf_text))
                 : null;
+            $hasStarted = (bool) $attempt || in_array((int) $quiz->id, $startedQuizIds, true);
             return [
                 'id' => $quiz->id,
                 'title' => $quiz->title,
@@ -430,6 +444,8 @@ class QuizController extends Controller
                 'allow_review' => (bool) $quiz->allow_review,
                 'target_type' => $quiz->target_type,
                 'attempted' => (bool) $attempt,
+                'started' => $hasStarted,
+                'is_locked' => $hasStarted,
                 'score' => $attempt?->score,
                 'max_score' => $attempt?->max_score,
                 'percentage' => $attempt?->percentage,

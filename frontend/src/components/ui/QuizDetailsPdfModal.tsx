@@ -11,6 +11,7 @@ import {
   Sparkles,
   X,
   ArrowRight,
+  Lock,
 } from 'lucide-react';
 import { lmsFetch } from '../../lmsApi';
 import type { Quiz } from '../../lib/types';
@@ -526,17 +527,47 @@ export default function QuizDetailsPdfModal({
             {inAssessmentWindow ? 'Back to Assessment Questions' : 'Close'}
           </Button>
           {!inAssessmentWindow && onStartQuiz && (
-            <Button
-              variant="accent"
-              onClick={() => {
-                const target = quiz;
-                onClose();
-                onStartQuiz(target);
-              }}
-            >
-              <BookOpen size={16} /> {quiz.attempted ? 'View Result & Recommendations' : 'Start Quiz Now'}{' '}
-              <ArrowRight size={15} />
-            </Button>
+            quiz.attempted || quiz.started || quiz.is_locked ? (
+              <>
+                {quiz.attempted && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      const target = quiz;
+                      onClose();
+                      onStartQuiz(target);
+                    }}
+                  >
+                    <BookOpen size={16} /> View Result & Recommendations <ArrowRight size={15} />
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  disabled
+                  title="Single-attempt policy: You have already started or completed this quiz and cannot click Take Quiz a second time."
+                  style={{
+                    opacity: 0.72,
+                    cursor: 'not-allowed',
+                    background: 'rgba(239, 68, 68, 0.12)',
+                    borderColor: 'rgba(239, 68, 68, 0.35)',
+                    color: '#fca5a5',
+                  }}
+                >
+                  <Lock size={15} /> Take Quiz (Locked)
+                </Button>
+              </>
+            ) : (
+              <Button
+                variant="accent"
+                onClick={() => {
+                  const target = quiz;
+                  onClose();
+                  onStartQuiz(target);
+                }}
+              >
+                <BookOpen size={16} /> Take Quiz <ArrowRight size={15} />
+              </Button>
+            )
           )}
         </div>
       </div>

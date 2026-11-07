@@ -284,7 +284,7 @@ export default function SecretaryDashboard() {
                 students.slice(0, 5).map(s => (
                   <tr key={s.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                     <td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>{s.name}</td>
-                    <td style={{ padding: '0.75rem 1rem', fontFamily: 'monospace' }}>{s.lrn || '—'}</td>
+                    <td style={{ padding: '0.75rem 1rem', fontFamily: 'monospace' }}>{s.lrn || 'N/A'}</td>
                     <td style={{ padding: '0.75rem 1rem' }}>
                       {s.section || 'Block - 1A'}{' '}
                       <span style={{ color: 'var(--neutral-400)', fontSize: '0.8rem' }}>
@@ -606,7 +606,7 @@ export default function SecretaryDashboard() {
               filteredStudents.map(student => (
                 <tr key={student.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                   <td style={{ padding: '0.85rem 1.25rem', fontWeight: 600 }}>{student.name}</td>
-                  <td style={{ padding: '0.85rem 1.25rem', fontFamily: 'monospace' }}>{student.lrn || '—'}</td>
+                  <td style={{ padding: '0.85rem 1.25rem', fontFamily: 'monospace' }}>{student.lrn || 'N/A'}</td>
                   <td style={{ padding: '0.85rem 1.25rem' }}>
                     {student.section || 'Block - 1A'}{' '}
                     <span style={{ color: 'var(--neutral-400)', fontSize: '0.8rem' }}>
@@ -777,7 +777,7 @@ export default function SecretaryDashboard() {
                 <tr key={log.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                   <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: 'var(--primary-300)' }}>{log.action}</td>
                   <td style={{ padding: '0.75rem 1rem' }}>{log.user?.name || `User #${log.user_id || 'System'}`}</td>
-                  <td style={{ padding: '0.75rem 1rem', color: 'var(--neutral-300)' }}>{log.description || '—'}</td>
+                  <td style={{ padding: '0.75rem 1rem', color: 'var(--neutral-300)' }}>{log.description || 'No description'}</td>
                   <td style={{ padding: '0.75rem 1rem', fontFamily: 'monospace' }}>{log.ip_address || '127.0.0.1'}</td>
                   <td style={{ padding: '0.75rem 1rem', color: 'var(--neutral-400)' }}>
                     {new Date(log.created_at).toLocaleString()}

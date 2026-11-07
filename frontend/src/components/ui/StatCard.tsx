@@ -1,44 +1,83 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
 import GlassCard from './GlassCard';
 
-interface StatCardProps {
-  icon: React.ReactNode;
+export interface StatCardProps {
   label: string;
   value: string | number;
   detail?: string;
-  linkTo?: string;
+  icon?: React.ReactNode;
+  trend?: 'up' | 'down' | 'neutral';
 }
 
-export default function StatCard({ icon, label, value, detail, linkTo }: StatCardProps) {
-  const CardContent = (
-    <>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
-        <h3 style={{ fontSize: '1rem', fontWeight: 500, color: 'var(--neutral-300)' }}>{label}</h3>
-        <div style={{ color: 'var(--primary-300)' }}>{icon}</div>
+export function StatCard({
+  label,
+  value,
+  detail,
+  icon,
+}: StatCardProps) {
+  return (
+    <GlassCard
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'space-between',
+        gap: '0.85rem',
+        height: '100%',
+        padding: '1.35rem 1.5rem',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem' }}>
+        <span
+          style={{
+            color: 'var(--neutral-300)',
+            fontSize: '0.84rem',
+            fontWeight: 600,
+            letterSpacing: '0.02em',
+            lineHeight: 1.35,
+          }}
+        >
+          {label}
+        </span>
+        {icon && (
+          <div
+            style={{
+              width: '42px',
+              height: '42px',
+              borderRadius: 'var(--radius-lg)',
+              background: 'rgba(245, 158, 11, 0.14)',
+              border: '1px solid rgba(251, 191, 36, 0.28)',
+              color: 'var(--accent-gold)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.12)',
+            }}
+          >
+            {icon}
+          </div>
+        )}
       </div>
-      <div style={{ fontSize: '2rem', fontWeight: 700, fontFamily: 'var(--font-display)', marginBottom: '0.5rem' }}>
+      <div style={{ fontSize: '2.1rem', fontWeight: 800, color: 'var(--white)', lineHeight: 1.1, letterSpacing: '-0.02em' }}>
         {value}
       </div>
       {detail && (
-        <p style={{ fontSize: '0.875rem', color: 'var(--neutral-400)' }}>{detail}</p>
+        <div
+          style={{
+            fontSize: '0.78rem',
+            color: 'var(--neutral-300)',
+            paddingTop: '0.55rem',
+            borderTop: '1px solid rgba(255, 255, 255, 0.06)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.35rem',
+          }}
+        >
+          {detail}
+        </div>
       )}
-    </>
-  );
-
-  if (linkTo) {
-    return (
-      <Link to={linkTo} style={{ display: 'block' }}>
-        <GlassCard hoverable className="stat-card">
-          {CardContent}
-        </GlassCard>
-      </Link>
-    );
-  }
-
-  return (
-    <GlassCard className="stat-card">
-      {CardContent}
     </GlassCard>
   );
 }
+
+export default StatCard;

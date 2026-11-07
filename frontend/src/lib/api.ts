@@ -1,5 +1,5 @@
 /**
- * LNHS LMS — API Client
+ * TCC LMS · API Client
  * Wraps the existing lmsApi.ts patterns with typed helpers.
  * Storage keys use dashes (lms-token, lms-user) to match the existing client.
  */

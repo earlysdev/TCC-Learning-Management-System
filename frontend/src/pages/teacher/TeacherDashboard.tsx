@@ -564,7 +564,7 @@ export default function TeacherDashboard() {
           {/* Row 1: Quiz Title, BSIT Subject, and Topic */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem' }}>
             <Input
-              label="Quiz Title (Optional — uses Topic if blank)"
+              label="Quiz Title (Optional · uses Topic if blank)"
               value={quizTitle}
               onChange={(e) => setQuizTitle(e.target.value)}
               placeholder="e.g. Midterm Quiz 1 (No extra title added)"
@@ -577,7 +577,7 @@ export default function TeacherDashboard() {
               options={subjects.length > 0
                 ? subjects.map((s) => ({
                     value: s.code && !s.name.startsWith(s.code) ? `${s.code} - ${s.name}` : s.name,
-                    label: s.code && !s.name.startsWith(s.code) ? `${s.code} — ${s.name}` : s.name,
+                    label: s.code && !s.name.startsWith(s.code) ? `${s.code} · ${s.name}` : s.name,
                   }))
                 : BSIT_SUBJECT_OPTIONS
               }
@@ -638,7 +638,7 @@ export default function TeacherDashboard() {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
               <Input
-                label="Time Limit (Minutes — Auto-Submit)"
+                label="Time Limit (Minutes · Auto-Submit)"
                 type="number"
                 min={1}
                 max={300}
@@ -683,8 +683,8 @@ export default function TeacherDashboard() {
               value={quizType}
               onChange={(val) => setQuizType(val === 'summative' ? 'summative' : 'formative')}
               options={[
-                { value: 'formative', label: 'Formative — Live Student Monitoring' },
-                { value: 'summative', label: 'Summative — Final Submission Only' },
+                { value: 'formative', label: 'Formative · Live Student Monitoring' },
+                { value: 'summative', label: 'Summative · Final Submission Only' },
               ]}
             />
 
@@ -693,7 +693,7 @@ export default function TeacherDashboard() {
               value={selectedTargetSection}
               onChange={setSelectedTargetSection}
               options={[
-                { value: '', label: 'No block — assign later' },
+                { value: '', label: 'No block · assign later' },
                 ...sections.map((s) => ({
                   value: String(s.id),
                   label: `${s.label}${s.studentCount ? ` (${s.studentCount} ${s.studentCount === 1 ? 'student' : 'students'})` : ''}`
@@ -1077,7 +1077,7 @@ export default function TeacherDashboard() {
               filteredStudents.map(student => (
                 <tr key={student.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                   <td style={{ padding: '0.85rem 1.25rem', fontWeight: 600 }}>{student.name}</td>
-                  <td style={{ padding: '0.85rem 1.25rem', fontFamily: 'monospace' }}>{student.lrn || '—'}</td>
+                  <td style={{ padding: '0.85rem 1.25rem', fontFamily: 'monospace' }}>{student.lrn || 'N/A'}</td>
                   <td style={{ padding: '0.85rem 1.25rem' }}>
                     {student.section || 'Block - 1A'}{' '}
                     <span style={{ color: 'var(--neutral-400)', fontSize: '0.8rem' }}>
