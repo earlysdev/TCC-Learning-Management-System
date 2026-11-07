@@ -58,14 +58,14 @@ class UserController extends Controller
             'password' => 'required|string|min:8',
             'role' => 'required|in:student,teacher,secretary,principal,dean',
             'lrn' => 'nullable|string|unique:users',
-            'grade' => 'nullable|string|max:16',
-            'section' => 'nullable|string|max:64',
+            'grade' => 'nullable|string|max:40',
+            'section' => 'nullable|string|max:80',
             'school_year' => 'nullable|string|max:9',
         ]);
 
-        if (!empty($validated['section']) && preg_match('/Block\s*-\s*([1-4])[A-E]/i', $validated['section'], $matches)) {
+        if (empty($validated['grade']) && !empty($validated['section']) && preg_match('/([1-4])[A-Z]/i', $validated['section'], $matches)) {
             $yearMap = ['1' => '1st Year', '2' => '2nd Year', '3' => '3rd Year', '4' => '4th Year'];
-            $validated['grade'] = $yearMap[$matches[1]] ?? ($validated['grade'] ?? null);
+            $validated['grade'] = $yearMap[$matches[1]] ?? null;
         }
 
         $validated['password'] = Hash::make($validated['password']);
@@ -106,13 +106,13 @@ class UserController extends Controller
             'last_name' => 'nullable|string|max:255',
             'email' => 'sometimes|required|string|email|max:255|unique:users,email,' . $user->id,
             'password' => 'nullable|string|min:8',
-            'grade' => 'nullable|string|max:16',
-            'section' => 'nullable|string|max:64',
+            'grade' => 'nullable|string|max:40',
+            'section' => 'nullable|string|max:80',
         ]);
 
-        if (!empty($validated['section']) && preg_match('/Block\s*-\s*([1-4])[A-E]/i', $validated['section'], $matches)) {
+        if (empty($validated['grade']) && !empty($validated['section']) && preg_match('/([1-4])[A-Z]/i', $validated['section'], $matches)) {
             $yearMap = ['1' => '1st Year', '2' => '2nd Year', '3' => '3rd Year', '4' => '4th Year'];
-            $validated['grade'] = $yearMap[$matches[1]] ?? ($validated['grade'] ?? null);
+            $validated['grade'] = $yearMap[$matches[1]] ?? null;
         }
 
         if (isset($validated['password'])) {

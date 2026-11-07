@@ -27,6 +27,13 @@ export interface RoleConfig {
   navItems: NavItem[];
 }
 
+export const YEAR_LEVEL_OPTIONS: string[] = [
+  '1st Year',
+  '2nd Year',
+  '3rd Year',
+  '4th Year',
+];
+
 export const YEAR_LEVEL_BLOCKS: Record<string, string[]> = {
   '1st Year': ['Block - 1A', 'Block - 1B', 'Block - 1C', 'Block - 1D', 'Block - 1E'],
   '2nd Year': ['Block - 2A', 'Block - 2B', 'Block - 2C', 'Block - 2D', 'Block - 2E'],
@@ -36,9 +43,16 @@ export const YEAR_LEVEL_BLOCKS: Record<string, string[]> = {
 
 export const ALL_BLOCKS: string[] = Object.values(YEAR_LEVEL_BLOCKS).flat();
 
-export function getYearLevelFromBlock(block?: string | null): string {
+export function getYearLevelFromBlock(block?: string | null, explicitGrade?: string | null): string {
+  if (explicitGrade && explicitGrade.trim().length > 0) {
+    return explicitGrade.trim();
+  }
   if (!block) return '1st Year';
-  const match = block.match(/([1-4])[A-E]/i);
+  if (/1st\s*Year/i.test(block)) return '1st Year';
+  if (/2nd\s*Year/i.test(block)) return '2nd Year';
+  if (/3rd\s*Year/i.test(block)) return '3rd Year';
+  if (/4th\s*Year/i.test(block)) return '4th Year';
+  const match = block.match(/([1-4])[A-Z]/i) || block.match(/\b([1-4])\b/);
   if (!match) return '1st Year';
   switch (match[1]) {
     case '1': return '1st Year';
@@ -52,70 +66,121 @@ export function getYearLevelFromBlock(block?: string | null): string {
 export interface CurriculumSubjectItem {
   code: string;
   name: string;
-  yearLevel: string;
-  semester: string;
+  yearLevel: '1st Year' | '2nd Year' | '3rd Year' | '4th Year';
+  semester: '1st Semester' | '2nd Semester' | 'Summer';
+  lec: number;
+  lab: number;
+  units: number;
+  prerequisite: string;
 }
 
+/**
+ * Tagoloan Community College (TCC)
+ * Bachelor of Science in Information Technology (BSIT)
+ * CMO 25, s. 2015 Curriculum (1st Year to 4th Year, excluding 4th Year Practicum)
+ */
 export const BSIT_SUBJECTS: CurriculumSubjectItem[] = [
-  // 2024-2025 1st (BSIT · Year 1st)
-  { code: 'PATH FIT 1', name: 'Movement Competency Training', yearLevel: '1st Year', semester: '1st Semester' },
-  { code: 'GEC 1', name: 'Understanding the Self', yearLevel: '1st Year', semester: '1st Semester' },
-  { code: 'IT 101', name: 'Introduction To Computing', yearLevel: '1st Year', semester: '1st Semester' },
-  { code: 'IT 102', name: 'Computer Programming 1', yearLevel: '1st Year', semester: '1st Semester' },
-  { code: 'IT 103', name: 'Integrated Application Software', yearLevel: '1st Year', semester: '1st Semester' },
-  { code: 'Math 1', name: 'College Algebra', yearLevel: '1st Year', semester: '1st Semester' },
-  { code: 'Math 2', name: 'Plane Trigonometry', yearLevel: '1st Year', semester: '1st Semester' },
-  { code: 'NSTP 1', name: 'CWTS/ROTC 1', yearLevel: '1st Year', semester: '1st Semester' },
+  // ==========================================
+  // FIRST YEAR — FIRST SEMESTER (14 Lec, 3 Lab, 17 TU)
+  // ==========================================
+  { code: 'IT 101', name: 'Introduction To Computing', yearLevel: '1st Year', semester: '1st Semester', lec: 2, lab: 1, units: 3, prerequisite: 'none' },
+  { code: 'IT 102', name: 'Computer Programming 1', yearLevel: '1st Year', semester: '1st Semester', lec: 2, lab: 1, units: 3, prerequisite: 'none' },
+  { code: 'IT 103', name: 'Integrated Application Software', yearLevel: '1st Year', semester: '1st Semester', lec: 2, lab: 1, units: 3, prerequisite: 'none' },
+  { code: 'GEC 1', name: 'Understanding the Self', yearLevel: '1st Year', semester: '1st Semester', lec: 3, lab: 0, units: 3, prerequisite: 'none' },
+  { code: 'ROTC/CWTS 101', name: 'Basic Army Science/CWTS', yearLevel: '1st Year', semester: '1st Semester', lec: 3, lab: 0, units: 3, prerequisite: 'none' },
+  { code: 'PATH FIT 1', name: 'Movement Competency Training', yearLevel: '1st Year', semester: '1st Semester', lec: 2, lab: 0, units: 2, prerequisite: 'none' },
 
-  // 2024-2025 2nd (BSIT · Year 1st)
-  { code: 'ROTC/CWTS 102', name: 'Reserved Officer Training Corps/CWTS', yearLevel: '1st Year', semester: '2nd Semester' },
-  { code: 'IT 105', name: 'Computer Programming 2', yearLevel: '1st Year', semester: '2nd Semester' },
-  { code: 'IT 106', name: 'Digital Logic Design', yearLevel: '1st Year', semester: '2nd Semester' },
-  { code: 'PATH FIT 2', name: 'Fitness Training', yearLevel: '1st Year', semester: '2nd Semester' },
-  { code: 'IT 104', name: 'Information Technology Fundamentals', yearLevel: '1st Year', semester: '2nd Semester' },
-  { code: 'Math 3', name: 'Pre-Calculus', yearLevel: '1st Year', semester: '2nd Semester' },
-  { code: 'GEC 2', name: 'READING IN PHILIPPINE HISTORY', yearLevel: '1st Year', semester: '2nd Semester' },
+  // ==========================================
+  // FIRST YEAR — SECOND SEMESTER (15 Lec, 2 Lab, 17 TU)
+  // ==========================================
+  { code: 'IT 104', name: 'Information Technology Fundamentals', yearLevel: '1st Year', semester: '2nd Semester', lec: 3, lab: 0, units: 3, prerequisite: 'IT 101' },
+  { code: 'IT 105', name: 'Computer Programming 2', yearLevel: '1st Year', semester: '2nd Semester', lec: 2, lab: 1, units: 3, prerequisite: 'IT 102' },
+  { code: 'IT 106', name: 'Digital Logic Design', yearLevel: '1st Year', semester: '2nd Semester', lec: 2, lab: 1, units: 3, prerequisite: 'none' },
+  { code: 'GEC 2', name: 'Readings in Philippine History', yearLevel: '1st Year', semester: '2nd Semester', lec: 3, lab: 0, units: 3, prerequisite: 'none' },
+  { code: 'ROTC/CWTS 102', name: 'Reserved Officer Training Corps/CWTS', yearLevel: '1st Year', semester: '2nd Semester', lec: 3, lab: 0, units: 3, prerequisite: 'R101' },
+  { code: 'PATH FIT 2', name: 'Fitness Training', yearLevel: '1st Year', semester: '2nd Semester', lec: 2, lab: 0, units: 2, prerequisite: 'PATH FIT 1' },
 
-  // 2025-2026 1st (BSIT · Year 2nd)
-  { code: 'PATH FIT 3', name: 'DANCE SPORTS & INDIVIDUAL/GROUP EXERCISE/OUTDOOR', yearLevel: '2nd Year', semester: '1st Semester' },
-  { code: 'GEC 3', name: 'The Contemporary World', yearLevel: '2nd Year', semester: '1st Semester' },
-  { code: 'IT 107', name: 'Application Development & Emerging Technologies', yearLevel: '2nd Year', semester: '1st Semester' },
-  { code: 'IT 108', name: 'Data Structures & Algorithms', yearLevel: '2nd Year', semester: '1st Semester' },
-  { code: 'IT 109', name: 'Fundamentals of Database Systems', yearLevel: '2nd Year', semester: '1st Semester' },
-  { code: 'IT 110', name: 'Object Oriented Programming (OOP)', yearLevel: '2nd Year', semester: '1st Semester' },
-  { code: 'IT 111', name: 'Social Issues & Professional Issues', yearLevel: '2nd Year', semester: '1st Semester' },
+  // ==========================================
+  // SECOND YEAR — FIRST SEMESTER (16 Lec, 4 Lab, 20 TU)
+  // ==========================================
+  { code: 'IT 107', name: 'Application Development & Emerging Technologies', yearLevel: '2nd Year', semester: '1st Semester', lec: 2, lab: 1, units: 3, prerequisite: 'IT 105' },
+  { code: 'IT 108', name: 'Data Structures & Algorithms', yearLevel: '2nd Year', semester: '1st Semester', lec: 2, lab: 1, units: 3, prerequisite: 'IT 105' },
+  { code: 'IT 109', name: 'Fundamentals of Database Systems', yearLevel: '2nd Year', semester: '1st Semester', lec: 2, lab: 1, units: 3, prerequisite: 'IT 105' },
+  { code: 'IT 110', name: 'Object Oriented Programming (OOP)', yearLevel: '2nd Year', semester: '1st Semester', lec: 2, lab: 1, units: 3, prerequisite: 'IT 105' },
+  { code: 'IT 111', name: 'Social Issues & Professional Issues', yearLevel: '2nd Year', semester: '1st Semester', lec: 3, lab: 0, units: 3, prerequisite: 'IT101/IT104' },
+  { code: 'GEC 3', name: 'The Contemporary World', yearLevel: '2nd Year', semester: '1st Semester', lec: 3, lab: 0, units: 3, prerequisite: 'none' },
+  { code: 'PATH FIT 3', name: 'Dance Sports/In-Dual/Group/Outdoor', yearLevel: '2nd Year', semester: '1st Semester', lec: 2, lab: 0, units: 2, prerequisite: 'PATH FIT 2' },
 
-  // 2025-2026 2nd (BSIT · Year 2nd)
-  { code: 'IT 112', name: 'Information Management 1', yearLevel: '2nd Year', semester: '2nd Semester' },
-  { code: 'IT 113', name: 'Event-Driven Programming', yearLevel: '2nd Year', semester: '2nd Semester' },
-  { code: 'IT 114', name: 'Integrative Programming & Technologies 1', yearLevel: '2nd Year', semester: '2nd Semester' },
-  { code: 'IT 115', name: 'Human Computer Interaction 1', yearLevel: '2nd Year', semester: '2nd Semester' },
-  { code: 'IT 116', name: 'Advanced Database System', yearLevel: '2nd Year', semester: '2nd Semester' },
-  { code: 'PATH FIT 4', name: 'Team Sports', yearLevel: '2nd Year', semester: '2nd Semester' },
-  { code: 'GEC 4', name: 'Mathematics in the Modern World', yearLevel: '2nd Year', semester: '2nd Semester' },
-  { code: 'GEE 6', name: 'Art Appreciation', yearLevel: '2nd Year', semester: '2nd Semester' },
-  { code: 'GEE 8', name: 'Ethics', yearLevel: '2nd Year', semester: '2nd Semester' },
+  // ==========================================
+  // SECOND YEAR — SECOND SEMESTER (21 Lec, 5 Lab, 26 TU)
+  // ==========================================
+  { code: 'IT 112', name: 'Information Management 1', yearLevel: '2nd Year', semester: '2nd Semester', lec: 2, lab: 1, units: 3, prerequisite: 'IT 108' },
+  { code: 'IT 113', name: 'Event-Driven Programming', yearLevel: '2nd Year', semester: '2nd Semester', lec: 2, lab: 1, units: 3, prerequisite: 'IT108/109/110' },
+  { code: 'IT 114', name: 'Integrative Programming & Technologies 1', yearLevel: '2nd Year', semester: '2nd Semester', lec: 2, lab: 1, units: 3, prerequisite: 'IT108/109/110' },
+  { code: 'IT 115', name: 'Human Computer Interaction 1', yearLevel: '2nd Year', semester: '2nd Semester', lec: 2, lab: 1, units: 3, prerequisite: 'IT108/109/110' },
+  { code: 'IT 116', name: 'Advanced Database System', yearLevel: '2nd Year', semester: '2nd Semester', lec: 2, lab: 1, units: 3, prerequisite: 'IT108/109/110' },
+  { code: 'GEC 4', name: 'Mathematics in the Modern World', yearLevel: '2nd Year', semester: '2nd Semester', lec: 3, lab: 0, units: 3, prerequisite: 'none' },
+  { code: 'GEE 6', name: 'Art Appreciation', yearLevel: '2nd Year', semester: '2nd Semester', lec: 3, lab: 0, units: 3, prerequisite: 'none' },
+  { code: 'GEE 8', name: 'Ethics', yearLevel: '2nd Year', semester: '2nd Semester', lec: 3, lab: 0, units: 3, prerequisite: 'none' },
+  { code: 'PATH FIT 4', name: 'Team Sports', yearLevel: '2nd Year', semester: '2nd Semester', lec: 2, lab: 0, units: 2, prerequisite: 'PATH FIT 3' },
 
-  // 2025-2026 Summer (BSIT · Year 2nd)
-  { code: 'IT 117', name: 'QualitativeMethods(Modeling&Simulation)', yearLevel: '2nd Year', semester: 'Summer' },
-  { code: 'IT 118', name: 'Human Computer Interaction 2', yearLevel: '2nd Year', semester: 'Summer' },
-  { code: 'IT Elec 1', name: 'System Analysis and Design (SAD)', yearLevel: '2nd Year', semester: 'Summer' },
+  // ==========================================
+  // SECOND YEAR — SUMMER (7 Lec, 2 Lab, 9 TU)
+  // ==========================================
+  { code: 'IT 117', name: 'Quantitative Methods (Modeling & Simulation)', yearLevel: '2nd Year', semester: 'Summer', lec: 2, lab: 1, units: 3, prerequisite: 'IT108/109/110/112' },
+  { code: 'IT 118', name: 'Human Computer Interaction 2', yearLevel: '2nd Year', semester: 'Summer', lec: 2, lab: 1, units: 3, prerequisite: 'IT115' },
+  { code: 'IT Elec 1', name: 'System Analysis and Design (SAD)', yearLevel: '2nd Year', semester: 'Summer', lec: 3, lab: 0, units: 3, prerequisite: 'IT109/110/116' },
 
-  // 2026-2027 1st (BSIT · Year 3rd)
-  { code: 'IT 119', name: 'System Integration & Architecture 1', yearLevel: '3rd Year', semester: '1st Semester' },
-  { code: 'IT 120', name: 'Research1 (Methods of Research in Computing)', yearLevel: '3rd Year', semester: '1st Semester' },
-  { code: 'IT 121', name: 'Information Management 2', yearLevel: '3rd Year', semester: '1st Semester' },
-  { code: 'IT 122', name: 'Integrative Programming & Technologies 2', yearLevel: '3rd Year', semester: '1st Semester' },
-  { code: 'IT Elec 2', name: 'Computer Graphics', yearLevel: '3rd Year', semester: '1st Semester' },
-  { code: 'GEC 5', name: 'Purposive Communication', yearLevel: '3rd Year', semester: '1st Semester' },
-  { code: 'GEC 7', name: 'Science, Technology, and Society', yearLevel: '3rd Year', semester: '1st Semester' },
-  { code: 'GEC 9', name: 'Life, Works & Writing of Dr. Jose Rizal', yearLevel: '3rd Year', semester: '1st Semester' },
-  { code: 'GEE 9', name: 'Technoprenuership (The Entrepreneurial Mind)', yearLevel: '3rd Year', semester: '1st Semester' },
+  // ==========================================
+  // THIRD YEAR — FIRST SEMESTER (23 Lec, 4 Lab, 27 TU)
+  // ==========================================
+  { code: 'IT 119', name: 'System Integration & Architecture 1', yearLevel: '3rd Year', semester: '1st Semester', lec: 2, lab: 1, units: 3, prerequisite: 'IT113/114/115/116' },
+  { code: 'IT 120', name: 'Research 1 (Methods of Research in Computing)', yearLevel: '3rd Year', semester: '1st Semester', lec: 3, lab: 0, units: 3, prerequisite: 'IT 112' },
+  { code: 'IT 121', name: 'Information Management 2', yearLevel: '3rd Year', semester: '1st Semester', lec: 2, lab: 1, units: 3, prerequisite: 'IT112' },
+  { code: 'IT 122', name: 'Integrative Programming & Technologies 2', yearLevel: '3rd Year', semester: '1st Semester', lec: 2, lab: 1, units: 3, prerequisite: 'IT114' },
+  { code: 'IT Elec 2', name: 'Computer Graphics', yearLevel: '3rd Year', semester: '1st Semester', lec: 2, lab: 1, units: 3, prerequisite: 'IT 106/118' },
+  { code: 'GEC 5', name: 'Purposive Communication', yearLevel: '3rd Year', semester: '1st Semester', lec: 3, lab: 0, units: 3, prerequisite: 'none' },
+  { code: 'GEC 7', name: 'Science, Technology and Society', yearLevel: '3rd Year', semester: '1st Semester', lec: 3, lab: 0, units: 3, prerequisite: 'none' },
+  { code: 'GEC 9', name: 'Life, Works & Writing of Dr. Jose Rizal', yearLevel: '3rd Year', semester: '1st Semester', lec: 3, lab: 0, units: 3, prerequisite: 'none' },
+  { code: 'GEE 9', name: 'Technopreneurship (The Entrepreneurial Mind)', yearLevel: '3rd Year', semester: '1st Semester', lec: 3, lab: 0, units: 3, prerequisite: 'none' },
+
+  // ==========================================
+  // THIRD YEAR — SECOND SEMESTER (23 Lec, 4 Lab, 27 TU)
+  // ==========================================
+  { code: 'IT 123', name: 'Information Assurance & Security 1', yearLevel: '3rd Year', semester: '2nd Semester', lec: 2, lab: 1, units: 3, prerequisite: 'IT119' },
+  { code: 'IT 124', name: 'Networking 1', yearLevel: '3rd Year', semester: '2nd Semester', lec: 2, lab: 1, units: 3, prerequisite: 'IT114' },
+  { code: 'IT 125', name: 'Capstone Project 1', yearLevel: '3rd Year', semester: '2nd Semester', lec: 3, lab: 0, units: 3, prerequisite: '1st/2nd/3rdYr1stSem' },
+  { code: 'IT 126', name: 'System Integration & Architecture 2', yearLevel: '3rd Year', semester: '2nd Semester', lec: 2, lab: 1, units: 3, prerequisite: 'IT119' },
+  { code: 'IT 127', name: 'Platform Technologies', yearLevel: '3rd Year', semester: '2nd Semester', lec: 3, lab: 0, units: 3, prerequisite: 'IT119' },
+  { code: 'IT Elec 3', name: 'Computer - Aided Design (CAD)', yearLevel: '3rd Year', semester: '2nd Semester', lec: 2, lab: 1, units: 3, prerequisite: 'IT Elective 2' },
+  { code: 'GEE 4', name: 'Living In the IT Era', yearLevel: '3rd Year', semester: '2nd Semester', lec: 3, lab: 0, units: 3, prerequisite: 'none' },
+  { code: 'GEE 7', name: 'Gender & Society', yearLevel: '3rd Year', semester: '2nd Semester', lec: 3, lab: 0, units: 3, prerequisite: 'none' },
+  { code: 'GEE 10', name: 'Entrepreneurial Management', yearLevel: '3rd Year', semester: '2nd Semester', lec: 3, lab: 0, units: 3, prerequisite: 'GEE 9' },
+  { code: 'GEE 11', name: 'Phil. Indigenous Communities & Peace Studies Education', yearLevel: '3rd Year', semester: '2nd Semester', lec: 3, lab: 0, units: 3, prerequisite: 'none' },
+
+  // ==========================================
+  // THIRD YEAR — SUMMER (8 Lec, 1 Lab, 9 TU)
+  // ==========================================
+  { code: 'IT Elec 4', name: 'Fundamentals of Data Warehousing & Data Mining', yearLevel: '3rd Year', semester: 'Summer', lec: 3, lab: 0, units: 3, prerequisite: 'IT119' },
+  { code: 'IT Elec 5', name: 'Multimedia System', yearLevel: '3rd Year', semester: 'Summer', lec: 2, lab: 1, units: 3, prerequisite: 'IT Elective 2 & 3' },
+  { code: 'IT Elec 6', name: 'Management Information System (MIS)', yearLevel: '3rd Year', semester: 'Summer', lec: 3, lab: 0, units: 3, prerequisite: 'IT Elective 1' },
+
+  // ==========================================
+  // FOURTH YEAR — FIRST SEMESTER (11 Lec, 4 Lab, 15 TU)
+  // Note: 4th Year 2nd Semester Practicum (Prac 101 - 486 hours) is intentionally excluded.
+  // ==========================================
+  { code: 'IT 128', name: 'System Administration and Maintenance', yearLevel: '4th Year', semester: '1st Semester', lec: 2, lab: 1, units: 3, prerequisite: 'IT123/124/126' },
+  { code: 'IT 129', name: 'Information Assurance & Security 2', yearLevel: '4th Year', semester: '1st Semester', lec: 2, lab: 1, units: 3, prerequisite: 'IT123' },
+  { code: 'IT 130', name: 'Networking 2', yearLevel: '4th Year', semester: '1st Semester', lec: 2, lab: 1, units: 3, prerequisite: 'IT124' },
+  { code: 'IT 131', name: 'Web System and Technologies', yearLevel: '4th Year', semester: '1st Semester', lec: 2, lab: 1, units: 3, prerequisite: 'IT 127' },
+  { code: 'IT 132', name: 'Capstone Project 2', yearLevel: '4th Year', semester: '1st Semester', lec: 3, lab: 0, units: 3, prerequisite: 'IT125' },
 ];
 
 export const BSIT_SUBJECT_OPTIONS = BSIT_SUBJECTS.map((s) => ({
   value: `${s.code} - ${s.name}`,
-  label: `${s.code} · ${s.name}`,
+  label: `[${s.yearLevel} • ${s.semester}] ${s.code} — ${s.name}`,
+  yearLevel: s.yearLevel,
+  semester: s.semester,
 }));
 
 export const ROLE_CONFIGS: Record<UserRole, RoleConfig> = {
@@ -149,7 +214,7 @@ export const ROLE_CONFIGS: Record<UserRole, RoleConfig> = {
     navItems: [
       { label: 'Overview', path: '/secretary/dashboard', icon: LayoutDashboard },
       { label: 'Create Account', path: '/secretary/accounts', icon: UserPlus },
-      { label: 'Blocks', path: '/secretary/sections', icon: Layers },
+      { label: 'Sections & Year Levels', path: '/secretary/sections', icon: Layers },
       { label: 'Student Records', path: '/secretary/records', icon: FileText },
       { label: 'Performance', path: '/secretary/performance', icon: BarChart },
       { label: 'Reports', path: '/secretary/reports', icon: FileText },

@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Http\Controllers\Api\SubjectController;
 use App\Models\ActivityLog;
 use App\Models\Announcement;
 use App\Models\LmsNotification;
@@ -114,73 +115,19 @@ class DemoSeeder extends Seeder
             }
         }
 
-        // Seed Official BSIT Subject Codes & Descriptions
-        $subjects = [
-            // 2024-2025 1st · BSIT Year 1st
-            ['code' => 'PATH FIT 1', 'name' => 'Movement Competency Training', 'grade' => '1st Year', 'department' => 'BSIT'],
-            ['code' => 'GEC 1', 'name' => 'Understanding the Self', 'grade' => '1st Year', 'department' => 'BSIT'],
-            ['code' => 'IT 101', 'name' => 'Introduction To Computing', 'grade' => '1st Year', 'department' => 'BSIT'],
-            ['code' => 'IT 102', 'name' => 'Computer Programming 1', 'grade' => '1st Year', 'department' => 'BSIT'],
-            ['code' => 'IT 103', 'name' => 'Integrated Application Software', 'grade' => '1st Year', 'department' => 'BSIT'],
-            ['code' => 'Math 1', 'name' => 'College Algebra', 'grade' => '1st Year', 'department' => 'BSIT'],
-            ['code' => 'Math 2', 'name' => 'Plane Trigonometry', 'grade' => '1st Year', 'department' => 'BSIT'],
-            ['code' => 'NSTP 1', 'name' => 'CWTS/ROTC 1', 'grade' => '1st Year', 'department' => 'BSIT'],
-
-            // 2024-2025 2nd · BSIT Year 1st
-            ['code' => 'ROTC/CWTS 102', 'name' => 'Reserved Officer Training Corps/CWTS', 'grade' => '1st Year', 'department' => 'BSIT'],
-            ['code' => 'IT 105', 'name' => 'Computer Programming 2', 'grade' => '1st Year', 'department' => 'BSIT'],
-            ['code' => 'IT 106', 'name' => 'Digital Logic Design', 'grade' => '1st Year', 'department' => 'BSIT'],
-            ['code' => 'PATH FIT 2', 'name' => 'Fitness Training', 'grade' => '1st Year', 'department' => 'BSIT'],
-            ['code' => 'IT 104', 'name' => 'Information Technology Fundamentals', 'grade' => '1st Year', 'department' => 'BSIT'],
-            ['code' => 'Math 3', 'name' => 'Pre-Calculus', 'grade' => '1st Year', 'department' => 'BSIT'],
-            ['code' => 'GEC 2', 'name' => 'READING IN PHILIPPINE HISTORY', 'grade' => '1st Year', 'department' => 'BSIT'],
-
-            // 2025-2026 1st · BSIT Year 2nd
-            ['code' => 'PATH FIT 3', 'name' => 'DANCE SPORTS & INDIVIDUAL/GROUP EXERCISE/OUTDOOR', 'grade' => '2nd Year', 'department' => 'BSIT'],
-            ['code' => 'GEC 3', 'name' => 'The Contemporary World', 'grade' => '2nd Year', 'department' => 'BSIT'],
-            ['code' => 'IT 107', 'name' => 'Application Development & Emerging Technologies', 'grade' => '2nd Year', 'department' => 'BSIT'],
-            ['code' => 'IT 108', 'name' => 'Data Structures & Algorithms', 'grade' => '2nd Year', 'department' => 'BSIT'],
-            ['code' => 'IT 109', 'name' => 'Fundamentals of Database Systems', 'grade' => '2nd Year', 'department' => 'BSIT'],
-            ['code' => 'IT 110', 'name' => 'Object Oriented Programming (OOP)', 'grade' => '2nd Year', 'department' => 'BSIT'],
-            ['code' => 'IT 111', 'name' => 'Social Issues & Professional Issues', 'grade' => '2nd Year', 'department' => 'BSIT'],
-
-            // 2025-2026 2nd · BSIT Year 2nd
-            ['code' => 'IT 112', 'name' => 'Information Management 1', 'grade' => '2nd Year', 'department' => 'BSIT'],
-            ['code' => 'IT 113', 'name' => 'Event-Driven Programming', 'grade' => '2nd Year', 'department' => 'BSIT'],
-            ['code' => 'IT 114', 'name' => 'Integrative Programming & Technologies 1', 'grade' => '2nd Year', 'department' => 'BSIT'],
-            ['code' => 'IT 115', 'name' => 'Human Computer Interaction 1', 'grade' => '2nd Year', 'department' => 'BSIT'],
-            ['code' => 'IT 116', 'name' => 'Advanced Database System', 'grade' => '2nd Year', 'department' => 'BSIT'],
-            ['code' => 'PATH FIT 4', 'name' => 'Team Sports', 'grade' => '2nd Year', 'department' => 'BSIT'],
-            ['code' => 'GEC 4', 'name' => 'Mathematics in the Modern World', 'grade' => '2nd Year', 'department' => 'BSIT'],
-            ['code' => 'GEE 6', 'name' => 'Art Appreciation', 'grade' => '2nd Year', 'department' => 'BSIT'],
-            ['code' => 'GEE 8', 'name' => 'Ethics', 'grade' => '2nd Year', 'department' => 'BSIT'],
-
-            // 2025-2026 Summer · BSIT Year 2nd
-            ['code' => 'IT 117', 'name' => 'QualitativeMethods(Modeling&Simulation)', 'grade' => '2nd Year', 'department' => 'BSIT'],
-            ['code' => 'IT 118', 'name' => 'Human Computer Interaction 2', 'grade' => '2nd Year', 'department' => 'BSIT'],
-            ['code' => 'IT Elec 1', 'name' => 'System Analysis and Design (SAD)', 'grade' => '2nd Year', 'department' => 'BSIT'],
-
-            // 2026-2027 1st · BSIT Year 3rd
-            ['code' => 'IT 119', 'name' => 'System Integration & Architecture 1', 'grade' => '3rd Year', 'department' => 'BSIT'],
-            ['code' => 'IT 120', 'name' => 'Research1 (Methods of Research in Computing)', 'grade' => '3rd Year', 'department' => 'BSIT'],
-            ['code' => 'IT 121', 'name' => 'Information Management 2', 'grade' => '3rd Year', 'department' => 'BSIT'],
-            ['code' => 'IT 122', 'name' => 'Integrative Programming & Technologies 2', 'grade' => '3rd Year', 'department' => 'BSIT'],
-            ['code' => 'IT Elec 2', 'name' => 'Computer Graphics', 'grade' => '3rd Year', 'department' => 'BSIT'],
-            ['code' => 'GEC 5', 'name' => 'Purposive Communication', 'grade' => '3rd Year', 'department' => 'BSIT'],
-            ['code' => 'GEC 7', 'name' => 'Science, Technology, and Society', 'grade' => '3rd Year', 'department' => 'BSIT'],
-            ['code' => 'GEC 9', 'name' => 'Life, Works & Writing of Dr. Jose Rizal', 'grade' => '3rd Year', 'department' => 'BSIT'],
-            ['code' => 'GEE 9', 'name' => 'Technoprenuership (The Entrepreneurial Mind)', 'grade' => '3rd Year', 'department' => 'BSIT'],
-        ];
+        // Seed Official BSIT Subject Codes & Descriptions (1st Year to 4th Year, excluding 4th Year Practicum)
+        $subjects = SubjectController::officialBsitSubjects();
 
         foreach ($subjects as $subj) {
+            $desc = "{$subj['semester']} • {$subj['units']} Units ({$subj['lec']} Lec / {$subj['lab']} Lab) • Preq: {$subj['prerequisite']}";
             Subject::updateOrCreate(
                 ['code' => $subj['code']],
                 [
                     'name' => $subj['name'],
                     'code' => $subj['code'],
                     'grade' => $subj['grade'],
-                    'department' => $subj['department'],
-                    'description' => $subj['name'],
+                    'department' => 'BSIT',
+                    'description' => $desc,
                 ]
             );
         }
@@ -213,7 +160,7 @@ class DemoSeeder extends Seeder
             ActivityLog::create([
                 'user_id' => $deanUser->id,
                 'action' => 'system_initialized',
-                'description' => 'Initialized TCC BSIT Curriculum (43 Courses, 20 College Blocks) for SY 2025-2026',
+                'description' => 'Initialized TCC BSIT Curriculum (58 Courses, 1st-4th Year excluding Practicum, 20 College Blocks) for SY 2025-2026',
                 'ip_address' => '127.0.0.1',
                 'user_agent' => 'TCC-System-Seeder',
             ]);

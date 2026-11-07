@@ -115,7 +115,7 @@ export default function TeacherDashboard() {
 
   // Manual & PDF/AI Quiz Builder form
   const [quizTitle, setQuizTitle] = useState('');
-  const [subject, setSubject] = useState(BSIT_SUBJECT_OPTIONS[2]?.value || 'IT 101 - Introduction To Computing');
+  const [subject, setSubject] = useState(BSIT_SUBJECT_OPTIONS[0]?.value || 'IT 101 - Introduction To Computing');
   const [topic, setTopic] = useState('');
   const [count, setCount] = useState(5);
   const [timeLimitMinutes, setTimeLimitMinutes] = useState(15);
@@ -595,16 +595,27 @@ export default function TeacherDashboard() {
             />
 
             <Select
-              label="Course Code & Subject Description"
+              label="Course Code & Subject Description (1st – 4th Year • Excl. Practicum)"
               value={subject}
               onChange={setSubject}
-              options={subjects.length > 0
-                ? subjects.map((s) => ({
-                    value: s.code && !s.name.startsWith(s.code) ? `${s.code} - ${s.name}` : s.name,
-                    label: s.code && !s.name.startsWith(s.code) ? `${s.code} · ${s.name}` : s.name,
-                  }))
-                : BSIT_SUBJECT_OPTIONS
-              }
+              options={(() => {
+                const base = [...BSIT_SUBJECT_OPTIONS];
+                const seen = new Set(base.map((o) => o.value.toLowerCase()));
+                subjects.forEach((s) => {
+                  if (/^prac/i.test(s.code || '') || /practicum/i.test(s.name || '')) return;
+                  const val = s.code && !s.name.startsWith(s.code) ? `${s.code} - ${s.name}` : s.name;
+                  if (!seen.has(val.toLowerCase())) {
+                    seen.add(val.toLowerCase());
+                    base.push({
+                      value: val,
+                      label: `[${s.grade || 'BSIT'}] ${s.code ? `${s.code} — ${s.name}` : s.name}`,
+                      yearLevel: (s.grade as any) || '1st Year',
+                      semester: '1st Semester',
+                    });
+                  }
+                });
+                return base;
+              })()}
             />
 
             <Input

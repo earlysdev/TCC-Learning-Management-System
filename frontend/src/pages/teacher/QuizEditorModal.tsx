@@ -792,13 +792,24 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
                 value={draft.subject}
                 onChange={(val) => setDraft({ ...draft, subject: val })}
                 style={{ margin: 0 }}
-                options={subjects && subjects.length > 0
-                  ? subjects.map((s) => ({
-                      value: s.code && !s.name.startsWith(s.code) ? `${s.code} - ${s.name}` : s.name,
-                      label: s.code && !s.name.startsWith(s.code) ? `${s.code} · ${s.name}` : s.name,
-                    }))
-                  : BSIT_SUBJECT_OPTIONS
-                }
+                options={(() => {
+                  const base = [...BSIT_SUBJECT_OPTIONS];
+                  const seen = new Set(base.map((o) => o.value.toLowerCase()));
+                  (subjects || []).forEach((s) => {
+                    if (/^prac/i.test(s.code || '') || /practicum/i.test(s.name || '')) return;
+                    const val = s.code && !s.name.startsWith(s.code) ? `${s.code} - ${s.name}` : s.name;
+                    if (!seen.has(val.toLowerCase())) {
+                      seen.add(val.toLowerCase());
+                      base.push({
+                        value: val,
+                        label: `[${s.grade || 'BSIT'}] ${s.code ? `${s.code} — ${s.name}` : s.name}`,
+                        yearLevel: (s.grade as any) || '1st Year',
+                        semester: '1st Semester',
+                      });
+                    }
+                  });
+                  return base;
+                })()}
               />
             </div>
           </div>

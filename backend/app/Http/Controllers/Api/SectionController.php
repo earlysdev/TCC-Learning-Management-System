@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\ActivityLog;
 use App\Models\Section;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
@@ -10,8 +11,37 @@ use Illuminate\Http\Request;
 
 class SectionController extends Controller
 {
+    private function ensureDefaultBlocksSeeded(): void
+    {
+        if (Section::count() > 0) {
+            return;
+        }
+
+        $yearBlocks = [
+            '1st Year' => ['Block - 1A', 'Block - 1B', 'Block - 1C', 'Block - 1D', 'Block - 1E'],
+            '2nd Year' => ['Block - 2A', 'Block - 2B', 'Block - 2C', 'Block - 2D', 'Block - 2E'],
+            '3rd Year' => ['Block - 3A', 'Block - 3B', 'Block - 3C', 'Block - 3D', 'Block - 3E'],
+            '4th Year' => ['Block - 4A', 'Block - 4B', 'Block - 4C', 'Block - 4D', 'Block - 4E'],
+        ];
+
+        foreach ($yearBlocks as $yearLevel => $blocks) {
+            foreach ($blocks as $blockName) {
+                Section::updateOrCreate(
+                    ['grade' => $yearLevel, 'name' => $blockName],
+                    [
+                        'grade' => $yearLevel,
+                        'name' => $blockName,
+                        'display_name' => $blockName,
+                    ]
+                );
+            }
+        }
+    }
+
     public function index(Request $request): JsonResponse
     {
+        $this->ensureDefaultBlocksSeeded();
+
         $query = Section::query();
 
         if ($request->has('grade') && !empty($request->grade)) {
@@ -20,21 +50,23 @@ class SectionController extends Controller
 
         $sections = $query->orderBy('grade')->orderBy('name')->get();
 
-        // Attach student counts per section
-        $studentCounts = User::where('role', 'student')
-            ->selectRaw('grade, section, count(*) as count')
-            ->groupBy('grade', 'section')
-            ->get()
-            ->keyBy(fn ($item) => "{$item->grade}___{$item->section}");
+        // Count students by section name across all students
+        $studentsBySection = User::where('role', 'student')
+            ->selectRaw('section, count(*) as count')
+            ->whereNotNull('section')
+            ->groupBy('section')
+            ->pluck('count', 'section');
 
-        $enriched = $sections->map(function (Section $section) use ($studentCounts) {
-            $key = "{$section->grade}___{$section->name}";
-            $count = $studentCounts->get($key)?->count ?? 0;
+        $enriched = $sections->map(function (Section $section) use ($studentsBySection) {
+            $count = (int) ($studentsBySection->get($section->name)
+                ?? $studentsBySection->get($section->display_name)
+                ?? 0);
+
             return [
                 'id' => $section->id,
                 'grade' => $section->grade,
                 'name' => $section->name,
-                'display_name' => $section->display_name ?: "{$section->grade} - {$section->name}",
+                'display_name' => $section->display_name ?: $section->name,
                 'student_count' => $count,
                 'students_count' => $count,
                 'created_at' => $section->created_at,
@@ -50,16 +82,27 @@ class SectionController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        $this->ensureDefaultBlocksSeeded();
+
         $validated = $request->validate([
-            'grade' => ['required', 'string', 'max:30'],
-            'name' => ['required', 'string', 'max:60'],
-            'display_name' => ['nullable', 'string', 'max:80'],
+            'grade' => ['required', 'string', 'max:40'],
+            'name' => ['required', 'string', 'max:80'],
+            'display_name' => ['nullable', 'string', 'max:100'],
         ]);
 
         $grade = trim($validated['grade']);
-        $name = trim($validated['name']);
+        $rawName = trim($validated['name']);
 
-        // Check if section already exists for this grade
+        // Normalize short block codes like "1F" or "2F" into "Block - 1F"
+        if (preg_match('/^([1-4][A-Z])$/i', $rawName, $matches)) {
+            $name = 'Block - ' . strtoupper($matches[1]);
+        } elseif (preg_match('/^block\s*[-:]?\s*([1-4][A-Z0-9-]+)$/i', $rawName, $matches)) {
+            $name = 'Block - ' . strtoupper($matches[1]);
+        } else {
+            $name = $rawName;
+        }
+
+        // Check if section already exists for this grade or globally with same block name
         $exists = Section::where('grade', $grade)
             ->whereRaw('LOWER(name) = ?', [strtolower($name)])
             ->exists();
@@ -67,18 +110,26 @@ class SectionController extends Controller
         if ($exists) {
             return response()->json([
                 'status' => 'error',
-                'message' => "Section '{$name}' already exists in {$grade}.",
+                'message' => "Section '{$name}' already exists under {$grade}.",
             ], 422);
         }
 
         $displayName = !empty($validated['display_name'])
             ? trim($validated['display_name'])
-            : "{$grade} - {$name}";
+            : $name;
 
         $section = Section::create([
             'grade' => $grade,
             'name' => $name,
             'display_name' => $displayName,
+        ]);
+
+        ActivityLog::create([
+            'user_id' => $request->user()?->id,
+            'action' => 'create_section',
+            'description' => "Created class section '{$section->name}' under {$section->grade}",
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
         ]);
 
         return response()->json([
@@ -96,15 +147,86 @@ class SectionController extends Controller
         ], 201);
     }
 
-    public function destroy(Section $section): JsonResponse
+    public function update(Request $request, Section $section): JsonResponse
+    {
+        $validated = $request->validate([
+            'grade' => ['required', 'string', 'max:40'],
+            'name' => ['required', 'string', 'max:80'],
+            'display_name' => ['nullable', 'string', 'max:100'],
+        ]);
+
+        $grade = trim($validated['grade']);
+        $rawName = trim($validated['name']);
+
+        if (preg_match('/^([1-4][A-Z])$/i', $rawName, $matches)) {
+            $name = 'Block - ' . strtoupper($matches[1]);
+        } elseif (preg_match('/^block\s*[-:]?\s*([1-4][A-Z0-9-]+)$/i', $rawName, $matches)) {
+            $name = 'Block - ' . strtoupper($matches[1]);
+        } else {
+            $name = $rawName;
+        }
+
+        $duplicate = Section::where('id', '!=', $section->id)
+            ->where('grade', $grade)
+            ->whereRaw('LOWER(name) = ?', [strtolower($name)])
+            ->exists();
+
+        if ($duplicate) {
+            return response()->json([
+                'status' => 'error',
+                'message' => "Section '{$name}' already exists under {$grade}.",
+            ], 422);
+        }
+
+        $oldName = $section->name;
+        $displayName = !empty($validated['display_name'])
+            ? trim($validated['display_name'])
+            : $name;
+
+        $section->update([
+            'grade' => $grade,
+            'name' => $name,
+            'display_name' => $displayName,
+        ]);
+
+        if ($oldName !== $name) {
+            User::where('role', 'student')
+                ->where('section', $oldName)
+                ->update([
+                    'section' => $name,
+                    'grade' => $grade,
+                ]);
+        }
+
+        ActivityLog::create([
+            'user_id' => $request->user()?->id,
+            'action' => 'update_section',
+            'description' => "Updated class section '{$oldName}' to '{$section->name}' ({$section->grade})",
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => "Section updated to '{$section->name}' ({$section->grade}).",
+            'section' => $section,
+            'data' => $section,
+        ]);
+    }
+
+    public function destroy(Request $request, Section $section): JsonResponse
     {
         $grade = $section->grade;
         $name = $section->name;
 
         // Check if students are currently enrolled in this section
         $enrolledCount = User::where('role', 'student')
-            ->where('grade', $grade)
-            ->where('section', $name)
+            ->where(function ($q) use ($name, $section) {
+                $q->where('section', $name);
+                if (!empty($section->display_name)) {
+                    $q->orWhere('section', $section->display_name);
+                }
+            })
             ->count();
 
         if ($enrolledCount > 0) {
@@ -115,6 +237,14 @@ class SectionController extends Controller
         }
 
         $section->delete();
+
+        ActivityLog::create([
+            'user_id' => $request->user()?->id,
+            'action' => 'delete_section',
+            'description' => "Removed class section '{$name}' from {$grade}",
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
 
         return response()->json([
             'status' => 'success',
