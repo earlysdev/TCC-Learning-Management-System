@@ -13,7 +13,8 @@ import {
 import { 
   Users, UserPlus, BookOpen, Activity, ArrowRight,
   CheckCircle2, AlertCircle, FileText, BarChart3, 
-  GraduationCap, Download, Layers, Plus, Trash2, Search, Sparkles
+  GraduationCap, Download, Layers, Plus, Trash2, Search, Sparkles,
+  KeyRound, Copy, Check, Eye, EyeOff, Printer, Clock, ShieldCheck, RefreshCw, X
 } from 'lucide-react';
 import GlassCard from '../../components/ui/GlassCard';
 import StatCard from '../../components/ui/StatCard';
@@ -23,11 +24,27 @@ import Input from '../../components/ui/Input';
 import ProfileUpdateCard from '../../components/ui/ProfileUpdateCard';
 import { useToastContext } from '../../contexts/ToastContext';
 
+const MAX_STUDENTS_PER_SECTION = 50;
+
 interface SecretaryMetrics {
   total_students: number;
   total_teachers: number;
   recent_registrations: number;
   system_status?: string;
+}
+
+type ReportTypeId = 'student_masterlist' | 'graduating_roster' | 'section_capacity' | 'curriculum_prospectus';
+
+interface RecentExportRecord {
+  id: string;
+  reportId: ReportTypeId;
+  docCode: string;
+  title: string;
+  format: 'Classic Printable Sheet (PDF)' | 'Official CSV Ledger';
+  scopeSummary: string;
+  recordCount: number;
+  exportedBy: string;
+  exportedAt: string;
 }
 
 const pathToSection: Record<string, string> = {
@@ -80,6 +97,53 @@ function computeNextBlockSuggestion(yearLevel: string, existingBlocks: string[])
   return `Block - ${yrNum}${existingBlocks.length + 1}`;
 }
 
+function generateStrongPasswordValue(length = 12): string {
+  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const lower = 'abcdefghijkmnopqrstuvwxyz';
+  const digits = '23456789';
+  const symbols = '!@#$%&*+?';
+  const all = upper + lower + digits + symbols;
+
+  const mandatory = [
+    upper[Math.floor(Math.random() * upper.length)],
+    upper[Math.floor(Math.random() * upper.length)],
+    lower[Math.floor(Math.random() * lower.length)],
+    lower[Math.floor(Math.random() * lower.length)],
+    digits[Math.floor(Math.random() * digits.length)],
+    digits[Math.floor(Math.random() * digits.length)],
+    symbols[Math.floor(Math.random() * symbols.length)],
+    symbols[Math.floor(Math.random() * symbols.length)],
+  ];
+
+  while (mandatory.length < length) {
+    mandatory.push(all[Math.floor(Math.random() * all.length)]);
+  }
+
+  for (let i = mandatory.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const temp = mandatory[i];
+    mandatory[i] = mandatory[j];
+    mandatory[j] = temp;
+  }
+
+  return mandatory.join('');
+}
+
+function evaluatePasswordStrength(pw: string): { label: string; color: string; score: number } {
+  if (!pw) return { label: 'Not Set', color: 'var(--neutral-400)', score: 0 };
+  let score = 0;
+  if (pw.length >= 8) score += 1;
+  if (pw.length >= 12) score += 1;
+  if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) score += 1;
+  if (/\d/.test(pw)) score += 1;
+  if (/[^A-Za-z0-9]/.test(pw)) score += 1;
+
+  if (score <= 2) return { label: 'Weak Password', color: '#f87171', score: 35 };
+  if (score === 3) return { label: 'Moderate Password', color: '#fbbf24', score: 65 };
+  if (score === 4) return { label: 'Strong Password', color: '#4ade80', score: 85 };
+  return { label: 'Very Strong • Institutional Grade', color: '#34d399', score: 100 };
+}
+
 export default function SecretaryDashboard() {
   const user = getLmsUser();
   const { showToast } = useToastContext();
@@ -122,9 +186,10 @@ export default function SecretaryDashboard() {
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [copiedPassword, setCopiedPassword] = useState(false);
   const [lrn, setLrn] = useState('');
   const [yearLevel, setYearLevel] = useState('1st Year');
-  const [section, setSection] = useState('Block - 1A');
 
   // LMSWO-00064: Manual Section & Year Level Creation state
   const [newSectionYearMode, setNewSectionYearMode] = useState<'existing' | 'custom'>('existing');
@@ -146,6 +211,25 @@ export default function SecretaryDashboard() {
   const [newSubjLab, setNewSubjLab] = useState(1);
   const [newSubjUnits, setNewSubjUnits] = useState(3);
   const [newSubjPreq, setNewSubjPreq] = useState('none');
+
+  // Official College Reports state
+  const [reportYearFilter, setReportYearFilter] = useState<string>('ALL');
+  const [reportStatusFilter, setReportStatusFilter] = useState<string>('ALL');
+  const [activePreviewReport, setActivePreviewReport] = useState<ReportTypeId | null>(null);
+  const [recentExports, setRecentExports] = useState<RecentExportRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem('tcc_secretary_recent_exportations');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch {
+      // Fallback
+    }
+    return [];
+  });
 
   // Combine default Year Levels + custom Year Levels + backend sections into an organized map
   const yearLevelBlocksMap = useMemo(() => {
@@ -169,7 +253,6 @@ export default function SecretaryDashboard() {
         map[yr].push(blkName);
       }
     });
-    // Also include any student section that might exist
     students.forEach((stu) => {
       const blkName = stu.section?.trim();
       if (!blkName) return;
@@ -186,6 +269,52 @@ export default function SecretaryDashboard() {
 
   const allAvailableYearLevels = useMemo(() => Object.keys(yearLevelBlocksMap), [yearLevelBlocksMap]);
   const allAvailableBlocks = useMemo(() => Object.values(yearLevelBlocksMap).flat(), [yearLevelBlocksMap]);
+
+  // Compute automatic section assignment for a given Year Level (50 students max per section)
+  const getAutoSectionAssignment = (targetYear: string) => {
+    const blocks = yearLevelBlocksMap[targetYear] || YEAR_LEVEL_BLOCKS['1st Year'] || ['Block - 1A'];
+    const blockUsage = blocks.map((blk) => {
+      const count = students.filter((s) => (s.section || '').trim().toLowerCase() === blk.toLowerCase()).length;
+      return {
+        block: blk,
+        count,
+        isFull: count >= MAX_STUDENTS_PER_SECTION,
+        vacant: Math.max(0, MAX_STUDENTS_PER_SECTION - count),
+      };
+    });
+
+    const firstAvailableIndex = blockUsage.findIndex((b) => !b.isFull);
+    if (firstAvailableIndex !== -1) {
+      const assigned = blockUsage[firstAvailableIndex];
+      const nextBlock =
+        blockUsage[firstAvailableIndex + 1]?.block ||
+        computeNextBlockSuggestion(targetYear, blocks);
+      return {
+        assignedBlock: assigned.block,
+        currentCount: assigned.count,
+        vacantSlots: assigned.vacant,
+        nextFallbackBlock: nextBlock,
+        allFull: false,
+        blockUsage,
+      };
+    }
+
+    // All existing blocks in this year level have reached 50 students -> auto-overflow to next block letter
+    const overflowBlock = computeNextBlockSuggestion(targetYear, blocks);
+    return {
+      assignedBlock: overflowBlock,
+      currentCount: 0,
+      vacantSlots: MAX_STUDENTS_PER_SECTION,
+      nextFallbackBlock: computeNextBlockSuggestion(targetYear, [...blocks, overflowBlock]),
+      allFull: true,
+      blockUsage,
+    };
+  };
+
+  const currentAutoAssignment = useMemo(
+    () => getAutoSectionAssignment(yearLevel),
+    [yearLevel, yearLevelBlocksMap, students]
+  );
 
   // Keep suggested block name updated when Secretary changes the Year Level in the creation form
   useEffect(() => {
@@ -231,7 +360,7 @@ export default function SecretaryDashboard() {
         system_status: 'Active',
       });
 
-      const studentsData = await lmsFetch<PaginatedResponse<User> | { data?: { data?: User[] } | User[] } | User[]>('/users?role=student').catch(() => []);
+      const studentsData = await lmsFetch<PaginatedResponse<User> | { data?: { data?: User[] } | User[] } | User[]>('/users?role=student&per_page=500').catch(() => []);
       if (Array.isArray(studentsData)) {
         setStudents(studentsData);
       } else if (studentsData && 'data' in studentsData) {
@@ -270,6 +399,26 @@ export default function SecretaryDashboard() {
       setActiveSection(pathToSection[subpage]);
     }
   }, [subpage]);
+
+  const handleGenerateStrongPassword = () => {
+    const generated = generateStrongPasswordValue(12);
+    setPassword(generated);
+    setShowPassword(true);
+    setCopiedPassword(false);
+    showToast('Generated strong institutional password.', 'info');
+  };
+
+  const handleCopyPassword = async () => {
+    if (!password) return;
+    try {
+      await navigator.clipboard.writeText(password);
+      setCopiedPassword(true);
+      showToast('Strong password copied to clipboard!', 'success');
+      setTimeout(() => setCopiedPassword(false), 2500);
+    } catch {
+      showToast('Could not copy automatically — please copy from the visible field.', 'warning');
+    }
+  };
 
   const handleCreateSectionAndYearLevel = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -429,10 +578,10 @@ export default function SecretaryDashboard() {
 
     try {
       const fullName = `${firstName} ${lastName}`.trim();
-      const computedYearLevel = newUserRole === 'student'
-        ? (yearLevel || getYearLevelFromBlock(section))
-        : null;
-      await lmsFetch('/users', {
+      const autoAssign = getAutoSectionAssignment(yearLevel);
+      const assignedSection = newUserRole === 'student' ? autoAssign.assignedBlock : null;
+
+      const response = await lmsFetch<{ data?: User; message?: string }>('/users', {
         method: 'POST',
         body: JSON.stringify({
           name: fullName,
@@ -442,12 +591,17 @@ export default function SecretaryDashboard() {
           password,
           role: newUserRole,
           lrn: newUserRole === 'student' ? lrn : null,
-          grade: computedYearLevel,
-          section: newUserRole === 'student' ? section : null,
+          grade: newUserRole === 'student' ? yearLevel : null,
+          section: assignedSection,
         }),
       });
 
-      const msg = `Account for ${fullName} (${newUserRole}) created successfully!`;
+      const finalSection = response?.data?.section || assignedSection;
+      const msg =
+        newUserRole === 'student'
+          ? `Student ${fullName} enrolled and automatically assigned to ${yearLevel} • ${finalSection} (${autoAssign.currentCount + 1}/${MAX_STUDENTS_PER_SECTION} capacity)!`
+          : `Teacher account for ${fullName} created successfully!`;
+
       setNotice(msg);
       showToast(msg, 'success');
       // Reset form
@@ -455,9 +609,11 @@ export default function SecretaryDashboard() {
       setLastName('');
       setEmail('');
       setPassword('');
+      setShowPassword(false);
       setLrn('');
       await loadSecretaryData();
       await loadSections();
+      await loadActivityLogs();
       setActiveSection('student_records');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to create user account';
@@ -501,15 +657,17 @@ export default function SecretaryDashboard() {
     return matchesSearch && matchesBlock && matchesStatus;
   });
 
-  // Merge official 58 BSIT subjects (excluding Practicum) with any extra custom subjects added via API
+  // Merge official 58 BSIT subjects (excluding Practicum and legacy Math 1/2/3/NSTP 1 duplicates) with any extra custom subjects added via API
   const allCurriculumSubjects: CurriculumSubjectItem[] = useMemo(() => {
     const baseList = [...BSIT_SUBJECTS];
+    const excludedLegacyCodes = new Set(['prac 101', 'nstp 1', 'math 1', 'math 2', 'math 3']);
     const knownCodes = new Set(baseList.map((item) => item.code.toLowerCase()));
     customSubjects.forEach((subj) => {
       const code = (subj.code || '').trim();
       const name = (subj.name || '').trim();
       if (!code || !name) return;
       if (/^prac/i.test(code) || /practicum/i.test(name)) return;
+      if (excludedLegacyCodes.has(code.toLowerCase())) return;
       if (knownCodes.has(code.toLowerCase())) return;
       knownCodes.add(code.toLowerCase());
       const yr = (['1st Year', '2nd Year', '3rd Year', '4th Year'].includes(subj.grade || '')
@@ -530,6 +688,215 @@ export default function SecretaryDashboard() {
     });
     return baseList;
   }, [customSubjects]);
+
+  // Record an export in Recent Exportations history
+  const recordReportExport = (
+    reportId: ReportTypeId,
+    docCode: string,
+    title: string,
+    format: RecentExportRecord['format'],
+    scopeSummary: string,
+    recordCount: number
+  ) => {
+    const newEntry: RecentExportRecord = {
+      id: `EXP-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
+      reportId,
+      docCode,
+      title,
+      format,
+      scopeSummary,
+      recordCount,
+      exportedBy: user?.name ? `${user.name} (Secretary)` : 'School Secretary',
+      exportedAt: new Date().toISOString(),
+    };
+    setRecentExports((prev) => {
+      const updated = [newEntry, ...prev].slice(0, 20);
+      try {
+        localStorage.setItem('tcc_secretary_recent_exportations', JSON.stringify(updated));
+      } catch {
+        // Ignore storage error
+      }
+      return updated;
+    });
+  };
+
+  // Filtered students for Official College Reports
+  const reportFilteredStudents = useMemo(() => {
+    return students.filter((s) => {
+      const sYear = getYearLevelFromBlock(s.section, s.grade);
+      const matchesYear = reportYearFilter === 'ALL' || sYear === reportYearFilter;
+      const matchesStatus = reportStatusFilter === 'ALL' || (s.status || 'active') === reportStatusFilter;
+      return matchesYear && matchesStatus;
+    });
+  }, [students, reportYearFilter, reportStatusFilter]);
+
+  const graduatingStudentsList = useMemo(() => {
+    return students.filter((s) => {
+      const sYear = getYearLevelFromBlock(s.section, s.grade);
+      return sYear === '4th Year' || s.status === 'graduated';
+    });
+  }, [students]);
+
+  const handleDownloadCsvReport = (reportId: ReportTypeId) => {
+    let csvContent = '';
+    let filename = '';
+    let docCode = '';
+    let title = '';
+    let scopeSummary = '';
+    let count = 0;
+
+    if (reportId === 'student_masterlist') {
+      docCode = 'TCC-REG-FORM-01';
+      title = 'Complete Student Masterlist';
+      const rows = reportFilteredStudents;
+      count = rows.length;
+      scopeSummary = `${reportYearFilter === 'ALL' ? 'All Year Levels' : reportYearFilter} • ${reportStatusFilter === 'ALL' ? 'All Statuses' : reportStatusFilter}`;
+      const header = ['No.', 'Student ID', 'Full Name', 'Year Level', 'Class Section / Block', 'Email Address', 'Enrollment Status'];
+      const body = rows.map((s, idx) => [
+        String(idx + 1),
+        s.lrn || 'N/A',
+        `"${(s.name || '').replace(/"/g, '""')}"`,
+        getYearLevelFromBlock(s.section, s.grade),
+        s.section || 'Block - 1A',
+        s.email || '',
+        (s.status || 'active').toUpperCase(),
+      ]);
+      csvContent = [header.join(','), ...body.map((r) => r.join(','))].join('\n');
+      filename = `TCC_Student_Masterlist_${new Date().toISOString().slice(0, 10)}.csv`;
+    } else if (reportId === 'graduating_roster') {
+      docCode = 'TCC-REG-FORM-02';
+      title = 'Graduating Students Roster (4th Year)';
+      const rows = graduatingStudentsList;
+      count = rows.length;
+      scopeSummary = '4th Year BSIT (Blocks 4A–4E) • S.Y. 2025–2026';
+      const header = ['No.', 'Student ID', 'Candidate Name', 'Year Level', 'Assigned Block', 'Email Address', 'Graduation Status'];
+      const body = rows.map((s, idx) => [
+        String(idx + 1),
+        s.lrn || 'N/A',
+        `"${(s.name || '').replace(/"/g, '""')}"`,
+        getYearLevelFromBlock(s.section, s.grade),
+        s.section || 'Block - 4A',
+        s.email || '',
+        (s.status || 'active').toUpperCase(),
+      ]);
+      csvContent = [header.join(','), ...body.map((r) => r.join(','))].join('\n');
+      filename = `TCC_Graduating_Roster_SY2025_2026_${new Date().toISOString().slice(0, 10)}.csv`;
+    } else if (reportId === 'section_capacity') {
+      docCode = 'TCC-REG-FORM-03';
+      title = 'Section & Block Capacity Utilization Report';
+      const allRows: string[][] = [];
+      let idx = 1;
+      Object.entries(yearLevelBlocksMap).forEach(([yr, blks]) => {
+        if (reportYearFilter !== 'ALL' && yr !== reportYearFilter) return;
+        blks.forEach((blk) => {
+          const enrolled = students.filter((s) => (s.section || '').trim().toLowerCase() === blk.toLowerCase()).length;
+          const vacant = Math.max(0, MAX_STUDENTS_PER_SECTION - enrolled);
+          const status = enrolled >= MAX_STUDENTS_PER_SECTION ? 'FULL (50/50)' : 'VACANT AVAILABLE';
+          allRows.push([
+            String(idx++),
+            yr,
+            blk,
+            String(enrolled),
+            String(MAX_STUDENTS_PER_SECTION),
+            String(vacant),
+            status,
+          ]);
+        });
+      });
+      count = allRows.length;
+      scopeSummary = `${reportYearFilter === 'ALL' ? '1st–4th Year Sections' : reportYearFilter} • Max 50 Students/Section`;
+      const header = ['No.', 'Year Level', 'Class Section / Block', 'Enrolled Students', 'Max Capacity', 'Vacant Slots', 'Section Status'];
+      csvContent = [header.join(','), ...allRows.map((r) => r.join(','))].join('\n');
+      filename = `TCC_Section_Capacity_Report_${new Date().toISOString().slice(0, 10)}.csv`;
+    } else {
+      docCode = 'TCC-REG-FORM-04';
+      title = 'Official BSIT Curriculum Prospectus Ledger';
+      const rows = allCurriculumSubjects.filter(
+        (c) => reportYearFilter === 'ALL' || c.yearLevel === reportYearFilter
+      );
+      count = rows.length;
+      scopeSummary = `${reportYearFilter === 'ALL' ? '1st–4th Year BSIT' : reportYearFilter} (Excl. Practicum)`;
+      const header = ['Course Code', 'Descriptive Title', 'Year Level', 'Semester', 'Lec', 'Lab', 'Total Units (TU)', 'Prerequisite'];
+      const body = rows.map((c) => [
+        `"${c.code}"`,
+        `"${c.name.replace(/"/g, '""')}"`,
+        c.yearLevel,
+        c.semester,
+        String(c.lec),
+        String(c.lab),
+        String(c.units),
+        `"${c.prerequisite}"`,
+      ]);
+      csvContent = [header.join(','), ...body.map((r) => r.join(','))].join('\n');
+      filename = `TCC_BSIT_Curriculum_Prospectus_${new Date().toISOString().slice(0, 10)}.csv`;
+    }
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    recordReportExport(reportId, docCode, title, 'Official CSV Ledger', scopeSummary, count);
+    showToast(`Exported "${title}" (${count} records) and recorded in Recent Exportations.`, 'success');
+  };
+
+  const handleOpenClassicSheet = (reportId: ReportTypeId, autoRecord = true) => {
+    setActivePreviewReport(reportId);
+    if (!autoRecord) return;
+
+    if (reportId === 'student_masterlist') {
+      recordReportExport(
+        reportId,
+        'TCC-REG-FORM-01',
+        'Complete Student Masterlist',
+        'Classic Printable Sheet (PDF)',
+        `${reportYearFilter === 'ALL' ? 'All Year Levels' : reportYearFilter} • ${reportStatusFilter === 'ALL' ? 'All Statuses' : reportStatusFilter}`,
+        reportFilteredStudents.length
+      );
+    } else if (reportId === 'graduating_roster') {
+      recordReportExport(
+        reportId,
+        'TCC-REG-FORM-02',
+        'Graduating Students Roster (4th Year)',
+        'Classic Printable Sheet (PDF)',
+        '4th Year BSIT (Blocks 4A–4E) • S.Y. 2025–2026',
+        graduatingStudentsList.length
+      );
+    } else if (reportId === 'section_capacity') {
+      const secCount = Object.entries(yearLevelBlocksMap)
+        .filter(([yr]) => reportYearFilter === 'ALL' || yr === reportYearFilter)
+        .reduce((acc, [, blks]) => acc + blks.length, 0);
+      recordReportExport(
+        reportId,
+        'TCC-REG-FORM-03',
+        'Section & Block Capacity Utilization Report',
+        'Classic Printable Sheet (PDF)',
+        `${reportYearFilter === 'ALL' ? 'All Year Levels' : reportYearFilter} • 50-Student Limit`,
+        secCount
+      );
+    } else {
+      const subjCount = allCurriculumSubjects.filter(
+        (c) => reportYearFilter === 'ALL' || c.yearLevel === reportYearFilter
+      ).length;
+      recordReportExport(
+        reportId,
+        'TCC-REG-FORM-04',
+        'Official BSIT Curriculum Prospectus Ledger',
+        'Classic Printable Sheet (PDF)',
+        `${reportYearFilter === 'ALL' ? '1st–4th Year BSIT' : reportYearFilter} (Excl. Practicum)`,
+        subjCount
+      );
+    }
+  };
+
+  const handlePrintOfficialSheet = () => {
+    window.print();
+  };
 
   const renderOverview = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -573,7 +940,7 @@ export default function SecretaryDashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '1.25rem' }}>
         <StatCard label="Total Students" value={loading ? '…' : students.length} icon={<GraduationCap size={24} />} detail="Enrolled learners" />
         <StatCard label="Total Teachers" value={loading ? '…' : metrics.total_teachers} icon={<Users size={24} />} detail="Faculty members" />
-        <StatCard label="Class Sections" value={allAvailableBlocks.length} icon={<Layers size={24} />} detail={`${allAvailableYearLevels.length} Year Levels (1st–4th Yr)`} />
+        <StatCard label="Class Sections" value={allAvailableBlocks.length} icon={<Layers size={24} />} detail={`${allAvailableYearLevels.length} Year Levels (50/Sec Cap)`} />
         <StatCard label="BSIT Subjects" value={allCurriculumSubjects.length} icon={<BookOpen size={24} />} detail="1st–4th Yr (Excl. Practicum)" />
       </div>
 
@@ -629,183 +996,388 @@ export default function SecretaryDashboard() {
     </div>
   );
 
-  const renderCreateAccount = () => (
-    <div style={{ maxWidth: '750px', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      <div>
-        <span style={{ fontSize: '0.8rem', color: 'var(--primary-300)', letterSpacing: '1px', textTransform: 'uppercase', fontWeight: 600 }}>
-          REGISTRATION
-        </span>
-        <h1 style={{ fontSize: '2rem', fontWeight: 800, color: 'white', marginTop: '0.25rem' }}>
-          Create New Account
-        </h1>
-        <p style={{ color: 'var(--neutral-300)' }}>
-          Register a verified student learner or faculty teacher to the Tagoloan Community College LMS database.
-        </p>
-      </div>
+  const renderCreateAccount = () => {
+    const pwStrength = evaluatePasswordStrength(password);
+    const fillPct = Math.min(100, Math.round((currentAutoAssignment.currentCount / MAX_STUDENTS_PER_SECTION) * 100));
 
-      {notice && (
-        <div style={{ background: 'rgba(67, 160, 71, 0.2)', border: '1px solid var(--success)', padding: '0.75rem 1rem', borderRadius: 'var(--radius-md)', color: '#c8e6c9', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <CheckCircle2 size={18} /> {notice}
+    return (
+      <div style={{ maxWidth: '780px', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <div>
+          <span style={{ fontSize: '0.8rem', color: 'var(--primary-300)', letterSpacing: '1px', textTransform: 'uppercase', fontWeight: 600 }}>
+            REGISTRATION &amp; AUTO-SECTIONING
+          </span>
+          <h1 style={{ fontSize: '2rem', fontWeight: 800, color: 'white', marginTop: '0.25rem' }}>
+            Create New Account
+          </h1>
+          <p style={{ color: 'var(--neutral-300)' }}>
+            Register a verified student learner or faculty teacher. Students are automatically assigned to the first vacant section in their Year Level (50 students max per section).
+          </p>
         </div>
-      )}
 
-      {error && (
-        <div style={{ background: 'rgba(239, 83, 80, 0.2)', border: '1px solid var(--error)', padding: '0.75rem 1rem', borderRadius: 'var(--radius-md)', color: '#ffcdd2', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <AlertCircle size={18} /> {error}
-        </div>
-      )}
+        {notice && (
+          <div style={{ background: 'rgba(67, 160, 71, 0.2)', border: '1px solid var(--success)', padding: '0.75rem 1rem', borderRadius: 'var(--radius-md)', color: '#c8e6c9', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <CheckCircle2 size={18} /> {notice}
+          </div>
+        )}
 
-      <GlassCard>
-        <form onSubmit={handleCreateUser} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          <div>
-            <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--neutral-300)', fontWeight: 600, marginBottom: '0.4rem' }}>
-              Account Role
-            </label>
-            <div style={{ display: 'flex', gap: '1rem' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'white', cursor: 'pointer' }}>
-                <input 
-                  type="radio" 
-                  name="role" 
-                  value="student" 
-                  checked={newUserRole === 'student'} 
-                  onChange={() => setNewUserRole('student')}
-                  style={{ accentColor: 'var(--primary-400)' }}
-                />
-                Student
+        {error && (
+          <div style={{ background: 'rgba(239, 83, 80, 0.2)', border: '1px solid var(--error)', padding: '0.75rem 1rem', borderRadius: 'var(--radius-md)', color: '#ffcdd2', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <AlertCircle size={18} /> {error}
+          </div>
+        )}
+
+        <GlassCard>
+          <form onSubmit={handleCreateUser} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--neutral-300)', fontWeight: 600, marginBottom: '0.4rem' }}>
+                Account Role
               </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'white', cursor: 'pointer' }}>
-                <input 
-                  type="radio" 
-                  name="role" 
-                  value="teacher" 
-                  checked={newUserRole === 'teacher'} 
-                  onChange={() => setNewUserRole('teacher')}
-                  style={{ accentColor: 'var(--primary-400)' }}
-                />
-                Teacher
-              </label>
+              <div style={{ display: 'flex', gap: '1rem' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'white', cursor: 'pointer' }}>
+                  <input 
+                    type="radio" 
+                    name="role" 
+                    value="student" 
+                    checked={newUserRole === 'student'} 
+                    onChange={() => setNewUserRole('student')}
+                    style={{ accentColor: 'var(--primary-400)' }}
+                  />
+                  Student
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'white', cursor: 'pointer' }}>
+                  <input 
+                    type="radio" 
+                    name="role" 
+                    value="teacher" 
+                    checked={newUserRole === 'teacher'} 
+                    onChange={() => setNewUserRole('teacher')}
+                    style={{ accentColor: 'var(--primary-400)' }}
+                  />
+                  Teacher
+                </label>
+              </div>
             </div>
-          </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-            <Input 
-              label="First Name"
-              placeholder="e.g. Juan"
-              value={firstName}
-              onChange={e => setFirstName(e.target.value)}
-              required
-            />
-            <Input 
-              label="Last Name"
-              placeholder="e.g. Dela Cruz"
-              value={lastName}
-              onChange={e => setLastName(e.target.value)}
-              required
-            />
-          </div>
-
-          <Input 
-            label="Email Address"
-            type="email"
-            placeholder="e.g. juan.delacruz@tcc.edu.ph"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            required
-          />
-
-          <Input 
-            label="Initial Password"
-            type="password"
-            placeholder="Enter initial password (min. 8 characters)"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            required
-            helpText="Minimum 8 characters. The user can change this later."
-          />
-
-          {newUserRole === 'student' && (
-            <>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
               <Input 
-                label="Student ID"
-                placeholder="e.g. 20273710"
-                value={lrn}
-                onChange={e => setLrn(e.target.value.replace(/\D/g, '').slice(0, 12))}
-                maxLength={12}
+                label="First Name"
+                placeholder="e.g. Juan"
+                value={firstName}
+                onChange={e => setFirstName(e.target.value)}
                 required
-                helpText="Students can use their Student ID (e.g. 20273710) as their login username."
               />
+              <Input 
+                label="Last Name"
+                placeholder="e.g. Dela Cruz"
+                value={lastName}
+                onChange={e => setLastName(e.target.value)}
+                required
+              />
+            </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--neutral-300)', fontWeight: 600, marginBottom: '0.4rem' }}>
-                    Year Level
-                  </label>
-                  <select 
-                    value={yearLevel}
-                    onChange={e => {
-                      const nextYear = e.target.value;
-                      setYearLevel(nextYear);
-                      const availableBlocks = yearLevelBlocksMap[nextYear] || YEAR_LEVEL_BLOCKS['1st Year'];
-                      setSection(availableBlocks[0] || 'Block - 1A');
+            <Input 
+              label="Email Address"
+              type="email"
+              placeholder="e.g. juan.delacruz@tcc.edu.ph"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              required
+            />
+
+            {/* Strong Password Generator & Field */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <label style={{ fontSize: '0.85rem', color: 'var(--neutral-200)', fontWeight: 600 }}>
+                  Initial Password
+                </label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                  <button
+                    type="button"
+                    onClick={handleGenerateStrongPassword}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.35rem',
+                      padding: '0.3rem 0.7rem',
+                      borderRadius: '8px',
+                      background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.22), rgba(139, 92, 246, 0.25))',
+                      border: '1px solid rgba(251, 191, 36, 0.45)',
+                      color: '#fde68a',
+                      fontSize: '0.76rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
                     }}
-                    className="form-select"
                   >
-                    {allAvailableYearLevels.map((yrLbl) => {
-                      const blks = yearLevelBlocksMap[yrLbl] || [];
-                      return (
-                        <option key={yrLbl} value={yrLbl}>
-                          {yrLbl} ({blks.length} {blks.length === 1 ? 'Section' : 'Sections'})
-                        </option>
-                      );
-                    })}
-                  </select>
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--neutral-300)', fontWeight: 600, marginBottom: '0.4rem' }}>
-                    Class Section / Block
-                  </label>
-                  <select 
-                    value={section}
-                    onChange={e => setSection(e.target.value)}
-                    className="form-select"
-                  >
-                    {(yearLevelBlocksMap[yearLevel] || YEAR_LEVEL_BLOCKS['1st Year']).map(blk => (
-                      <option key={blk} value={blk}>{blk}</option>
-                    ))}
-                  </select>
+                    <KeyRound size={13} /> Generate Strong Password
+                  </button>
+                  {password && (
+                    <button
+                      type="button"
+                      onClick={handleCopyPassword}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.3rem',
+                        padding: '0.3rem 0.6rem',
+                        borderRadius: '8px',
+                        background: 'rgba(255, 255, 255, 0.07)',
+                        border: '1px solid rgba(255, 255, 255, 0.16)',
+                        color: copiedPassword ? '#86efac' : '#e2e8f0',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {copiedPassword ? <Check size={13} /> : <Copy size={13} />}
+                      {copiedPassword ? 'Copied' : 'Copy'}
+                    </button>
+                  )}
                 </div>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginTop: '-0.35rem' }}>
-                <span style={{ fontSize: '0.78rem', color: 'var(--neutral-400)' }}>
-                  Need a new Block or Year Level? You can manually create custom sections in the Sections &amp; Year Levels tab.
-                </span>
+
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Enter initial password or click Generate Strong Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  minLength={8}
+                  className="form-input"
+                  style={{
+                    width: '100%',
+                    paddingRight: '2.75rem',
+                    fontFamily: showPassword ? 'monospace' : 'inherit',
+                    letterSpacing: showPassword ? '0.4px' : 'normal',
+                  }}
+                />
                 <button
                   type="button"
-                  onClick={() => handleSectionChange('blocks')}
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  title={showPassword ? 'Hide password' : 'Show password'}
                   style={{
+                    position: 'absolute',
+                    right: '0.75rem',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
                     background: 'none',
                     border: 'none',
-                    color: 'var(--accent-purple-light)',
-                    fontSize: '0.78rem',
-                    fontWeight: 700,
+                    color: 'var(--neutral-300)',
                     cursor: 'pointer',
-                    textDecoration: 'underline',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    padding: 0,
                   }}
                 >
-                  + Manage Sections &amp; Year Levels
+                  {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
                 </button>
               </div>
-            </>
-          )}
 
-          <Button variant="accent" size="lg" type="submit" disabled={busy} style={{ marginTop: '0.5rem' }}>
-            <UserPlus size={18} /> {busy ? 'Creating User Account...' : 'Register Account'}
-          </Button>
-        </form>
-      </GlassCard>
-    </div>
-  );
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.76rem', color: 'var(--neutral-400)' }}>
+                  Minimum 8 characters. Click <strong style={{ color: '#fde68a' }}>Generate Strong Password</strong> for a secure 12-character credential.
+                </span>
+                {password && (
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: pwStrength.color }}>
+                    {pwStrength.label}
+                  </span>
+                )}
+              </div>
+              {password && (
+                <div style={{ width: '100%', height: '5px', background: 'rgba(255,255,255,0.08)', borderRadius: '999px', overflow: 'hidden' }}>
+                  <div
+                    style={{
+                      width: `${pwStrength.score}%`,
+                      height: '100%',
+                      background: pwStrength.color,
+                      transition: 'width 0.2s ease',
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+
+            {newUserRole === 'student' && (
+              <>
+                <Input 
+                  label="Student ID"
+                  placeholder="e.g. 20273710"
+                  value={lrn}
+                  onChange={e => setLrn(e.target.value.replace(/\D/g, '').slice(0, 12))}
+                  maxLength={12}
+                  required
+                  helpText="Students can use their Student ID (e.g. 20273710) as their login username."
+                />
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem', alignItems: 'start' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--neutral-300)', fontWeight: 600, marginBottom: '0.4rem' }}>
+                      Year Level
+                    </label>
+                    <select 
+                      value={yearLevel}
+                      onChange={e => setYearLevel(e.target.value)}
+                      className="form-select"
+                    >
+                      {allAvailableYearLevels.map((yrLbl) => {
+                        const blks = yearLevelBlocksMap[yrLbl] || [];
+                        return (
+                          <option key={yrLbl} value={yrLbl}>
+                            {yrLbl} ({blks.length} {blks.length === 1 ? 'Section' : 'Sections'})
+                          </option>
+                        );
+                      })}
+                    </select>
+                    <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--neutral-400)', marginTop: '0.35rem' }}>
+                      Select the student&apos;s Year Level. The system automatically assigns the section.
+                    </span>
+                  </div>
+
+                  {/* Auto-Assigned Section Box (No manual selection needed; 50 students per section rule) */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                      <label style={{ fontSize: '0.85rem', color: 'var(--neutral-300)', fontWeight: 600 }}>
+                        Assigned Class Section (Automatic)
+                      </label>
+                      <span
+                        style={{
+                          fontSize: '0.68rem',
+                          fontWeight: 800,
+                          padding: '0.12rem 0.5rem',
+                          borderRadius: '999px',
+                          background: 'rgba(16, 185, 129, 0.18)',
+                          border: '1px solid rgba(16, 185, 129, 0.4)',
+                          color: '#6ee7b7',
+                          letterSpacing: '0.4px',
+                          textTransform: 'uppercase',
+                        }}
+                      >
+                        Auto-Assigned • 50 Max
+                      </span>
+                    </div>
+
+                    <div
+                      style={{
+                        padding: '0.7rem 0.9rem',
+                        borderRadius: '10px',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid rgba(255, 255, 255, 0.14)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.45rem',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ fontWeight: 800, fontSize: '1rem', color: 'white', whiteSpace: 'nowrap' }}>
+                          {currentAutoAssignment.assignedBlock}
+                        </span>
+                        <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#fbbf24', whiteSpace: 'nowrap' }}>
+                          {currentAutoAssignment.currentCount} / {MAX_STUDENTS_PER_SECTION} Students
+                        </span>
+                      </div>
+
+                      <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.08)', borderRadius: '999px', overflow: 'hidden' }}>
+                        <div
+                          style={{
+                            width: `${fillPct}%`,
+                            height: '100%',
+                            background: fillPct >= 90 ? '#f59e0b' : '#10b981',
+                            transition: 'width 0.25s ease',
+                          }}
+                        />
+                      </div>
+
+                      <div style={{ fontSize: '0.74rem', color: 'var(--neutral-300)', lineHeight: 1.35 }}>
+                        <strong style={{ color: '#a7f3d0' }}>{currentAutoAssignment.vacantSlots} vacant slots</strong> remaining in{' '}
+                        <strong style={{ color: 'white' }}>{currentAutoAssignment.assignedBlock}</strong>. Once it reaches{' '}
+                        <strong>{MAX_STUDENTS_PER_SECTION}/{MAX_STUDENTS_PER_SECTION}</strong>, the next student automatically moves to{' '}
+                        <strong style={{ color: '#c4b5fd' }}>{currentAutoAssignment.nextFallbackBlock}</strong>.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Live Year Level Section Capacity Strip */}
+                <div
+                  style={{
+                    padding: '0.75rem 0.9rem',
+                    borderRadius: '10px',
+                    background: 'rgba(255, 255, 255, 0.03)',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.5rem',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <span style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--neutral-300)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      {yearLevel} Section Capacity Queue (50 Students Per Section)
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleSectionChange('blocks')}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--accent-purple-light)',
+                        fontSize: '0.76rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        textDecoration: 'underline',
+                      }}
+                    >
+                      + Manage Sections &amp; Year Levels
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem' }}>
+                    {currentAutoAssignment.blockUsage.map((item) => {
+                      const isActiveTarget = item.block === currentAutoAssignment.assignedBlock;
+                      return (
+                        <div
+                          key={item.block}
+                          style={{
+                            padding: '0.3rem 0.65rem',
+                            borderRadius: '8px',
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            whiteSpace: 'nowrap',
+                            background: item.isFull
+                              ? 'rgba(239, 68, 68, 0.16)'
+                              : isActiveTarget
+                                ? 'rgba(16, 185, 129, 0.2)'
+                                : 'rgba(255, 255, 255, 0.05)',
+                            border: item.isFull
+                              ? '1px solid rgba(239, 68, 68, 0.4)'
+                              : isActiveTarget
+                                ? '1px solid rgba(16, 185, 129, 0.5)'
+                                : '1px solid rgba(255, 255, 255, 0.1)',
+                            color: item.isFull ? '#fca5a5' : isActiveTarget ? '#a7f3d0' : 'var(--neutral-300)',
+                          }}
+                        >
+                          {item.block}: {item.count}/{MAX_STUDENTS_PER_SECTION}
+                          {item.isFull ? ' (FULL)' : isActiveTarget ? ' • NEXT' : ''}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+
+            <Button variant="accent" size="lg" type="submit" disabled={busy} style={{ marginTop: '0.5rem' }}>
+              <UserPlus size={18} />{' '}
+              {busy
+                ? 'Creating User Account...'
+                : newUserRole === 'student'
+                  ? `Register Student into ${currentAutoAssignment.assignedBlock}`
+                  : 'Register Faculty Account'}
+            </Button>
+          </form>
+        </GlassCard>
+      </div>
+    );
+  };
 
   const renderBlocks = () => {
     const filteredCurriculum = allCurriculumSubjects.filter((item) => {
@@ -833,6 +1405,167 @@ export default function SecretaryDashboard() {
       yearLevelBlocksMap[activeTargetYear] || []
     );
 
+    const renderSemesterCurriculumCard = (
+      yrLevel: string,
+      sem: '1st Semester' | '2nd Semester' | 'Summer',
+      semItems: CurriculumSubjectItem[]
+    ) => {
+      const totalLec = semItems.reduce((acc, i) => acc + i.lec, 0);
+      const totalLab = semItems.reduce((acc, i) => acc + i.lab, 0);
+      const totalTu = semItems.reduce((acc, i) => acc + i.units, 0);
+
+      return (
+        <div
+          key={sem}
+          style={{
+            borderRadius: '10px',
+            background: 'rgba(15, 23, 42, 0.55)',
+            border: '1px solid rgba(255, 255, 255, 0.09)',
+            overflow: 'hidden',
+            width: '100%',
+          }}
+        >
+          <div
+            style={{
+              padding: '0.65rem 1rem',
+              background:
+                sem === 'Summer'
+                  ? 'rgba(245, 158, 11, 0.16)'
+                  : 'rgba(63, 81, 181, 0.22)',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: '0.5rem',
+            }}
+          >
+            <span
+              style={{
+                fontWeight: 800,
+                fontSize: '0.85rem',
+                color: 'white',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+              }}
+            >
+              {yrLevel} • {sem}
+            </span>
+            <span style={{ fontSize: '0.76rem', color: '#cbd5e1', fontWeight: 700, whiteSpace: 'nowrap' }}>
+              {semItems.length} Courses • {totalTu} TU
+            </span>
+          </div>
+
+          <table
+            style={{
+              width: '100%',
+              tableLayout: 'fixed',
+              borderCollapse: 'collapse',
+              textAlign: 'left',
+              color: 'white',
+              fontSize: '0.81rem',
+            }}
+          >
+            <colgroup>
+              <col style={{ width: '112px' }} />
+              <col />
+              <col style={{ width: '38px' }} />
+              <col style={{ width: '38px' }} />
+              <col style={{ width: '38px' }} />
+              <col style={{ width: '110px' }} />
+            </colgroup>
+            <thead>
+              <tr
+                style={{
+                  background: 'rgba(255, 255, 255, 0.04)',
+                  borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                  color: 'var(--neutral-300)',
+                  fontSize: '0.73rem',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.4px',
+                }}
+              >
+                <th style={{ padding: '0.55rem 0.65rem' }}>Course Code</th>
+                <th style={{ padding: '0.55rem 0.65rem' }}>Descriptive Title</th>
+                <th style={{ padding: '0.55rem 0.25rem', textAlign: 'center' }}>Lec</th>
+                <th style={{ padding: '0.55rem 0.25rem', textAlign: 'center' }}>Lab</th>
+                <th style={{ padding: '0.55rem 0.25rem', textAlign: 'center' }}>TU</th>
+                <th style={{ padding: '0.55rem 0.65rem' }}>Preq</th>
+              </tr>
+            </thead>
+            <tbody>
+              {semItems.map((subj) => (
+                <tr key={subj.code} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.045)' }}>
+                  <td style={{ padding: '0.55rem 0.65rem', verticalAlign: 'middle' }}>
+                    <span
+                      style={{
+                        display: 'inline-block',
+                        fontFamily: 'monospace',
+                        fontWeight: 800,
+                        fontSize: '0.75rem',
+                        padding: '0.15rem 0.42rem',
+                        borderRadius: '6px',
+                        background: 'rgba(139, 92, 246, 0.18)',
+                        border: '1px solid rgba(139, 92, 246, 0.35)',
+                        color: '#ddd6fe',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {subj.code}
+                    </span>
+                  </td>
+                  <td
+                    style={{
+                      padding: '0.55rem 0.65rem',
+                      fontWeight: 600,
+                      color: '#f8fafc',
+                      lineHeight: 1.35,
+                      wordBreak: 'break-word',
+                    }}
+                  >
+                    {subj.name}
+                  </td>
+                  <td style={{ padding: '0.55rem 0.25rem', textAlign: 'center', color: '#cbd5e1' }}>{subj.lec}</td>
+                  <td style={{ padding: '0.55rem 0.25rem', textAlign: 'center', color: '#cbd5e1' }}>{subj.lab}</td>
+                  <td style={{ padding: '0.55rem 0.25rem', textAlign: 'center', fontWeight: 800, color: '#fbbf24' }}>{subj.units}</td>
+                  <td
+                    style={{
+                      padding: '0.55rem 0.65rem',
+                      color: subj.prerequisite === 'none' ? 'var(--neutral-400)' : '#93c5fd',
+                      fontSize: '0.73rem',
+                      fontFamily: 'monospace',
+                      wordBreak: 'break-word',
+                      lineHeight: 1.3,
+                    }}
+                  >
+                    {subj.prerequisite}
+                  </td>
+                </tr>
+              ))}
+              <tr style={{ background: 'rgba(255, 255, 255, 0.05)', fontWeight: 800 }}>
+                <td
+                  colSpan={2}
+                  style={{
+                    padding: '0.55rem 0.65rem',
+                    textAlign: 'right',
+                    color: '#cbd5e1',
+                    fontSize: '0.74rem',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                  }}
+                >
+                  Total Credits
+                </td>
+                <td style={{ padding: '0.55rem 0.25rem', textAlign: 'center', color: 'white' }}>{totalLec}</td>
+                <td style={{ padding: '0.55rem 0.25rem', textAlign: 'center', color: 'white' }}>{totalLab}</td>
+                <td style={{ padding: '0.55rem 0.25rem', textAlign: 'center', color: '#a5d6a7' }}>{totalTu}</td>
+                <td style={{ padding: '0.55rem 0.65rem' }} />
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      );
+    };
+
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
@@ -844,7 +1577,7 @@ export default function SecretaryDashboard() {
               Year Levels, Class Sections &amp; BSIT Subjects
             </h1>
             <p style={{ color: 'var(--neutral-300)' }}>
-              Manually create and manage Year Levels (1st to 4th Year), Class Sections/Blocks, and official TCC BSIT Curriculum Subjects (excluding 4th Year Practicum).
+              Manually create and manage Year Levels (1st to 4th Year), Class Sections/Blocks (50 students per section capacity), and official TCC BSIT Curriculum Subjects.
             </p>
           </div>
           <Button variant="accent" onClick={() => handleSectionChange('create_account')}>
@@ -1005,7 +1738,7 @@ export default function SecretaryDashboard() {
         </GlassCard>
 
         {/* Year Levels & Class Sections Grid (1st to 4th Year + Custom) */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: '1.25rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(285px, 1fr))', gap: '1.25rem' }}>
           {Object.entries(yearLevelBlocksMap).map(([yearLbl, blocks]) => {
             const yearStudentsCount = students.filter(
               (s) => getYearLevelFromBlock(s.section, s.grade) === yearLbl
@@ -1022,7 +1755,7 @@ export default function SecretaryDashboard() {
                       <span style={{ fontSize: '0.78rem', color: 'var(--neutral-300)' }}>
                         {yearCourses.length > 0
                           ? `${yearCourses.length} BSIT Subjects • ${yearUnits} Total Units`
-                          : 'Custom Academic Year Level'}
+                          : 'Academic Year Level'}
                       </span>
                     </div>
                     <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
@@ -1038,7 +1771,8 @@ export default function SecretaryDashboard() {
                       </div>
                     ) : (
                       blocks.map((blk) => {
-                        const count = students.filter((s) => s.section === blk).length;
+                        const count = students.filter((s) => (s.section || '').trim().toLowerCase() === blk.toLowerCase()).length;
+                        const isFull = count >= MAX_STUDENTS_PER_SECTION;
                         const dbSection = sectionsList.find(
                           (sec) =>
                             sec.grade === yearLbl &&
@@ -1057,56 +1791,60 @@ export default function SecretaryDashboard() {
                               gap: '0.5rem',
                               padding: '0.6rem 0.85rem',
                               background: 'rgba(255,255,255,0.04)',
-                              border: isDefaultBlock
-                                ? '1px solid var(--glass-border)'
-                                : '1px solid rgba(139, 92, 246, 0.45)',
+                              border: '1px solid var(--glass-border)',
                               borderRadius: 'var(--radius-sm)',
                             }}
                           >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
-                              <span style={{ fontWeight: 700, color: 'white', fontSize: '0.9rem' }}>{blk}</span>
-                              {!isDefaultBlock && (
-                                <span
-                                  style={{
-                                    fontSize: '0.66rem',
-                                    fontWeight: 700,
-                                    padding: '0.1rem 0.4rem',
-                                    borderRadius: '999px',
-                                    background: 'rgba(139, 92, 246, 0.22)',
-                                    color: '#c4b5fd',
-                                    textTransform: 'uppercase',
-                                  }}
-                                >
-                                  Custom
-                                </span>
-                              )}
-                            </div>
+                            <span
+                              style={{
+                                fontWeight: 700,
+                                color: 'white',
+                                fontSize: '0.9rem',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {blk}
+                            </span>
 
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexShrink: 0 }}>
-                              <span style={{ fontSize: '0.78rem', color: 'var(--neutral-300)', fontWeight: 600 }}>
-                                {count} {count === 1 ? 'Student' : 'Students'}
+                              <span
+                                style={{
+                                  fontSize: '0.76rem',
+                                  color: isFull ? '#fca5a5' : 'var(--neutral-300)',
+                                  fontWeight: 600,
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {count} / {MAX_STUDENTS_PER_SECTION} Students
                               </span>
                               <button
                                 type="button"
-                                title={`Enroll a student into ${blk} (${yearLbl})`}
+                                disabled={isFull}
+                                title={
+                                  isFull
+                                    ? `${blk} has reached the 50-student limit`
+                                    : `Enroll a student into ${yearLbl} (${blk})`
+                                }
                                 onClick={() => {
                                   setNewUserRole('student');
                                   setYearLevel(yearLbl);
-                                  setSection(blk);
                                   handleSectionChange('create_account');
                                 }}
                                 style={{
-                                  padding: '0.2rem 0.5rem',
+                                  padding: '0.2rem 0.52rem',
                                   borderRadius: '6px',
                                   fontSize: '0.72rem',
                                   fontWeight: 700,
-                                  background: 'rgba(63, 81, 181, 0.25)',
-                                  border: '1px solid rgba(99, 102, 241, 0.4)',
-                                  color: '#c7d2fe',
-                                  cursor: 'pointer',
+                                  whiteSpace: 'nowrap',
+                                  background: isFull ? 'rgba(239, 68, 68, 0.15)' : 'rgba(63, 81, 181, 0.25)',
+                                  border: isFull
+                                    ? '1px solid rgba(239, 68, 68, 0.35)'
+                                    : '1px solid rgba(99, 102, 241, 0.4)',
+                                  color: isFull ? '#fca5a5' : '#c7d2fe',
+                                  cursor: isFull ? 'not-allowed' : 'pointer',
                                 }}
                               >
-                                + Enroll
+                                {isFull ? 'Full' : '+ Enroll'}
                               </button>
                               {dbSection && count === 0 && !isDefaultBlock && (
                                 <button
@@ -1118,15 +1856,15 @@ export default function SecretaryDashboard() {
                                     display: 'inline-flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
-                                    padding: '0.25rem',
+                                    padding: '0.22rem',
                                     borderRadius: '6px',
-                                    background: 'rgba(239, 68, 68, 0.16)',
-                                    border: '1px solid rgba(239, 68, 68, 0.35)',
+                                    background: 'rgba(239, 68, 68, 0.14)',
+                                    border: '1px solid rgba(239, 68, 68, 0.3)',
                                     color: '#fca5a5',
                                     cursor: 'pointer',
                                   }}
                                 >
-                                  <Trash2 size={13} />
+                                  <Trash2 size={12} />
                                 </button>
                               )}
                             </div>
@@ -1344,17 +2082,17 @@ export default function SecretaryDashboard() {
             </div>
           </div>
 
-          {/* Grouped Year Level & Semester Tables */}
+          {/* Grouped Year Level & Semester Tables — Cleanly fitted without scrollbars */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             {displayedYears.map((yrLevel) => {
               const yearItems = filteredCurriculum.filter((item) => item.yearLevel === yrLevel);
               if (yearItems.length === 0) return null;
 
-              const semestersOrder: Array<'1st Semester' | '2nd Semester' | 'Summer'> = [
-                '1st Semester',
-                '2nd Semester',
-                'Summer',
-              ];
+              const regularSemesters: Array<'1st Semester' | '2nd Semester'> = ['1st Semester', '2nd Semester'];
+              const activeRegularSemesters = regularSemesters.filter((sem) =>
+                yearItems.some((i) => i.semester === sem)
+              );
+              const summerItems = yearItems.filter((i) => i.semester === 'Summer');
 
               return (
                 <div
@@ -1406,103 +2144,34 @@ export default function SecretaryDashboard() {
                     </div>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: '1.15rem' }}>
-                    {semestersOrder.map((sem) => {
-                      const semItems = yearItems.filter((i) => i.semester === sem);
-                      if (semItems.length === 0) return null;
+                  {/* 1st & 2nd Semester side-by-side (or full width if single semester like 4th Year) */}
+                  {activeRegularSemesters.length > 0 && (
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns:
+                          activeRegularSemesters.length === 1
+                            ? '1fr'
+                            : 'repeat(auto-fit, minmax(430px, 1fr))',
+                        gap: '1.15rem',
+                      }}
+                    >
+                      {activeRegularSemesters.map((sem) =>
+                        renderSemesterCurriculumCard(
+                          yrLevel,
+                          sem,
+                          yearItems.filter((i) => i.semester === sem)
+                        )
+                      )}
+                    </div>
+                  )}
 
-                      const totalLec = semItems.reduce((acc, i) => acc + i.lec, 0);
-                      const totalLab = semItems.reduce((acc, i) => acc + i.lab, 0);
-                      const totalTu = semItems.reduce((acc, i) => acc + i.units, 0);
-
-                      return (
-                        <div
-                          key={sem}
-                          style={{
-                            borderRadius: '10px',
-                            background: 'rgba(15, 23, 42, 0.55)',
-                            border: '1px solid rgba(255, 255, 255, 0.08)',
-                            overflow: 'hidden',
-                          }}
-                        >
-                          <div
-                            style={{
-                              padding: '0.65rem 1rem',
-                              background: sem === 'Summer'
-                                ? 'rgba(245, 158, 11, 0.16)'
-                                : 'rgba(63, 81, 181, 0.22)',
-                              borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center',
-                            }}
-                          >
-                            <span style={{ fontWeight: 800, fontSize: '0.86rem', color: 'white', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                              {yrLevel} • {sem}
-                            </span>
-                            <span style={{ fontSize: '0.76rem', color: '#cbd5e1', fontWeight: 700 }}>
-                              {semItems.length} Courses • {totalTu} TU
-                            </span>
-                          </div>
-
-                          <div className="table-responsive" style={{ margin: 0 }}>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', color: 'white', fontSize: '0.82rem' }}>
-                              <thead>
-                                <tr style={{ background: 'rgba(255, 255, 255, 0.04)', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', color: 'var(--neutral-300)' }}>
-                                  <th style={{ padding: '0.55rem 0.75rem', whiteSpace: 'nowrap' }}>Course Code</th>
-                                  <th style={{ padding: '0.55rem 0.75rem' }}>Descriptive Title</th>
-                                  <th style={{ padding: '0.55rem 0.45rem', textAlign: 'center' }}>Lec</th>
-                                  <th style={{ padding: '0.55rem 0.45rem', textAlign: 'center' }}>Lab</th>
-                                  <th style={{ padding: '0.55rem 0.45rem', textAlign: 'center' }}>TU</th>
-                                  <th style={{ padding: '0.55rem 0.75rem' }}>Preq</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {semItems.map((subj) => (
-                                  <tr key={subj.code} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
-                                    <td style={{ padding: '0.55rem 0.75rem', whiteSpace: 'nowrap' }}>
-                                      <span
-                                        style={{
-                                          fontFamily: 'monospace',
-                                          fontWeight: 800,
-                                          fontSize: '0.79rem',
-                                          padding: '0.15rem 0.45rem',
-                                          borderRadius: '6px',
-                                          background: 'rgba(139, 92, 246, 0.18)',
-                                          border: '1px solid rgba(139, 92, 246, 0.35)',
-                                          color: '#ddd6fe',
-                                        }}
-                                      >
-                                        {subj.code}
-                                      </span>
-                                    </td>
-                                    <td style={{ padding: '0.55rem 0.75rem', fontWeight: 600, color: '#f8fafc', lineHeight: 1.35 }}>
-                                      {subj.name}
-                                    </td>
-                                    <td style={{ padding: '0.55rem 0.45rem', textAlign: 'center', color: '#cbd5e1' }}>{subj.lec}</td>
-                                    <td style={{ padding: '0.55rem 0.45rem', textAlign: 'center', color: '#cbd5e1' }}>{subj.lab}</td>
-                                    <td style={{ padding: '0.55rem 0.45rem', textAlign: 'center', fontWeight: 800, color: '#fbbf24' }}>{subj.units}</td>
-                                    <td style={{ padding: '0.55rem 0.75rem', color: subj.prerequisite === 'none' ? 'var(--neutral-400)' : '#93c5fd', fontSize: '0.76rem', fontFamily: 'monospace' }}>
-                                      {subj.prerequisite}
-                                    </td>
-                                  </tr>
-                                ))}
-                                <tr style={{ background: 'rgba(255, 255, 255, 0.05)', fontWeight: 800 }}>
-                                  <td colSpan={2} style={{ padding: '0.55rem 0.75rem', textAlign: 'right', color: '#cbd5e1', fontSize: '0.76rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                                    Total Credits
-                                  </td>
-                                  <td style={{ padding: '0.55rem 0.45rem', textAlign: 'center', color: 'white' }}>{totalLec}</td>
-                                  <td style={{ padding: '0.55rem 0.45rem', textAlign: 'center', color: 'white' }}>{totalLab}</td>
-                                  <td style={{ padding: '0.55rem 0.45rem', textAlign: 'center', color: '#a5d6a7' }}>{totalTu}</td>
-                                  <td style={{ padding: '0.55rem 0.75rem' }} />
-                                </tr>
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  {/* Summer Term rendered cleanly below 1st & 2nd Semester without cramping columns */}
+                  {summerItems.length > 0 && (
+                    <div style={{ marginTop: activeRegularSemesters.length > 0 ? '1.15rem' : 0 }}>
+                      {renderSemesterCurriculumCard(yrLevel, 'Summer', summerItems)}
+                    </div>
+                  )}
 
                   {yrLevel === '1st Year' && (
                     <div style={{ marginTop: '0.75rem', fontSize: '0.78rem', color: 'var(--neutral-400)', fontStyle: 'italic' }}>
@@ -1706,49 +2375,734 @@ export default function SecretaryDashboard() {
     </div>
   );
 
-  const renderReports = () => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      <div>
-        <span style={{ fontSize: '0.8rem', color: 'var(--primary-300)', letterSpacing: '1px', textTransform: 'uppercase', fontWeight: 600 }}>
-          DATA EXPORT &amp; REPORTING
-        </span>
-        <h1 style={{ fontSize: '2rem', fontWeight: 800, color: 'white', marginTop: '0.25rem' }}>
-          Official College Reports
-        </h1>
-        <p style={{ color: 'var(--neutral-300)' }}>
-          Generate printable enrollment rosters and official TCC Secretary compliance records.
-        </p>
-      </div>
+  const renderReports = () => {
+    const reportCards: Array<{
+      id: ReportTypeId;
+      docCode: string;
+      seriesLabel: string;
+      title: string;
+      description: string;
+      recordCount: number;
+      recordUnit: string;
+      accentColor: string;
+    }> = [
+      {
+        id: 'student_masterlist',
+        docCode: 'TCC-REG-FORM-01',
+        seriesLabel: 'OFFICIAL REGISTRY LEDGER',
+        title: 'Complete Student Masterlist',
+        description:
+          'Official institutional student roster containing Student ID, Full Name, Year Level, Assigned Block (50-student limit), Email, and Enrollment Status.',
+        recordCount: reportFilteredStudents.length,
+        recordUnit: 'Enrolled Students',
+        accentColor: '#fbbf24',
+      },
+      {
+        id: 'graduating_roster',
+        docCode: 'TCC-REG-FORM-02',
+        seriesLabel: 'ACADEMIC CANDIDACY ROSTER',
+        title: 'Graduating Students Roster',
+        description:
+          'Official summary of 4th Year graduating BSIT students (Blocks 4A–4E) and graduation candidates for Academic Year 2025–2026.',
+        recordCount: graduatingStudentsList.length,
+        recordUnit: '4th Year Candidates',
+        accentColor: '#c4b5fd',
+      },
+      {
+        id: 'section_capacity',
+        docCode: 'TCC-REG-FORM-03',
+        seriesLabel: 'BLOCK UTILIZATION AUDIT',
+        title: 'Section & Block Capacity Report',
+        description:
+          'Audits all active class sections across 1st–4th Year against the mandatory 50-student per section maximum capacity and vacant slot queue.',
+        recordCount: allAvailableBlocks.length,
+        recordUnit: 'Active Sections',
+        accentColor: '#34d399',
+      },
+      {
+        id: 'curriculum_prospectus',
+        docCode: 'TCC-REG-FORM-04',
+        seriesLabel: 'CMO 25 S. 2015 PROSPECTUS',
+        title: 'BSIT Curriculum Prospectus Report',
+        description:
+          'Complete 1st to 4th Year BSIT curriculum course schedule with Lecture, Laboratory, Total Units (TU), and Prerequisites (excluding Practicum).',
+        recordCount: allCurriculumSubjects.length,
+        recordUnit: 'Official Courses',
+        accentColor: '#60a5fa',
+      },
+    ];
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem' }}>
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.65rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+          <div>
+            <span style={{ fontSize: '0.8rem', color: 'var(--primary-300)', letterSpacing: '1px', textTransform: 'uppercase', fontWeight: 600 }}>
+              DATA EXPORT &amp; INSTITUTIONAL REPORTING
+            </span>
+            <h1 style={{ fontSize: '2rem', fontWeight: 800, color: 'white', marginTop: '0.25rem' }}>
+              Official College Reports
+            </h1>
+            <p style={{ color: 'var(--neutral-300)' }}>
+              Generate classic TCC Secretary &amp; Registrar compliance documents, printable rosters, and audited CSV ledgers.
+            </p>
+          </div>
+
+          {/* Classic Filter & Scope Controls */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.65rem',
+              flexWrap: 'wrap',
+              padding: '0.6rem 0.85rem',
+              borderRadius: '12px',
+              background: 'rgba(255, 255, 255, 0.04)',
+              border: '1px solid var(--glass-border)',
+            }}
+          >
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--neutral-300)', textTransform: 'uppercase' }}>
+              Report Scope:
+            </span>
+            <select
+              value={reportYearFilter}
+              onChange={(e) => setReportYearFilter(e.target.value)}
+              className="form-select"
+              style={{ width: '165px', padding: '0.35rem 0.65rem', fontSize: '0.82rem' }}
+            >
+              <option value="ALL">All Year Levels</option>
+              {allAvailableYearLevels.map((yr) => (
+                <option key={yr} value={yr}>
+                  {yr}
+                </option>
+              ))}
+            </select>
+            <select
+              value={reportStatusFilter}
+              onChange={(e) => setReportStatusFilter(e.target.value)}
+              className="form-select"
+              style={{ width: '150px', padding: '0.35rem 0.65rem', fontSize: '0.82rem' }}
+            >
+              <option value="ALL">All Statuses</option>
+              <option value="active">Active Only</option>
+              <option value="inactive">Inactive Only</option>
+              <option value="graduated">Graduated Only</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Classic Institutional Report Ledgers Grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.25rem' }}>
+          {reportCards.map((card) => {
+            const lastExportForCard = recentExports.find((item) => item.reportId === card.id);
+            return (
+              <GlassCard
+                key={card.id}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  gap: '1.1rem',
+                  borderTop: `3px solid ${card.accentColor}`,
+                }}
+              >
+                <div>
+                  {/* Classic Document Header Strip */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      paddingBottom: '0.65rem',
+                      marginBottom: '0.75rem',
+                      borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                      <FileText size={16} style={{ color: card.accentColor }} />
+                      <span
+                        style={{
+                          fontFamily: 'monospace',
+                          fontSize: '0.74rem',
+                          fontWeight: 800,
+                          color: card.accentColor,
+                          letterSpacing: '0.5px',
+                        }}
+                      >
+                        {card.docCode}
+                      </span>
+                    </div>
+                    <span
+                      style={{
+                        fontSize: '0.68rem',
+                        fontWeight: 700,
+                        padding: '0.15rem 0.5rem',
+                        borderRadius: '6px',
+                        background: 'rgba(255, 255, 255, 0.06)',
+                        color: 'var(--neutral-300)',
+                        letterSpacing: '0.5px',
+                      }}
+                    >
+                      {card.seriesLabel}
+                    </span>
+                  </div>
+
+                  <h3 style={{ fontSize: '1.18rem', fontWeight: 800, color: 'white', margin: '0 0 0.4rem' }}>
+                    {card.title}
+                  </h3>
+                  <p style={{ color: 'var(--neutral-300)', fontSize: '0.84rem', lineHeight: 1.45, margin: 0 }}>
+                    {card.description}
+                  </p>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                  {/* Metadata Strip */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '0.5rem 0.75rem',
+                      borderRadius: '8px',
+                      background: 'rgba(15, 23, 42, 0.5)',
+                      border: '1px solid rgba(255, 255, 255, 0.07)',
+                      fontSize: '0.78rem',
+                    }}
+                  >
+                    <span style={{ color: 'var(--neutral-300)' }}>
+                      Ready Records: <strong style={{ color: 'white' }}>{card.recordCount} {card.recordUnit}</strong>
+                    </span>
+                    <span style={{ color: lastExportForCard ? '#a7f3d0' : 'var(--neutral-400)', fontSize: '0.73rem' }}>
+                      {lastExportForCard
+                        ? `Last exported ${new Date(lastExportForCard.exportedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                        : 'Not exported this session'}
+                    </span>
+                  </div>
+
+                  {/* Classic Dual Action Bar */}
+                  <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+                    <Button
+                      type="button"
+                      variant="accent"
+                      size="sm"
+                      onClick={() => handleOpenClassicSheet(card.id, true)}
+                      style={{ flex: 1 }}
+                    >
+                      <Printer size={14} /> Open Classic Report Sheet
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDownloadCsvReport(card.id)}
+                      style={{ flex: 1 }}
+                    >
+                      <Download size={14} /> Export CSV Ledger
+                    </Button>
+                  </div>
+                </div>
+              </GlassCard>
+            );
+          })}
+        </div>
+
+        {/* Recent Exportations History Table */}
         <GlassCard>
-          <FileText size={32} style={{ color: 'var(--primary-400)', marginBottom: '0.75rem' }} />
-          <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'white', marginBottom: '0.4rem' }}>
-            Complete Student Masterlist
-          </h3>
-          <p style={{ color: 'var(--neutral-300)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
-            Export full student roster including ID, block, and status.
-          </p>
-          <Button variant="outline" size="sm" onClick={() => showToast('Exporting Student Masterlist CSV...', 'success')}>
-            <Download size={14} /> Export CSV
-          </Button>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '0.75rem',
+              marginBottom: '1rem',
+              paddingBottom: '0.75rem',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+            }}
+          >
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Clock size={18} style={{ color: '#fbbf24' }} />
+                <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'white', margin: 0 }}>
+                  Recent Exportations
+                </h2>
+              </div>
+              <p style={{ color: 'var(--neutral-300)', fontSize: '0.84rem', margin: '0.2rem 0 0' }}>
+                Official audit log recording the last time each college report or student roster was exported.
+              </p>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              <Badge variant="primary">{recentExports.length} Recorded Exports</Badge>
+              {recentExports.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRecentExports([]);
+                    try {
+                      localStorage.removeItem('tcc_secretary_recent_exportations');
+                    } catch {
+                      // Ignore
+                    }
+                    showToast('Cleared Recent Exportations history.', 'info');
+                  }}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.06)',
+                    border: '1px solid rgba(255, 255, 255, 0.14)',
+                    color: 'var(--neutral-300)',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    padding: '0.3rem 0.65rem',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Clear Log
+                </button>
+              )}
+            </div>
+          </div>
+
+          {recentExports.length === 0 ? (
+            <div
+              style={{
+                padding: '2.25rem 1.5rem',
+                textAlign: 'center',
+                background: 'rgba(255, 255, 255, 0.025)',
+                border: '1px dashed rgba(255, 255, 255, 0.14)',
+                borderRadius: '10px',
+                color: 'var(--neutral-300)',
+              }}
+            >
+              <ShieldCheck size={28} style={{ color: 'var(--primary-300)', marginBottom: '0.5rem' }} />
+              <div style={{ fontWeight: 700, color: 'white', fontSize: '0.95rem', marginBottom: '0.25rem' }}>
+                No Report Exportations Recorded Yet
+              </div>
+              <div style={{ fontSize: '0.83rem', color: 'var(--neutral-400)' }}>
+                Click <strong>Open Classic Report Sheet</strong> or <strong>Export CSV Ledger</strong> on any report above to generate an official college record and log the export timestamp here.
+              </div>
+            </div>
+          ) : (
+            <table
+              style={{
+                width: '100%',
+                borderCollapse: 'collapse',
+                textAlign: 'left',
+                color: 'white',
+                fontSize: '0.84rem',
+              }}
+            >
+              <thead>
+                <tr
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                    color: 'var(--neutral-300)',
+                    fontSize: '0.75rem',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.4px',
+                  }}
+                >
+                  <th style={{ padding: '0.65rem 0.85rem' }}>Form Code &amp; Report Title</th>
+                  <th style={{ padding: '0.65rem 0.85rem' }}>Format / Style</th>
+                  <th style={{ padding: '0.65rem 0.85rem' }}>Scope &amp; Records</th>
+                  <th style={{ padding: '0.65rem 0.85rem' }}>Exported By</th>
+                  <th style={{ padding: '0.65rem 0.85rem' }}>Last Exported Timestamp</th>
+                  <th style={{ padding: '0.65rem 0.85rem', textAlign: 'right' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentExports.map((exp) => (
+                  <tr key={exp.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.045)' }}>
+                    <td style={{ padding: '0.7rem 0.85rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span
+                          style={{
+                            fontFamily: 'monospace',
+                            fontSize: '0.73rem',
+                            fontWeight: 800,
+                            padding: '0.15rem 0.45rem',
+                            borderRadius: '6px',
+                            background: 'rgba(251, 191, 36, 0.16)',
+                            border: '1px solid rgba(251, 191, 36, 0.35)',
+                            color: '#fde68a',
+                          }}
+                        >
+                          {exp.docCode}
+                        </span>
+                        <span style={{ fontWeight: 700, color: 'white' }}>{exp.title}</span>
+                      </div>
+                    </td>
+                    <td style={{ padding: '0.7rem 0.85rem' }}>
+                      <Badge variant={exp.format.includes('PDF') ? 'primary' : 'success'}>
+                        {exp.format}
+                      </Badge>
+                    </td>
+                    <td style={{ padding: '0.7rem 0.85rem', color: 'var(--neutral-300)' }}>
+                      {exp.scopeSummary} • <strong style={{ color: 'white' }}>{exp.recordCount} records</strong>
+                    </td>
+                    <td style={{ padding: '0.7rem 0.85rem', color: '#cbd5e1', fontWeight: 600 }}>
+                      {exp.exportedBy}
+                    </td>
+                    <td style={{ padding: '0.7rem 0.85rem', color: '#fde68a', fontFamily: 'monospace', fontSize: '0.8rem' }}>
+                      {new Date(exp.exportedAt).toLocaleString()}
+                    </td>
+                    <td style={{ padding: '0.7rem 0.85rem', textAlign: 'right' }}>
+                      <div style={{ display: 'inline-flex', gap: '0.4rem' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenClassicSheet(exp.reportId, false)}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.3rem',
+                            padding: '0.28rem 0.6rem',
+                            borderRadius: '6px',
+                            background: 'rgba(139, 92, 246, 0.22)',
+                            border: '1px solid rgba(139, 92, 246, 0.45)',
+                            color: '#ddd6fe',
+                            fontSize: '0.74rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <Printer size={12} /> View Sheet
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadCsvReport(exp.reportId)}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.3rem',
+                            padding: '0.28rem 0.6rem',
+                            borderRadius: '6px',
+                            background: 'rgba(255, 255, 255, 0.07)',
+                            border: '1px solid rgba(255, 255, 255, 0.16)',
+                            color: 'white',
+                            fontSize: '0.74rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <RefreshCw size={12} /> Re-Export
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </GlassCard>
 
-        <GlassCard>
-          <FileText size={32} style={{ color: 'var(--accent-purple-light)', marginBottom: '0.75rem' }} />
-          <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'white', marginBottom: '0.4rem' }}>
-            Graduating Students Roster
-          </h3>
-          <p style={{ color: 'var(--neutral-300)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
-            Summary of 4th Year graduating students (Blocks 4A–4E) for S.Y. 2025–2026.
-          </p>
-          <Button variant="outline" size="sm" onClick={() => showToast('Generating Graduating Students Report PDF...', 'success')}>
-            <Download size={14} /> Export PDF
-          </Button>
-        </GlassCard>
+        {/* Classic Official TCC Document Preview & Print Modal */}
+        {activePreviewReport && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 9999,
+              background: 'rgba(5, 8, 18, 0.82)',
+              backdropFilter: 'blur(6px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '1.5rem',
+            }}
+          >
+            <div
+              style={{
+                width: '100%',
+                maxWidth: '1020px',
+                maxHeight: '90vh',
+                display: 'flex',
+                flexDirection: 'column',
+                borderRadius: '16px',
+                background: '#160b18',
+                border: '1px solid rgba(251, 191, 36, 0.35)',
+                boxShadow: '0 25px 70px rgba(0,0,0,0.75)',
+                overflow: 'hidden',
+              }}
+            >
+              {/* Modal Top Action Bar */}
+              <div
+                style={{
+                  padding: '0.85rem 1.25rem',
+                  background: 'rgba(255, 255, 255, 0.04)',
+                  borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: '0.75rem',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                  <FileText size={18} style={{ color: '#fbbf24' }} />
+                  <span style={{ fontWeight: 800, color: 'white', fontSize: '0.95rem' }}>
+                    Official TCC Institutional Document Sheet Preview
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleDownloadCsvReport(activePreviewReport)}
+                  >
+                    <Download size={14} /> Download CSV
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="accent"
+                    size="sm"
+                    onClick={handlePrintOfficialSheet}
+                  >
+                    <Printer size={14} /> Print / Save Official PDF
+                  </Button>
+                  <button
+                    type="button"
+                    onClick={() => setActivePreviewReport(null)}
+                    style={{
+                      background: 'rgba(255,255,255,0.08)',
+                      border: '1px solid rgba(255,255,255,0.16)',
+                      color: 'white',
+                      borderRadius: '8px',
+                      padding: '0.35rem',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Classic Institutional Paper Sheet Content */}
+              <div style={{ padding: '1.5rem', overflowY: 'auto' }}>
+                <div
+                  style={{
+                    background: '#fffdf9',
+                    color: '#1e293b',
+                    borderRadius: '10px',
+                    padding: '2rem 2.25rem',
+                    border: '2px solid #7f1d1d',
+                    boxShadow: 'inset 0 0 0 1px #d97706',
+                    fontFamily: 'Georgia, "Times New Roman", serif',
+                  }}
+                >
+                  {/* Official TCC Letterhead */}
+                  <div
+                    style={{
+                      textAlign: 'center',
+                      borderBottom: '2px double #7f1d1d',
+                      paddingBottom: '1rem',
+                      marginBottom: '1.25rem',
+                    }}
+                  >
+                    <div style={{ fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '1.2px', color: '#475569' }}>
+                      Republic of the Philippines • Province of Misamis Oriental • Municipality of Tagoloan
+                    </div>
+                    <h2 style={{ fontSize: '1.55rem', fontWeight: 900, color: '#7f1d1d', margin: '0.2rem 0', letterSpacing: '0.5px' }}>
+                      TAGOLOAN COMMUNITY COLLEGE
+                    </h2>
+                    <div style={{ fontSize: '0.84rem', fontWeight: 700, color: '#1e293b' }}>
+                      COLLEGE OF INFORMATION TECHNOLOGY • OFFICE OF THE COLLEGE SECRETARY
+                    </div>
+                    <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: '0.15rem' }}>
+                      Baluarte, Tagoloan, Misamis Oriental • Academic Year 2025–2026
+                    </div>
+                  </div>
+
+                  {/* Document Title & Metadata Strip */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'flex-end',
+                      flexWrap: 'wrap',
+                      gap: '1rem',
+                      marginBottom: '1rem',
+                      fontFamily: 'system-ui, -apple-system, sans-serif',
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#991b1b', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                        {activePreviewReport === 'student_masterlist' && 'FORM TCC-REG-01 • OFFICIAL ENROLLMENT ROSTER'}
+                        {activePreviewReport === 'graduating_roster' && 'FORM TCC-REG-02 • 4TH YEAR GRADUATION CANDIDACY ROSTER'}
+                        {activePreviewReport === 'section_capacity' && 'FORM TCC-REG-03 • SECTION & BLOCK CAPACITY AUDIT (50 MAX)'}
+                        {activePreviewReport === 'curriculum_prospectus' && 'FORM TCC-REG-04 • CMO 25 S. 2015 BSIT CURRICULUM PROSPECTUS'}
+                      </div>
+                      <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f172a', margin: '0.15rem 0 0' }}>
+                        {activePreviewReport === 'student_masterlist' && 'Complete BSIT Student Masterlist'}
+                        {activePreviewReport === 'graduating_roster' && '4th Year Graduating Students Roster (S.Y. 2025–2026)'}
+                        {activePreviewReport === 'section_capacity' && 'Class Section & Block Capacity Utilization Report'}
+                        {activePreviewReport === 'curriculum_prospectus' && 'Official BSIT 1st–4th Year Curriculum Prospectus'}
+                      </h3>
+                    </div>
+                    <div style={{ textAlign: 'right', fontSize: '0.78rem', color: '#334155' }}>
+                      <div><strong>Date Generated:</strong> {new Date().toLocaleString()}</div>
+                      <div><strong>Generated By:</strong> {user?.name || 'School Secretary'}</div>
+                    </div>
+                  </div>
+
+                  {/* Classic Report Table */}
+                  <div style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+                    {(activePreviewReport === 'student_masterlist' || activePreviewReport === 'graduating_roster') && (
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                        <thead>
+                          <tr style={{ background: '#7f1d1d', color: 'white' }}>
+                            <th style={{ padding: '0.5rem 0.65rem', border: '1px solid #991b1b', textAlign: 'center', width: '44px' }}>No.</th>
+                            <th style={{ padding: '0.5rem 0.65rem', border: '1px solid #991b1b', textAlign: 'left' }}>Student ID</th>
+                            <th style={{ padding: '0.5rem 0.65rem', border: '1px solid #991b1b', textAlign: 'left' }}>Student Full Name</th>
+                            <th style={{ padding: '0.5rem 0.65rem', border: '1px solid #991b1b', textAlign: 'left' }}>Year Level</th>
+                            <th style={{ padding: '0.5rem 0.65rem', border: '1px solid #991b1b', textAlign: 'left' }}>Assigned Block</th>
+                            <th style={{ padding: '0.5rem 0.65rem', border: '1px solid #991b1b', textAlign: 'left' }}>Official Email</th>
+                            <th style={{ padding: '0.5rem 0.65rem', border: '1px solid #991b1b', textAlign: 'center' }}>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(activePreviewReport === 'graduating_roster' ? graduatingStudentsList : reportFilteredStudents).length === 0 ? (
+                            <tr>
+                              <td colSpan={7} style={{ padding: '1.25rem', textAlign: 'center', border: '1px solid #cbd5e1', color: '#64748b' }}>
+                                No student records match the current filter criteria.
+                              </td>
+                            </tr>
+                          ) : (
+                            (activePreviewReport === 'graduating_roster' ? graduatingStudentsList : reportFilteredStudents).map((s, idx) => (
+                              <tr key={s.id} style={{ background: idx % 2 === 0 ? '#ffffff' : '#f8fafc' }}>
+                                <td style={{ padding: '0.45rem 0.65rem', border: '1px solid #cbd5e1', textAlign: 'center', fontWeight: 700 }}>{idx + 1}</td>
+                                <td style={{ padding: '0.45rem 0.65rem', border: '1px solid #cbd5e1', fontFamily: 'monospace', fontWeight: 700 }}>{s.lrn || 'N/A'}</td>
+                                <td style={{ padding: '0.45rem 0.65rem', border: '1px solid #cbd5e1', fontWeight: 700, color: '#0f172a' }}>{s.name}</td>
+                                <td style={{ padding: '0.45rem 0.65rem', border: '1px solid #cbd5e1' }}>{getYearLevelFromBlock(s.section, s.grade)}</td>
+                                <td style={{ padding: '0.45rem 0.65rem', border: '1px solid #cbd5e1', fontWeight: 600 }}>{s.section || 'Block - 1A'}</td>
+                                <td style={{ padding: '0.45rem 0.65rem', border: '1px solid #cbd5e1', color: '#334155' }}>{s.email}</td>
+                                <td style={{ padding: '0.45rem 0.65rem', border: '1px solid #cbd5e1', textAlign: 'center', fontWeight: 700, textTransform: 'uppercase' }}>
+                                  {s.status || 'Active'}
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    )}
+
+                    {activePreviewReport === 'section_capacity' && (
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                        <thead>
+                          <tr style={{ background: '#7f1d1d', color: 'white' }}>
+                            <th style={{ padding: '0.5rem 0.65rem', border: '1px solid #991b1b', textAlign: 'left' }}>Year Level</th>
+                            <th style={{ padding: '0.5rem 0.65rem', border: '1px solid #991b1b', textAlign: 'left' }}>Class Section / Block</th>
+                            <th style={{ padding: '0.5rem 0.65rem', border: '1px solid #991b1b', textAlign: 'center' }}>Enrolled Students</th>
+                            <th style={{ padding: '0.5rem 0.65rem', border: '1px solid #991b1b', textAlign: 'center' }}>Max Capacity</th>
+                            <th style={{ padding: '0.5rem 0.65rem', border: '1px solid #991b1b', textAlign: 'center' }}>Vacant Slots</th>
+                            <th style={{ padding: '0.5rem 0.65rem', border: '1px solid #991b1b', textAlign: 'center' }}>Queue Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {Object.entries(yearLevelBlocksMap)
+                            .filter(([yr]) => reportYearFilter === 'ALL' || yr === reportYearFilter)
+                            .flatMap(([yr, blks]) =>
+                              blks.map((blk) => {
+                                const enrolled = students.filter(
+                                  (s) => (s.section || '').trim().toLowerCase() === blk.toLowerCase()
+                                ).length;
+                                const vacant = Math.max(0, MAX_STUDENTS_PER_SECTION - enrolled);
+                                return (
+                                  <tr key={`${yr}-${blk}`}>
+                                    <td style={{ padding: '0.45rem 0.65rem', border: '1px solid #cbd5e1', fontWeight: 700 }}>{yr}</td>
+                                    <td style={{ padding: '0.45rem 0.65rem', border: '1px solid #cbd5e1', fontWeight: 700 }}>{blk}</td>
+                                    <td style={{ padding: '0.45rem 0.65rem', border: '1px solid #cbd5e1', textAlign: 'center', fontWeight: 700 }}>{enrolled}</td>
+                                    <td style={{ padding: '0.45rem 0.65rem', border: '1px solid #cbd5e1', textAlign: 'center' }}>{MAX_STUDENTS_PER_SECTION}</td>
+                                    <td style={{ padding: '0.45rem 0.65rem', border: '1px solid #cbd5e1', textAlign: 'center', fontWeight: 700, color: '#047857' }}>{vacant}</td>
+                                    <td style={{ padding: '0.45rem 0.65rem', border: '1px solid #cbd5e1', textAlign: 'center', fontWeight: 700 }}>
+                                      {enrolled >= MAX_STUDENTS_PER_SECTION ? 'FULL (50/50)' : 'OPEN / VACANT'}
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            )}
+                        </tbody>
+                      </table>
+                    )}
+
+                    {activePreviewReport === 'curriculum_prospectus' && (
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+                        <thead>
+                          <tr style={{ background: '#7f1d1d', color: 'white' }}>
+                            <th style={{ padding: '0.45rem 0.6rem', border: '1px solid #991b1b', textAlign: 'left' }}>Course Code</th>
+                            <th style={{ padding: '0.45rem 0.6rem', border: '1px solid #991b1b', textAlign: 'left' }}>Descriptive Title</th>
+                            <th style={{ padding: '0.45rem 0.6rem', border: '1px solid #991b1b', textAlign: 'left' }}>Year &amp; Semester</th>
+                            <th style={{ padding: '0.45rem 0.6rem', border: '1px solid #991b1b', textAlign: 'center' }}>Lec</th>
+                            <th style={{ padding: '0.45rem 0.6rem', border: '1px solid #991b1b', textAlign: 'center' }}>Lab</th>
+                            <th style={{ padding: '0.45rem 0.6rem', border: '1px solid #991b1b', textAlign: 'center' }}>TU</th>
+                            <th style={{ padding: '0.45rem 0.6rem', border: '1px solid #991b1b', textAlign: 'left' }}>Prerequisite</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {allCurriculumSubjects
+                            .filter((c) => reportYearFilter === 'ALL' || c.yearLevel === reportYearFilter)
+                            .map((c) => (
+                              <tr key={c.code}>
+                                <td style={{ padding: '0.4rem 0.6rem', border: '1px solid #cbd5e1', fontFamily: 'monospace', fontWeight: 700 }}>{c.code}</td>
+                                <td style={{ padding: '0.4rem 0.6rem', border: '1px solid #cbd5e1', fontWeight: 600 }}>{c.name}</td>
+                                <td style={{ padding: '0.4rem 0.6rem', border: '1px solid #cbd5e1' }}>{c.yearLevel} • {c.semester}</td>
+                                <td style={{ padding: '0.4rem 0.6rem', border: '1px solid #cbd5e1', textAlign: 'center' }}>{c.lec}</td>
+                                <td style={{ padding: '0.4rem 0.6rem', border: '1px solid #cbd5e1', textAlign: 'center' }}>{c.lab}</td>
+                                <td style={{ padding: '0.4rem 0.6rem', border: '1px solid #cbd5e1', textAlign: 'center', fontWeight: 700 }}>{c.units}</td>
+                                <td style={{ padding: '0.4rem 0.6rem', border: '1px solid #cbd5e1', fontFamily: 'monospace' }}>{c.prerequisite}</td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+
+                  {/* Classic Signatory Block */}
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(3, 1fr)',
+                      gap: '1.5rem',
+                      marginTop: '2.25rem',
+                      paddingTop: '1rem',
+                      borderTop: '1px solid #cbd5e1',
+                      fontFamily: 'system-ui, -apple-system, sans-serif',
+                      fontSize: '0.78rem',
+                      textAlign: 'center',
+                    }}
+                  >
+                    <div>
+                      <div style={{ color: '#64748b', marginBottom: '1.6rem' }}>Prepared &amp; Exported By:</div>
+                      <div style={{ fontWeight: 800, color: '#0f172a', borderTop: '1px solid #334155', paddingTop: '0.3rem' }}>
+                        {(user?.name || 'MIRACLE').toUpperCase()}
+                      </div>
+                      <div style={{ color: '#475569', fontSize: '0.72rem' }}>College Secretary, BSIT Department</div>
+                    </div>
+                    <div>
+                      <div style={{ color: '#64748b', marginBottom: '1.6rem' }}>Reviewed &amp; Verified By:</div>
+                      <div style={{ fontWeight: 800, color: '#0f172a', borderTop: '1px solid #334155', paddingTop: '0.3rem' }}>
+                        BSIT PROGRAM HEAD / DEAN
+                      </div>
+                      <div style={{ color: '#475569', fontSize: '0.72rem' }}>College of Information Technology</div>
+                    </div>
+                    <div>
+                      <div style={{ color: '#64748b', marginBottom: '1.6rem' }}>Attested By:</div>
+                      <div style={{ fontWeight: 800, color: '#0f172a', borderTop: '1px solid #334155', paddingTop: '0.3rem' }}>
+                        OFFICE OF THE COLLEGE REGISTRAR
+                      </div>
+                      <div style={{ color: '#475569', fontSize: '0.72rem' }}>Tagoloan Community College</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderActivityLogs = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>

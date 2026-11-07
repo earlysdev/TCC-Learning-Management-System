@@ -98,14 +98,15 @@ class SubjectController extends Controller
 
     private function ensureOfficialCurriculumSynced(): void
     {
-        // Always exclude 4th Year Practicum (Prac 101)
+        // Always exclude 4th Year Practicum (Prac 101) and legacy non-prospectus duplicates
         Subject::where('code', 'LIKE', 'Prac%')
             ->orWhere('name', 'LIKE', '%Practicum%')
+            ->orWhereIn('code', ['NSTP 1', 'Math 1', 'Math 2', 'Math 3'])
             ->delete();
 
         // If 4th Year subjects are not yet present in DB, sync the full 58-course curriculum
         $hasFourthYear = Subject::where('grade', '4th Year')->exists();
-        if ($hasFourthYear && Subject::count() >= 55) {
+        if ($hasFourthYear && Subject::count() === 58) {
             return;
         }
 
