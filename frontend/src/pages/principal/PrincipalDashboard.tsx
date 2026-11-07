@@ -1,19 +1,23 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import { lmsFetch, getLmsUser, extractCollection } from '../../lmsApi';
-import type { User, Quiz, SecurityLog, ActivityLog, PaginatedResponse, Announcement } from '../../lib/types';
+import type { User, Quiz, SecurityLog, ActivityLog, PaginatedResponse, Announcement, Section } from '../../lib/types';
+import {
+  YEAR_LEVEL_BLOCKS,
+  YEAR_LEVEL_OPTIONS,
+  getYearLevelFromBlock,
+} from '../../lib/constants';
 import { 
   Users, ShieldCheck, AlertTriangle, TrendingUp, 
   CheckCircle2, AlertCircle, 
-  Check, Activity, Send
+  Check, Activity, Send, GraduationCap, Layers
 } from 'lucide-react';
 import GlassCard from '../../components/ui/GlassCard';
 import StatCard from '../../components/ui/StatCard';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import Input from '../../components/ui/Input';
-import Select from '../../components/ui/Select';
 import ProfileUpdateCard from '../../components/ui/ProfileUpdateCard';
 import { useToastContext } from '../../contexts/ToastContext';
 
@@ -29,7 +33,10 @@ const pathToSection: Record<string, string> = {
   overview: 'overview',
   users: 'user_management',
   user_management: 'user_management',
-  records: 'user_management',
+  staff: 'user_management',
+  students: 'student_management',
+  student_management: 'student_management',
+  records: 'student_management',
   quizzes: 'quiz_oversight',
   quiz_oversight: 'quiz_oversight',
   security: 'security',
@@ -42,6 +49,7 @@ const pathToSection: Record<string, string> = {
 const sectionToPath: Record<string, string> = {
   overview: '/dean/dashboard',
   user_management: '/dean/users',
+  student_management: '/dean/students',
   quiz_oversight: '/dean/quizzes',
   security: '/dean/security',
   analytics: '/dean/analytics',
@@ -63,6 +71,7 @@ export default function PrincipalDashboard() {
     security_alerts: 0,
   });
   const [usersList, setUsersList] = useState<User[]>([]);
+  const [sectionsList, setSectionsList] = useState<Section[]>([]);
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [securityLogs, setSecurityLogs] = useState<SecurityLog[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
@@ -74,9 +83,16 @@ export default function PrincipalDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // Filters
-  const [userSearch, setUserSearch] = useState('');
-  const [roleFilter, setRoleFilter] = useState('');
+  // LMSWO-00067: Separate Staff User Management filters (Teachers & Secretaries only, excluding Dean)
+  const [staffSearch, setStaffSearch] = useState('');
+  const [staffRoleFilter, setStaffRoleFilter] = useState<'' | 'teacher' | 'secretary'>('');
+  const [staffStatusFilter, setStaffStatusFilter] = useState('');
+
+  // LMSWO-00067: Separate Student Management filters (Students with Section & Year Level)
+  const [studentSearch, setStudentSearch] = useState('');
+  const [studentYearFilter, setStudentYearFilter] = useState('');
+  const [studentSectionFilter, setStudentSectionFilter] = useState('');
+  const [studentStatusFilter, setStudentStatusFilter] = useState('');
 
   const loadDeanData = async () => {
     try {
@@ -91,8 +107,11 @@ export default function PrincipalDashboard() {
         security_alerts: Number(d.unresolved_security_alerts ?? d.security_alerts ?? 0),
       });
 
-      const allUsers = await lmsFetch<PaginatedResponse<User> | { data?: { data?: User[] } | User[] } | User[]>('/users').catch(() => []);
+      const allUsers = await lmsFetch<PaginatedResponse<User> | { data?: { data?: User[] } | User[] } | User[]>('/users?per_page=500').catch(() => []);
       setUsersList(extractCollection<User>(allUsers));
+
+      const secData = await lmsFetch<unknown>('/sections').catch(() => []);
+      setSectionsList(extractCollection<Section>(secData));
 
       const secLogs = await lmsFetch<unknown>('/dean/security-logs').catch(() => []);
       setSecurityLogs(extractCollection<SecurityLog>(secLogs));
@@ -199,16 +218,77 @@ export default function PrincipalDashboard() {
     }
   };
 
-  const filteredUsers = usersList.filter(u => {
-    const q = userSearch.toLowerCase();
-    const matchesSearch = !userSearch || 
-      u.name.toLowerCase().includes(q) || 
-      u.email.toLowerCase().includes(q) ||
-      (u.lrn || '').toLowerCase().includes(q) ||
-      (u.section || '').toLowerCase().includes(q);
-    const matchesRole = !roleFilter || u.role === roleFilter;
-    return matchesSearch && matchesRole;
-  });
+  // LMSWO-00067: Staff Users = ONLY Teachers and Secretaries (explicitly excluding Dean & Students)
+  const staffUsers = useMemo(
+    () => usersList.filter((u) => u.role === 'teacher' || u.role === 'secretary'),
+    [usersList]
+  );
+
+  // LMSWO-00067: Student Users = All Students
+  const studentUsers = useMemo(
+    () => usersList.filter((u) => u.role === 'student'),
+    [usersList]
+  );
+
+  // Build dynamic Year Level -> Section map for Student Management filters
+  const yearLevelBlocksMap = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    YEAR_LEVEL_OPTIONS.forEach((yr) => {
+      map[yr] = [...(YEAR_LEVEL_BLOCKS[yr] || [])];
+    });
+    sectionsList.forEach((sec) => {
+      const yr = sec.grade?.trim() || getYearLevelFromBlock(sec.name);
+      const blk = (sec.name || sec.display_name || '').trim();
+      if (!blk) return;
+      if (!map[yr]) map[yr] = [];
+      if (!map[yr].some((existing) => existing.toLowerCase() === blk.toLowerCase())) {
+        map[yr].push(blk);
+      }
+    });
+    studentUsers.forEach((s) => {
+      const blk = s.section?.trim();
+      if (!blk) return;
+      const yr = getYearLevelFromBlock(blk, s.grade);
+      if (!map[yr]) map[yr] = [];
+      if (!map[yr].some((existing) => existing.toLowerCase() === blk.toLowerCase())) {
+        map[yr].push(blk);
+      }
+    });
+    return map;
+  }, [sectionsList, studentUsers]);
+
+  const filteredStaffUsers = useMemo(() => {
+    const q = staffSearch.trim().toLowerCase();
+    return staffUsers.filter((u) => {
+      const matchesSearch =
+        !q ||
+        u.name.toLowerCase().includes(q) ||
+        u.email.toLowerCase().includes(q) ||
+        u.role.toLowerCase().includes(q);
+      const matchesRole = !staffRoleFilter || u.role === staffRoleFilter;
+      const matchesStatus = !staffStatusFilter || (u.status || 'active') === staffStatusFilter;
+      return matchesSearch && matchesRole && matchesStatus;
+    });
+  }, [staffUsers, staffSearch, staffRoleFilter, staffStatusFilter]);
+
+  const filteredStudentUsers = useMemo(() => {
+    const q = studentSearch.trim().toLowerCase();
+    return studentUsers.filter((u) => {
+      const sYear = getYearLevelFromBlock(u.section, u.grade);
+      const sSection = u.section || 'Block - 1A';
+      const matchesSearch =
+        !q ||
+        u.name.toLowerCase().includes(q) ||
+        u.email.toLowerCase().includes(q) ||
+        (u.lrn || '').toLowerCase().includes(q) ||
+        sSection.toLowerCase().includes(q) ||
+        sYear.toLowerCase().includes(q);
+      const matchesYear = !studentYearFilter || sYear === studentYearFilter;
+      const matchesSection = !studentSectionFilter || sSection === studentSectionFilter;
+      const matchesStatus = !studentStatusFilter || (u.status || 'active') === studentStatusFilter;
+      return matchesSearch && matchesYear && matchesSection && matchesStatus;
+    });
+  }, [studentUsers, studentSearch, studentYearFilter, studentSectionFilter, studentStatusFilter]);
 
   const renderOverview = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -224,7 +304,13 @@ export default function PrincipalDashboard() {
             Tagoloan Community College administrative command, proctoring surveillance, and institutional analytics.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <Button variant="outline" onClick={() => handleSectionChange('user_management')}>
+            <Users size={16} /> Staff Directory
+          </Button>
+          <Button variant="outline" onClick={() => handleSectionChange('student_management')}>
+            <GraduationCap size={16} /> Student Directory
+          </Button>
           <Button variant="outline" onClick={() => handleSectionChange('security')}>
             <ShieldCheck size={16} /> Security Audit
           </Button>
@@ -247,8 +333,8 @@ export default function PrincipalDashboard() {
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem' }}>
-        <StatCard label="Active LMS Users" value={loading ? '…' : (metrics.active_users || usersList.length)} icon={<Users size={24} />} detail="Staff and learners" />
-        <StatCard label="Quiz Completion" value={loading ? '…' : `${metrics.quiz_completion}%`} icon={<TrendingUp size={24} />} detail="Overall completion rate" />
+        <StatCard label="Staff Personnel" value={loading ? '…' : staffUsers.length} icon={<Users size={24} />} detail="Teachers & Secretaries" />
+        <StatCard label="Enrolled Students" value={loading ? '…' : studentUsers.length} icon={<GraduationCap size={24} />} detail="1st–4th Year Learners" />
         <StatCard label="Avg Performance" value={loading ? '…' : `${metrics.avg_performance}%`} icon={<Activity size={24} />} detail="College composite score" />
         <StatCard 
           label="Security Alerts" 
@@ -312,118 +398,328 @@ export default function PrincipalDashboard() {
     </div>
   );
 
-  const renderUserManagement = () => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      <div>
-        <span style={{ fontSize: '0.8rem', color: 'var(--primary-300)', letterSpacing: '1px', textTransform: 'uppercase', fontWeight: 600 }}>
-          PERSONNEL & DIRECTORY
-        </span>
-        <h1 style={{ fontSize: '2rem', fontWeight: 800, color: 'white', marginTop: '0.25rem' }}>
-          User Management
-        </h1>
-        <p style={{ color: 'var(--neutral-300)' }}>
-          School-wide directory of administrative staff, teachers, and learners.
-        </p>
-      </div>
+  // LMSWO-00067: Staff User Management (Teachers & Secretaries ONLY — excludes Dean & Students)
+  const renderUserManagement = () => {
+    const teachersCount = staffUsers.filter((u) => u.role === 'teacher').length;
+    const secretariesCount = staffUsers.filter((u) => u.role === 'secretary').length;
 
-      {notice && (
-        <div style={{ background: 'rgba(67, 160, 71, 0.2)', border: '1px solid var(--success)', padding: '0.75rem 1rem', borderRadius: 'var(--radius-md)', color: '#c8e6c9', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <CheckCircle2 size={18} /> {notice}
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+          <div>
+            <span style={{ fontSize: '0.8rem', color: 'var(--primary-300)', letterSpacing: '1px', textTransform: 'uppercase', fontWeight: 600 }}>
+              STAFF PERSONNEL DIRECTORY (EXCLUDING DEAN)
+            </span>
+            <h1 style={{ fontSize: '2rem', fontWeight: 800, color: 'white', marginTop: '0.25rem' }}>
+              User Management
+            </h1>
+            <p style={{ color: 'var(--neutral-300)' }}>
+              Manage Faculty Teachers and School Secretaries at Tagoloan Community College. Students are managed separately in Student Management.
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap' }}>
+            <Button variant="accent" onClick={() => handleSectionChange('user_management')}>
+              <Users size={16} /> Staff Management ({staffUsers.length})
+            </Button>
+            <Button variant="outline" onClick={() => handleSectionChange('student_management')}>
+              <GraduationCap size={16} /> Student Management ({studentUsers.length})
+            </Button>
+          </div>
         </div>
-      )}
 
-      <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-        <div style={{ flex: 1, minWidth: '240px' }}>
-          <Input 
-            placeholder="Search by name, email, ID (e.g. 20273710), or Block..."
-            value={userSearch}
-            onChange={e => setUserSearch(e.target.value)}
-          />
-        </div>
-        <div style={{ width: '180px' }}>
-          <Select 
-            value={roleFilter} 
-            onChange={setRoleFilter}
-            options={[
-              { value: '', label: 'All Roles' },
-              { value: 'student', label: 'Students' },
-              { value: 'teacher', label: 'Teachers' },
-              { value: 'secretary', label: 'Secretaries' },
-              { value: 'dean', label: 'Deans' }
-            ]}
-          />
-        </div>
-      </div>
+        {notice && (
+          <div style={{ background: 'rgba(67, 160, 71, 0.2)', border: '1px solid var(--success)', padding: '0.75rem 1rem', borderRadius: 'var(--radius-md)', color: '#c8e6c9', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <CheckCircle2 size={18} /> {notice}
+          </div>
+        )}
 
-      <GlassCard style={{ padding: 0, overflow: 'hidden' }}>
-        <div className="table-responsive" style={{ margin: 0 }}>
-          <table style={{ width: '100%', minWidth: '600px', borderCollapse: 'collapse', textAlign: 'left', color: 'white', fontSize: '0.9rem' }}>
-          <thead>
-            <tr style={{ background: 'rgba(255,255,255,0.06)', borderBottom: '1px solid var(--glass-border)' }}>
-              <th style={{ padding: '0.85rem 1.25rem' }}>Name</th>
-              <th style={{ padding: '0.85rem 1.25rem' }}>Role</th>
-              <th style={{ padding: '0.85rem 1.25rem' }}>Email / ID</th>
-              <th style={{ padding: '0.85rem 1.25rem' }}>Block</th>
-              <th style={{ padding: '0.85rem 1.25rem' }}>Status</th>
-              <th style={{ padding: '0.85rem 1.25rem', textAlign: 'right' }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredUsers.length === 0 ? (
-              <tr>
-                <td colSpan={6} style={{ padding: '2rem', textAlign: 'center', color: 'var(--neutral-400)' }}>
-                  No users found matching your filters.
-                </td>
-              </tr>
-            ) : (
-              filteredUsers.map(u => (
-                <tr key={u.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                  <td style={{ padding: '0.85rem 1.25rem', fontWeight: 600 }}>{u.name}</td>
-                  <td style={{ padding: '0.85rem 1.25rem' }}>
-                    <Badge variant={u.role === 'dean' ? 'error' : u.role === 'teacher' ? 'primary' : u.role === 'secretary' ? 'warning' : 'success'}>
-                      {u.role.toUpperCase()}
-                    </Badge>
-                  </td>
-                  <td style={{ padding: '0.85rem 1.25rem', color: 'var(--neutral-300)' }}>
-                    <div>{u.email}</div>
-                    {u.lrn && <div style={{ fontSize: '0.78rem', color: 'var(--neutral-400)', fontFamily: 'monospace' }}>ID: {u.lrn}</div>}
-                  </td>
-                  <td style={{ padding: '0.85rem 1.25rem', color: 'var(--neutral-300)' }}>
-                    {u.section ? `${u.section}${u.grade ? ` (${u.grade})` : ''}` : 'Not Assigned'}
-                  </td>
-                  <td style={{ padding: '0.85rem 1.25rem' }}>
-                    <Badge variant={u.status === 'inactive' ? 'warning' : 'success'}>
-                      {u.status || 'Active'}
-                    </Badge>
-                  </td>
-                  <td style={{ padding: '0.85rem 1.25rem', textAlign: 'right' }}>
-                    <select
-                      value={u.status || 'active'}
-                      onChange={e => handleToggleUserStatus(u, e.target.value)}
-                      disabled={busy}
-                      style={{
-                        background: 'rgba(255,255,255,0.1)',
-                        border: '1px solid var(--glass-border)',
-                        color: 'white',
-                        padding: '0.25rem 0.5rem',
-                        borderRadius: 'var(--radius-sm)',
-                        fontSize: '0.8rem',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      <option value="active" style={{ background: '#1a1a2e' }}>Set Active</option>
-                      <option value="inactive" style={{ background: '#1a1a2e' }}>Set Inactive</option>
-                    </select>
-                  </td>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.15rem' }}>
+          <StatCard label="Total Staff Users" value={staffUsers.length} icon={<Users size={22} />} detail="Teachers & Secretaries (Excl. Dean)" />
+          <StatCard label="Faculty Teachers" value={teachersCount} icon={<Users size={22} />} detail="BSIT Course Instructors" />
+          <StatCard label="School Secretaries" value={secretariesCount} icon={<ShieldCheck size={22} />} detail="Enrollment & Records Staff" />
+        </div>
+
+        {/* Aligned Filter Row */}
+        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={{ flex: 1, minWidth: '240px' }}>
+            <input
+              type="text"
+              className="form-input"
+              placeholder="Search teachers or secretaries by name or official email..."
+              value={staffSearch}
+              onChange={e => setStaffSearch(e.target.value)}
+              style={{ height: '42px', margin: 0, width: '100%', boxSizing: 'border-box' }}
+            />
+          </div>
+          <select
+            value={staffRoleFilter}
+            onChange={e => setStaffRoleFilter(e.target.value as '' | 'teacher' | 'secretary')}
+            className="form-select"
+            style={{ width: '250px', height: '42px', margin: 0, boxSizing: 'border-box' }}
+          >
+            <option value="">All Staff (Teachers &amp; Secretaries)</option>
+            <option value="teacher">Teachers Only</option>
+            <option value="secretary">Secretaries Only</option>
+          </select>
+          <select
+            value={staffStatusFilter}
+            onChange={e => setStaffStatusFilter(e.target.value)}
+            className="form-select"
+            style={{ width: '165px', height: '42px', margin: 0, boxSizing: 'border-box' }}
+          >
+            <option value="">All Statuses</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+        </div>
+
+        <GlassCard style={{ padding: 0, overflow: 'hidden' }}>
+          <div className="table-responsive" style={{ margin: 0 }}>
+            <table style={{ width: '100%', minWidth: '640px', borderCollapse: 'collapse', textAlign: 'left', color: 'white', fontSize: '0.9rem' }}>
+              <thead>
+                <tr style={{ background: 'rgba(255,255,255,0.06)', borderBottom: '1px solid var(--glass-border)' }}>
+                  <th style={{ padding: '0.85rem 1.25rem' }}>Staff Member Name</th>
+                  <th style={{ padding: '0.85rem 1.25rem' }}>Role</th>
+                  <th style={{ padding: '0.85rem 1.25rem' }}>Official Email</th>
+                  <th style={{ padding: '0.85rem 1.25rem' }}>Department / Office</th>
+                  <th style={{ padding: '0.85rem 1.25rem' }}>Status</th>
+                  <th style={{ padding: '0.85rem 1.25rem', textAlign: 'right' }}>Actions</th>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              </thead>
+              <tbody>
+                {filteredStaffUsers.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} style={{ padding: '2rem', textAlign: 'center', color: 'var(--neutral-400)' }}>
+                      No teachers or secretaries found matching your filters.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredStaffUsers.map(u => (
+                    <tr key={u.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                      <td style={{ padding: '0.85rem 1.25rem', fontWeight: 700 }}>{u.name}</td>
+                      <td style={{ padding: '0.85rem 1.25rem' }}>
+                        <Badge variant={u.role === 'teacher' ? 'primary' : 'warning'}>
+                          {u.role.toUpperCase()}
+                        </Badge>
+                      </td>
+                      <td style={{ padding: '0.85rem 1.25rem', color: 'var(--neutral-300)' }}>
+                        {u.email}
+                      </td>
+                      <td style={{ padding: '0.85rem 1.25rem', color: 'var(--neutral-300)' }}>
+                        {u.role === 'teacher'
+                          ? 'College of Information Technology (BSIT Faculty)'
+                          : 'Office of the College Secretary & Registrar'}
+                      </td>
+                      <td style={{ padding: '0.85rem 1.25rem' }}>
+                        <Badge variant={u.status === 'inactive' ? 'warning' : 'success'}>
+                          {u.status || 'Active'}
+                        </Badge>
+                      </td>
+                      <td style={{ padding: '0.85rem 1.25rem', textAlign: 'right' }}>
+                        <select
+                          value={u.status || 'active'}
+                          onChange={e => handleToggleUserStatus(u, e.target.value)}
+                          disabled={busy}
+                          style={{
+                            background: 'rgba(255,255,255,0.1)',
+                            border: '1px solid var(--glass-border)',
+                            color: 'white',
+                            padding: '0.25rem 0.5rem',
+                            borderRadius: 'var(--radius-sm)',
+                            fontSize: '0.8rem',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <option value="active" style={{ background: '#1a1a2e' }}>Set Active</option>
+                          <option value="inactive" style={{ background: '#1a1a2e' }}>Set Inactive</option>
+                        </select>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </GlassCard>
+      </div>
+    );
+  };
+
+  // LMSWO-00067: Dedicated Student Management (All Students with Section & Year Level)
+  const renderStudentManagement = () => {
+    const activeStudentsCount = studentUsers.filter((s) => s.status !== 'inactive').length;
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+          <div>
+            <span style={{ fontSize: '0.8rem', color: 'var(--primary-300)', letterSpacing: '1px', textTransform: 'uppercase', fontWeight: 600 }}>
+              ENROLLED STUDENT DIRECTORY BY YEAR LEVEL &amp; SECTION
+            </span>
+            <h1 style={{ fontSize: '2rem', fontWeight: 800, color: 'white', marginTop: '0.25rem' }}>
+              Student Management
+            </h1>
+            <p style={{ color: 'var(--neutral-300)' }}>
+              View and manage all enrolled BSIT students along with their assigned Class Section/Block and Year Level (1st to 4th Year).
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap' }}>
+            <Button variant="outline" onClick={() => handleSectionChange('user_management')}>
+              <Users size={16} /> Staff Management ({staffUsers.length})
+            </Button>
+            <Button variant="accent" onClick={() => handleSectionChange('student_management')}>
+              <GraduationCap size={16} /> Student Management ({studentUsers.length})
+            </Button>
+          </div>
         </div>
-      </GlassCard>
-    </div>
-  );
+
+        {notice && (
+          <div style={{ background: 'rgba(67, 160, 71, 0.2)', border: '1px solid var(--success)', padding: '0.75rem 1rem', borderRadius: 'var(--radius-md)', color: '#c8e6c9', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <CheckCircle2 size={18} /> {notice}
+          </div>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.15rem' }}>
+          <StatCard label="Total Enrolled Students" value={studentUsers.length} icon={<GraduationCap size={22} />} detail="All BSIT Learners" />
+          <StatCard label="Active Student Accounts" value={activeStudentsCount} icon={<CheckCircle2 size={22} />} detail="Verified active learners" />
+          <StatCard label="Year Levels Covered" value={Object.keys(yearLevelBlocksMap).length} icon={<Layers size={22} />} detail="1st Year to 4th Year" />
+        </div>
+
+        {/* Aligned Student Search & Filter Row */}
+        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={{ flex: 1, minWidth: '240px' }}>
+            <input
+              type="text"
+              className="form-input"
+              placeholder="Search student by name, Student ID (e.g. 20273710), section, year level, or email..."
+              value={studentSearch}
+              onChange={e => setStudentSearch(e.target.value)}
+              style={{ height: '42px', margin: 0, width: '100%', boxSizing: 'border-box' }}
+            />
+          </div>
+
+          <select
+            value={studentYearFilter}
+            onChange={e => {
+              setStudentYearFilter(e.target.value);
+              setStudentSectionFilter('');
+            }}
+            className="form-select"
+            style={{ width: '175px', height: '42px', margin: 0, boxSizing: 'border-box' }}
+          >
+            <option value="">All Year Levels</option>
+            {Object.keys(yearLevelBlocksMap).map((yr) => (
+              <option key={yr} value={yr}>{yr}</option>
+            ))}
+          </select>
+
+          <select
+            value={studentSectionFilter}
+            onChange={e => setStudentSectionFilter(e.target.value)}
+            className="form-select"
+            style={{ width: '210px', height: '42px', margin: 0, boxSizing: 'border-box' }}
+          >
+            <option value="">All Sections / Blocks</option>
+            {Object.entries(yearLevelBlocksMap)
+              .filter(([yr]) => !studentYearFilter || yr === studentYearFilter)
+              .map(([yr, blocks]) => (
+                <optgroup key={yr} label={yr}>
+                  {blocks.map((blk) => (
+                    <option key={blk} value={blk}>{blk}</option>
+                  ))}
+                </optgroup>
+              ))}
+          </select>
+
+          <select
+            value={studentStatusFilter}
+            onChange={e => setStudentStatusFilter(e.target.value)}
+            className="form-select"
+            style={{ width: '160px', height: '42px', margin: 0, boxSizing: 'border-box' }}
+          >
+            <option value="">All Statuses</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+            <option value="graduated">Graduated</option>
+          </select>
+        </div>
+
+        <GlassCard style={{ padding: 0, overflow: 'hidden' }}>
+          <div className="table-responsive" style={{ margin: 0 }}>
+            <table style={{ width: '100%', minWidth: '720px', borderCollapse: 'collapse', textAlign: 'left', color: 'white', fontSize: '0.9rem' }}>
+              <thead>
+                <tr style={{ background: 'rgba(255,255,255,0.06)', borderBottom: '1px solid var(--glass-border)' }}>
+                  <th style={{ padding: '0.85rem 1.25rem' }}>Student Name</th>
+                  <th style={{ padding: '0.85rem 1.25rem' }}>Student ID</th>
+                  <th style={{ padding: '0.85rem 1.25rem' }}>Year Level</th>
+                  <th style={{ padding: '0.85rem 1.25rem' }}>Section / Block</th>
+                  <th style={{ padding: '0.85rem 1.25rem' }}>Email Address</th>
+                  <th style={{ padding: '0.85rem 1.25rem' }}>Status</th>
+                  <th style={{ padding: '0.85rem 1.25rem', textAlign: 'right' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredStudentUsers.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ padding: '2rem', textAlign: 'center', color: 'var(--neutral-400)' }}>
+                      No students found matching your filters.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredStudentUsers.map(u => {
+                    const resolvedYearLevel = getYearLevelFromBlock(u.section, u.grade);
+                    const resolvedSection = u.section || 'Block - 1A';
+                    return (
+                      <tr key={u.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                        <td style={{ padding: '0.85rem 1.25rem', fontWeight: 700 }}>{u.name}</td>
+                        <td style={{ padding: '0.85rem 1.25rem', fontFamily: 'monospace', color: '#fde68a', fontWeight: 600 }}>
+                          {u.lrn || 'N/A'}
+                        </td>
+                        <td style={{ padding: '0.85rem 1.25rem' }}>
+                          <Badge variant="primary">{resolvedYearLevel}</Badge>
+                        </td>
+                        <td style={{ padding: '0.85rem 1.25rem', fontWeight: 700, color: 'white', whiteSpace: 'nowrap' }}>
+                          {resolvedSection}
+                        </td>
+                        <td style={{ padding: '0.85rem 1.25rem', color: 'var(--neutral-300)' }}>
+                          {u.email}
+                        </td>
+                        <td style={{ padding: '0.85rem 1.25rem' }}>
+                          <Badge variant={u.status === 'inactive' ? 'warning' : u.status === 'graduated' ? 'primary' : 'success'}>
+                            {u.status || 'Active'}
+                          </Badge>
+                        </td>
+                        <td style={{ padding: '0.85rem 1.25rem', textAlign: 'right' }}>
+                          <select
+                            value={u.status || 'active'}
+                            onChange={e => handleToggleUserStatus(u, e.target.value)}
+                            disabled={busy}
+                            style={{
+                              background: 'rgba(255,255,255,0.1)',
+                              border: '1px solid var(--glass-border)',
+                              color: 'white',
+                              padding: '0.25rem 0.5rem',
+                              borderRadius: 'var(--radius-sm)',
+                              fontSize: '0.8rem',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <option value="active" style={{ background: '#1a1a2e' }}>Set Active</option>
+                            <option value="inactive" style={{ background: '#1a1a2e' }}>Set Inactive</option>
+                            <option value="graduated" style={{ background: '#1a1a2e' }}>Set Graduated</option>
+                          </select>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </GlassCard>
+      </div>
+    );
+  };
 
   const renderQuizOversight = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -482,7 +778,7 @@ export default function PrincipalDashboard() {
           SECURITY SURVEILLANCE
         </span>
         <h1 style={{ fontSize: '2rem', fontWeight: 800, color: 'white', marginTop: '0.25rem' }}>
-          Security & Access Logs
+          Security &amp; Access Logs
         </h1>
         <p style={{ color: 'var(--neutral-300)' }}>
           Monitor authentication events, failed logins, and suspicious activities.
@@ -568,7 +864,7 @@ export default function PrincipalDashboard() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem' }}>
-        <StatCard label="Registered Learners" value={usersList.filter(u => u.role === 'student').length} icon={<Users size={24} />} detail="Total student body" />
+        <StatCard label="Registered Learners" value={studentUsers.length} icon={<GraduationCap size={24} />} detail="Total student body" />
         <StatCard label="Faculty Teachers" value={usersList.filter(u => u.role === 'teacher').length} icon={<Users size={24} />} detail="Active educators" />
         <StatCard label="Assessments Built" value={quizzes.length} icon={<Activity size={24} />} detail="Published quizzes" />
       </div>
@@ -693,6 +989,7 @@ export default function PrincipalDashboard() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%', minWidth: 0 }}>
         {activeSection === 'overview' && renderOverview()}
         {activeSection === 'user_management' && renderUserManagement()}
+        {activeSection === 'student_management' && renderStudentManagement()}
         {activeSection === 'quiz_oversight' && renderQuizOversight()}
         {activeSection === 'security' && renderSecurity()}
         {activeSection === 'analytics' && renderAnalytics()}

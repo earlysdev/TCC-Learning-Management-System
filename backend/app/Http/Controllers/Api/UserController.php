@@ -17,8 +17,20 @@ class UserController extends Controller
     {
         $query = User::query();
 
-        if ($request->has('role')) {
-            $query->byRole($request->role);
+        if ($request->has('role') && $request->filled('role')) {
+            $roleParam = trim((string) $request->role);
+            if ($roleParam === 'staff') {
+                $query->whereIn('role', ['teacher', 'secretary']);
+            } elseif (str_contains($roleParam, ',')) {
+                $roles = array_filter(array_map('trim', explode(',', $roleParam)));
+                $query->whereIn('role', $roles);
+            } else {
+                $query->byRole($roleParam);
+            }
+        }
+
+        if ($request->boolean('exclude_dean')) {
+            $query->whereNotIn('role', ['dean', 'principal']);
         }
 
         if ($request->has('status')) {
