@@ -15,6 +15,7 @@ import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import ProfileUpdateCard from '../../components/ui/ProfileUpdateCard';
 import QuizDetailsPdfModal from '../../components/ui/QuizDetailsPdfModal';
+import QuizPrivacyRulesModal from '../../components/ui/QuizPrivacyRulesModal';
 
 export default function StudentDashboard() {
   const user = getLmsUser();
@@ -30,6 +31,7 @@ export default function StudentDashboard() {
   // Taking a quiz state
   const [selectedQuiz, setSelectedQuiz] = useState<Quiz | null>(null);
   const [detailsModalQuiz, setDetailsModalQuiz] = useState<Quiz | null>(null);
+  const [privacyModalQuiz, setPrivacyModalQuiz] = useState<Quiz | null>(null);
   const [answers, setAnswers] = useState<StudentAnswerValue[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [takingQuizId, setTakingQuizId] = useState<number | null>(null);
@@ -106,9 +108,15 @@ export default function StudentDashboard() {
     }
   };
 
+  const requestTakeQuiz = (quiz: Quiz) => {
+    if (takingQuizId === quiz.id) return;
+    setPrivacyModalQuiz(quiz);
+  };
+
   const openQuizWindow = (quiz: Quiz) => {
     if (takingQuizId === quiz.id) return;
     setTakingQuizId(quiz.id);
+    setPrivacyModalQuiz(null);
 
     // Immediately enter Full-Screen Exam Lock within the user click gesture to prevent alt-tabbing or window switching
     const docEl = document.documentElement as HTMLElement & {
@@ -364,7 +372,7 @@ export default function StudentDashboard() {
                         openQuiz(quiz);
                         setActiveSection('quizzes');
                       } else {
-                        openQuizWindow(quiz);
+                        requestTakeQuiz(quiz);
                       }
                     }}
                   >
@@ -1013,12 +1021,12 @@ export default function StudentDashboard() {
                     variant={quiz.attempted ? 'outline' : 'accent'}
                     disabled={!quiz.attempted && takingQuizId === quiz.id}
                     style={{ flex: 1 }}
-                    onClick={() => quiz.attempted ? openQuiz(quiz) : openQuizWindow(quiz)}
+                    onClick={() => quiz.attempted ? openQuiz(quiz) : requestTakeQuiz(quiz)}
                   >
                     {!quiz.attempted && takingQuizId === quiz.id ? (
                       <><Loader2 size={16} className="spin-icon" /> Opening...</>
                     ) : (
-                      <>{quiz.attempted ? (quiz.allow_review ? 'View Result & Review' : 'View Result') : 'Start Quiz'} <ArrowRight size={16} /></>
+                      <>{quiz.attempted ? (quiz.allow_review ? 'View Result & Review' : 'View Result') : 'Take Quiz'} <ArrowRight size={16} /></>
                     )}
                   </Button>
                 </div>
@@ -1340,11 +1348,19 @@ export default function StudentDashboard() {
               openQuiz(q);
               setActiveSection('quizzes');
             } else {
-              openQuizWindow(q);
+              requestTakeQuiz(q);
             }
           }}
         />
       )}
+
+      <QuizPrivacyRulesModal
+        quiz={privacyModalQuiz}
+        isOpen={Boolean(privacyModalQuiz)}
+        isStarting={Boolean(privacyModalQuiz && takingQuizId === privacyModalQuiz.id)}
+        onClose={() => setPrivacyModalQuiz(null)}
+        onConfirmStart={(q) => openQuizWindow(q)}
+      />
     </DashboardLayout>
   );
 }
