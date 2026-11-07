@@ -461,76 +461,168 @@ class LmsAiService
         array $answers,
         ?string $pdfText = null,
         ?string $pdfName = null,
+        ?string $pdfBase64 = null,
     ): array {
-        $missed = [];
-        foreach ($questions as $index => $question) {
-            if (($answers[$index] ?? null) !== $question['correct_index']) {
-                $missed[] = (string) ($question['skill'] ?? $topic);
-            }
-        }
-        $focus = array_values(array_unique($missed));
-        $topicSafe = trim($topic);
+        $topicSafe = trim($topic) !== '' ? trim($topic) : 'Course Assessment';
         $cleanPdfName = trim((string) $pdfName);
-        $cleanPdfText = trim((string) $pdfText);
-        $hasPdf = $cleanPdfName !== '' || $cleanPdfText !== '';
-        $curatedReferences = $this->buildTopicReferences($topicSafe, $focus, $cleanPdfName, $cleanPdfText);
+        $cleanSentences = $this->extractCleanSentences((string) $pdfText);
+        $cleanPdfText = implode(' ', $cleanSentences);
+        $hasPdf = $cleanPdfName !== '' || $cleanPdfText !== '' || ! empty($pdfBase64);
 
-        if ($focus === []) {
-            $pdfNote = $hasPdf
-                ? ' based on the uploaded reference handout ('.($cleanPdfName ?: 'PDF Module').')'
-                : '';
+        // 1. If the student achieved a Perfect Score, no further improvement or external links are needed.
+        if ($max > 0 && $score >= $max) {
             return [
-                'summary' => 'Outstanding work! You demonstrated complete mastery across all tested learning competencies for '.$topicSafe.$pdfNote.'.',
+                'summary' => 'Perfect Score! You answered every question correctly and demonstrated 100% mastery of this assessment. No further study improvements or reference links are needed.',
                 'focus_topics' => [],
-                'action_steps' => [
-                    $hasPdf
-                        ? 'Revisit advanced sections of the uploaded PDF handout ('.($cleanPdfName ?: $topicSafe).') to deepen your practical mastery.'
-                        : 'Proceed to subsequent modules or challenge yourself with advanced problem sets in '.$topicSafe.'.',
-                    'Share your mastery and mentor peers reviewing this unit.'
-                ],
-                'references' => $curatedReferences,
-                'source' => $hasPdf ? 'pdf-local' : 'local',
+                'action_steps' => [],
+                'references' => [],
+                'source' => $hasPdf ? 'pdf-perfect' : 'perfect',
             ];
         }
 
-        $pdfExcerptNote = '';
-        if ($cleanPdfText !== '') {
-            $pdfExcerptNote = ' Key handout excerpt to review: "'.Str::limit($cleanPdfText, 220).'"';
+        // 2. Identify the exact missed questions and their underlying concepts
+        $missedSkills = [];
+        $missedDetails = [];
+        foreach (array_values($questions) as $index => $question) {
+            if (! is_array($question)) {
+                continue;
+            }
+            $studentAns = $answers[$index] ?? null;
+            if (! $this->isQuestionAnsweredCorrectly($question, $studentAns)) {
+                $qNum = $index + 1;
+                $promptText = trim((string) ($question['prompt'] ?? ''));
+                $skillLabel = trim((string) ($question['skill'] ?? ''));
+                if ($skillLabel === '' || strtolower($skillLabel) === 'topic understanding') {
+                    $skillLabel = "{$topicSafe} (Question #{$qNum})";
+                }
+                $correctConcept = $this->extractCorrectConceptText($question);
+                $missedSkills[] = $skillLabel;
+                $missedDetails[] = [
+                    'number' => $qNum,
+                    'skill' => $skillLabel,
+                    'prompt' => $promptText,
+                    'concept' => $correctConcept,
+                ];
+            }
         }
+
+        if ($missedDetails === []) {
+            return [
+                'summary' => 'Perfect Score! You answered every question correctly and demonstrated 100% mastery of this assessment. No further study improvements or reference links are needed.',
+                'focus_topics' => [],
+                'action_steps' => [],
+                'references' => [],
+                'source' => $hasPdf ? 'pdf-perfect' : 'perfect',
+            ];
+        }
+
+        $focus = array_values(array_unique($missedSkills));
+        $pdfLabel = $cleanPdfName !== '' ? $cleanPdfName : "{$topicSafe} PDF Handout";
+
+        // Build Learning Ideas directly from the attached PDF and missed questions
+        $pdfLearningIdeas = [];
+        if ($hasPdf) {
+            foreach (array_slice($missedDetails, 0, 4) as $item) {
+                $conceptText = $item['concept'] !== ''
+                    ? $item['concept']
+                    : ($cleanSentences[$item['number'] % max(1, count($cleanSentences))] ?? "Review the {$item['skill']} section in {$pdfLabel}.");
+                $promptSnippet = Str::limit(rtrim($item['prompt'], '? '), 95);
+                $pdfLearningIdeas[] = "From {$pdfLabel} (Question #{$item['number']} — {$promptSnippet}): Key concept to remember — {$conceptText}";
+            }
+            foreach ($cleanSentences as $sentence) {
+                if (count($pdfLearningIdeas) >= 4) {
+                    break;
+                }
+                $candidateIdea = "PDF Handout Key Note ({$pdfLabel}): {$sentence}";
+                if (! in_array($candidateIdea, $pdfLearningIdeas, true)) {
+                    $pdfLearningIdeas[] = $candidateIdea;
+                }
+            }
+            if ($pdfLearningIdeas === []) {
+                $pdfLearningIdeas[] = "Open the attached PDF handout ({$pdfLabel}) and review the core principles covering ".implode(', ', array_slice($focus, 0, 3)).'.';
+            }
+        }
+
+        // When a PDF is attached by the instructor, references should focus on the attached PDF handout rather than generic external websites
+        $curatedReferences = $hasPdf
+            ? [
+                [
+                    'title' => "Attached Instructor PDF: {$pdfLabel}",
+                    'url' => '#attached-pdf-handout',
+                    'description' => $cleanPdfText !== ''
+                        ? 'Handout Excerpt: '.Str::limit($cleanPdfText, 160)
+                        : "Click to open and review your instructor's uploaded PDF reference material ({$pdfLabel}) for {$topicSafe}.",
+                    'source_name' => 'Instructor Uploaded PDF Handout',
+                ],
+            ]
+            : $this->buildTopicReferences($topicSafe, $focus);
 
         $fallback = [
             'summary' => $hasPdf
-                ? "You achieved {$score} of {$max} points. Based on the uploaded PDF reference (".($cleanPdfName ?: $topicSafe)."), a focused review of ".implode(', ', array_slice($focus, 0, 2))." will strengthen your mastery.".$pdfExcerptNote
-                : "You achieved {$score} of {$max} points. A focused review of ".implode(', ', array_slice($focus, 0, 2)).' will strengthen your topic accuracy and exam readiness.',
-            'focus_topics' => array_slice($focus, 0, 4),
-            'action_steps' => [
-                $hasPdf
-                    ? 'Re-read the uploaded PDF handout ('.($cleanPdfName ?: $topicSafe).') sections covering '.implode(' and ', array_slice($focus, 0, 2)).'.'
-                    : 'Review the core lesson notes and reference study links below for '.implode(' and ', array_slice($focus, 0, 2)).'.',
-                'Engage with the interactive practice modules and self-learning materials provided in the references.',
-                'Clarify specific misconceptions with your teacher during the next class session.'
-            ],
+                ? "You scored {$score} out of {$max} points. Based directly on your instructor's attached PDF handout ({$pdfLabel}), review the learning ideas below for the ".count($missedDetails).' question'.(count($missedDetails) === 1 ? '' : 's').' you missed.'
+                : "You achieved {$score} of {$max} points. A focused review of ".implode(', ', array_slice($focus, 0, 3)).' will strengthen your topic accuracy and mastery.',
+            'focus_topics' => array_slice($focus, 0, 5),
+            'action_steps' => $hasPdf
+                ? array_slice($pdfLearningIdeas, 0, 4)
+                : [
+                    'Review the core lesson concepts covering '.implode(' and ', array_slice($focus, 0, 2)).'.',
+                    ...array_map(
+                        fn (array $m) => "Question #{$m['number']} Review: Recall that {$m['concept']}",
+                        array_slice($missedDetails, 0, 3)
+                    ),
+                ],
             'references' => $curatedReferences,
-            'source' => $hasPdf ? 'pdf-local' : 'local',
+            'source' => $hasPdf ? 'pdf-learning-ideas' : 'local',
         ];
 
         $key = config('services.gemini.key');
-        if (! $key) return $fallback;
+        if (! $key) {
+            return $fallback;
+        }
 
-        $prompt = "Provide supportive, highly accurate educational study advice for a college/secondary learner. "
-            ."Topic: {$topicSafe}. Score: {$score}/{$max}. Competencies missed: ".implode(', ', $focus).". "
-            .($hasPdf ? "The teacher provided a PDF reference handout (\"{$cleanPdfName}\"). Base your study feedback and action steps on this PDF material:\n".Str::limit($cleanPdfText, 5000, '')."\n\n" : '')
-            ."Return JSON with:\n"
-            ."- summary (string: 2-3 sentences of constructive learning feedback".($hasPdf ? " referencing the uploaded PDF material" : "").")\n"
-            ."- focus_topics (array of strings: specific concepts to review)\n"
-            ."- action_steps (array of strings: actionable revision recommendations)\n"
-            ."- references (array of 2 to 3 objects with title, url, description, and source_name). Ensure URLs are valid https educational links relevant to {$topicSafe} (e.g. Khan Academy, Wikipedia, or official educational portals). Do not infer personal traits or include answer keys.";
+        $missedSummaryLines = array_map(
+            fn (array $m) => "- Question #{$m['number']}: \"{$m['prompt']}\" | Correct Concept from Material: \"{$m['concept']}\"",
+            array_slice($missedDetails, 0, 8)
+        );
+
+        $prompt = $hasPdf
+            ? "You are an academic tutor providing post-quiz Learning Ideas based STRICTLY on the instructor's attached PDF handout (\"{$pdfLabel}\").\n"
+                ."Course Topic: {$topicSafe}. Student Score: {$score}/{$max}.\n"
+                ."Questions Missed by the Student:\n".implode("\n", $missedSummaryLines)."\n\n"
+                .($cleanPdfText !== '' ? "Extracted Text from Instructor's Attached PDF (\"{$pdfLabel}\"):\n".Str::limit($cleanPdfText, 7000, '')."\n\n" : '')
+                ."Return JSON with:\n"
+                ."- summary (string: 2-3 sentences explaining what the student should review from the attached PDF \"{$pdfLabel}\" based on their mistakes)\n"
+                ."- focus_topics (array of 2-4 specific subtopics from the attached PDF that the student missed)\n"
+                ."- action_steps (array of 3-4 concrete Learning Ideas & key concept explanations drawn directly from the attached PDF \"{$pdfLabel}\" that address each missed question)\n"
+                ."- references (empty array [] because the learning material is the attached PDF itself)."
+            : "Provide supportive, accurate educational study advice for a college learner.\n"
+                ."Topic: {$topicSafe}. Score: {$score}/{$max}.\n"
+                ."Questions Missed:\n".implode("\n", $missedSummaryLines)."\n\n"
+                ."Return JSON with:\n"
+                ."- summary (string: 2-3 sentences of constructive learning feedback)\n"
+                ."- focus_topics (array of strings: specific concepts to review)\n"
+                ."- action_steps (array of strings: actionable learning ideas explaining the missed concepts)\n"
+                ."- references (array of 2 to 3 objects with title, url, description, and source_name with valid https educational links).";
+
+        $parts = [];
+        if ($hasPdf && ! empty($pdfBase64)) {
+            $rawBase64 = preg_replace('/^data:application\/pdf;base64,/i', '', trim($pdfBase64)) ?? '';
+            if ($rawBase64 !== '' && strlen($rawBase64) <= 12_000_000) {
+                $parts[] = [
+                    'inlineData' => [
+                        'mimeType' => 'application/pdf',
+                        'data' => $rawBase64,
+                    ],
+                ];
+            }
+        }
+        $parts[] = ['text' => $prompt];
 
         foreach ($this->candidateModels() as $model) {
             try {
-                $response = Http::withoutVerifying()->withHeaders(['x-goog-api-key' => $key])->timeout(15)->post(
+                $response = Http::withoutVerifying()->withHeaders(['x-goog-api-key' => $key])->timeout(18)->post(
                     "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent",
-                    ['contents' => [['parts' => [['text' => $prompt]]]], 'generationConfig' => ['responseMimeType' => 'application/json', 'temperature' => 0.4]],
+                    ['contents' => [['parts' => $parts]], 'generationConfig' => ['responseMimeType' => 'application/json', 'temperature' => 0.35]],
                 );
 
                 if ($response->status() === 503 || $response->status() === 429) {
@@ -540,12 +632,14 @@ class LmsAiService
                 $json = $response->throw()->json();
                 $text = $json['candidates'][0]['content']['parts'][0]['text'] ?? '';
                 $data = json_decode($text, true, flags: JSON_THROW_ON_ERROR);
-                if (! is_string($data['summary'] ?? null) || ! is_array($data['focus_topics'] ?? null) || ! is_array($data['action_steps'] ?? null)) continue;
+                if (! is_string($data['summary'] ?? null) || ! is_array($data['focus_topics'] ?? null) || ! is_array($data['action_steps'] ?? null)) {
+                    continue;
+                }
 
                 $extractedReferences = [];
-                if (isset($data['references']) && is_array($data['references'])) {
+                if (! $hasPdf && isset($data['references']) && is_array($data['references'])) {
                     foreach ($data['references'] as $ref) {
-                        if (is_array($ref) && !empty($ref['title']) && !empty($ref['url'])) {
+                        if (is_array($ref) && ! empty($ref['title']) && ! empty($ref['url'])) {
                             $rawUrl = (string) $ref['url'];
                             if (filter_var($rawUrl, FILTER_VALIDATE_URL) && str_starts_with($rawUrl, 'https://')) {
                                 $extractedReferences[] = [
@@ -559,16 +653,16 @@ class LmsAiService
                     }
                 }
 
-                $finalReferences = count($extractedReferences) >= 2
-                    ? array_slice($extractedReferences, 0, 4)
-                    : $curatedReferences;
+                $finalReferences = $hasPdf
+                    ? $curatedReferences
+                    : (count($extractedReferences) >= 2 ? array_slice($extractedReferences, 0, 4) : $curatedReferences);
 
                 return [
-                    'summary' => Str::limit(strip_tags($data['summary']), 500),
+                    'summary' => Str::limit(strip_tags($data['summary']), 550),
                     'focus_topics' => array_slice(array_map(fn ($v) => Str::limit(strip_tags((string) $v), 100), $data['focus_topics']), 0, 5),
-                    'action_steps' => array_slice(array_map(fn ($v) => Str::limit(strip_tags((string) $v), 180), $data['action_steps']), 0, 4),
+                    'action_steps' => array_slice(array_map(fn ($v) => Str::limit(strip_tags((string) $v), 240), $data['action_steps']), 0, 5),
                     'references' => $finalReferences,
-                    'source' => 'gemini',
+                    'source' => $hasPdf ? 'gemini-pdf' : 'gemini',
                 ];
             } catch (\Throwable $error) {
                 continue;
@@ -578,46 +672,120 @@ class LmsAiService
         return $fallback;
     }
 
-    /** @param array<int, string> $focus @return array<int, array{title: string, url: string, description: string, source_name: string}> */
-    private function buildTopicReferences(string $topic, array $focus, string $pdfName = '', string $pdfText = ''): array
+    /**
+     * Determine if a student's answer for a question is correct across all 5 question types.
+     *
+     * @param array<string, mixed> $question
+     */
+    private function isQuestionAnsweredCorrectly(array $question, mixed $rawAnswer): bool
     {
-        $primarySkill = !empty($focus) ? $focus[0] : $topic;
+        $type = (string) ($question['type'] ?? 'multiple_choice');
+        if ($type === 'identification') {
+            $studentText = is_string($rawAnswer) || is_numeric($rawAnswer) ? trim((string) $rawAnswer) : '';
+            if ($studentText === '') {
+                return false;
+            }
+            $keyText = trim((string) ($question['correct_answer'] ?? ($question['options'][0] ?? '')));
+            $accepted = array_values(array_filter(array_map(
+                fn ($s) => strtolower(trim($s)),
+                explode(',', $keyText)
+            ), fn ($s) => $s !== ''));
+            if ($accepted === []) {
+                $accepted = [strtolower($keyText)];
+            }
+            return in_array(strtolower($studentText), $accepted, true);
+        }
+
+        if ($type === 'essay') {
+            $studentText = is_string($rawAnswer) || is_numeric($rawAnswer) ? trim((string) $rawAnswer) : '';
+            if ($studentText === '') {
+                return false;
+            }
+            $keyText = trim((string) ($question['correct_answer'] ?? ($question['options'][0] ?? '')));
+            if ($keyText === '') {
+                return strlen($studentText) >= 10;
+            }
+            return str_contains(strtolower($studentText), strtolower($keyText)) || strlen($studentText) >= 15;
+        }
+
+        if ($type === 'multiple_answer') {
+            $selected = [];
+            if (is_array($rawAnswer)) {
+                foreach ($rawAnswer as $idx) {
+                    if (is_numeric($idx) && (int) $idx >= 0) {
+                        $selected[] = (int) $idx;
+                    }
+                }
+            }
+            $selected = array_values(array_unique($selected));
+            sort($selected);
+            $correctIndices = is_array($question['correct_indices'] ?? null) && ! empty($question['correct_indices'])
+                ? array_values(array_unique(array_map('intval', $question['correct_indices'])))
+                : [(int) ($question['correct_index'] ?? 0)];
+            sort($correctIndices);
+            return $selected !== [] && $selected === $correctIndices;
+        }
+
+        $picked = is_numeric($rawAnswer) ? (int) $rawAnswer : -1;
+        return $picked >= 0 && $picked === (int) ($question['correct_index'] ?? 0);
+    }
+
+    /**
+     * Extract the human-readable correct concept or statement from a question.
+     *
+     * @param array<string, mixed> $question
+     */
+    private function extractCorrectConceptText(array $question): string
+    {
+        $type = (string) ($question['type'] ?? 'multiple_choice');
+        if ($type === 'identification' || $type === 'essay') {
+            return trim((string) ($question['correct_answer'] ?? ($question['options'][0] ?? '')));
+        }
+        if ($type === 'multiple_answer') {
+            $options = is_array($question['options'] ?? null) ? array_values($question['options']) : [];
+            $indices = is_array($question['correct_indices'] ?? null) && ! empty($question['correct_indices'])
+                ? array_map('intval', $question['correct_indices'])
+                : [(int) ($question['correct_index'] ?? 0)];
+            $parts = [];
+            foreach ($indices as $i) {
+                if (isset($options[$i])) {
+                    $parts[] = trim((string) $options[$i]);
+                }
+            }
+            return implode('; ', $parts);
+        }
+        $options = is_array($question['options'] ?? null) ? array_values($question['options']) : [];
+        $correctIdx = (int) ($question['correct_index'] ?? 0);
+        return trim((string) ($options[$correctIdx] ?? ($options[0] ?? '')));
+    }
+
+    /** @param array<int, string> $focus @return array<int, array{title: string, url: string, description: string, source_name: string}> */
+    private function buildTopicReferences(string $topic, array $focus): array
+    {
+        $primarySkill = ! empty($focus) ? $focus[0] : $topic;
         $encodedTopic = urlencode($topic);
         $encodedSkill = urlencode($primarySkill);
 
-        $refs = [];
-        if ($pdfName !== '' || $pdfText !== '') {
-            $excerpt = $pdfText !== ''
-                ? 'Handout focus: '.Str::limit($pdfText, 140)
-                : "Review the instructor's uploaded PDF handout ({$pdfName}) for {$primarySkill}.";
-            $refs[] = [
-                'title' => 'Instructor PDF Handout: '.($pdfName !== '' ? $pdfName : "{$topic} Reference PDF"),
-                'url' => "https://scholar.google.com/scholar?q={$encodedTopic}+{$encodedSkill}",
-                'description' => $excerpt,
-                'source_name' => 'Uploaded Course PDF & Scholar Reference',
-            ];
-        }
-
-        $refs[] = [
-            'title' => "Khan Academy: {$topic} Study Module",
-            'url' => "https://www.khanacademy.org/search?page_search_query={$encodedTopic}",
-            'description' => "Interactive lessons, video walkthroughs, and practice problems focused on {$topic}.",
-            'source_name' => 'Khan Academy',
+        return [
+            [
+                'title' => "Khan Academy: {$topic} Study Module",
+                'url' => "https://www.khanacademy.org/search?page_search_query={$encodedTopic}",
+                'description' => "Interactive lessons, video walkthroughs, and practice problems focused on {$topic}.",
+                'source_name' => 'Khan Academy',
+            ],
+            [
+                'title' => "Wikipedia Knowledge Base: {$topic}",
+                'url' => "https://en.wikipedia.org/wiki/Special:Search?search={$encodedTopic}",
+                'description' => "Academic summaries, diagrams, and comprehensive definitions for {$topic}.",
+                'source_name' => 'Wikipedia Library',
+            ],
+            [
+                'title' => "DepEd LR Portal Competency: {$primarySkill}",
+                'url' => "https://lrmds.deped.gov.ph/search?query={$encodedSkill}",
+                'description' => "Official curriculum guides and self-learning modules for {$primarySkill}.",
+                'source_name' => 'DepEd Learning Resource',
+            ],
         ];
-        $refs[] = [
-            'title' => "Wikipedia Knowledge Base: {$topic}",
-            'url' => "https://en.wikipedia.org/wiki/Special:Search?search={$encodedTopic}",
-            'description' => "Academic summaries, diagrams, and comprehensive definitions for {$topic}.",
-            'source_name' => 'Wikipedia Library',
-        ];
-        $refs[] = [
-            'title' => "DepEd LR Portal Competency: {$primarySkill}",
-            'url' => "https://lrmds.deped.gov.ph/search?query={$encodedSkill}",
-            'description' => "Official curriculum guides and self-learning modules for {$primarySkill}.",
-            'source_name' => 'DepEd Learning Resource',
-        ];
-
-        return array_slice($refs, 0, 4);
     }
 
     /**

@@ -410,6 +410,7 @@ class QuizController extends Controller
         return response()->json(['quizzes' => $eligibleQuizzes->values()->map(function (Quiz $quiz): array {
             $this->repairQuizQuestionsIfNeeded($quiz);
             $attempt = $quiz->attempts->first();
+            $this->refreshAttemptRecommendationIfNeeded($quiz, $attempt);
             $cleanPdfText = !empty($quiz->reference_pdf_text)
                 ? implode(' ', $this->ai->extractCleanSentences((string) $quiz->reference_pdf_text))
                 : null;
@@ -449,6 +450,7 @@ class QuizController extends Controller
         $this->repairQuizQuestionsIfNeeded($quiz);
 
         $attempt = QuizAttempt::where('quiz_id', $quiz->id)->where('student_id', $student->id)->first();
+        $this->refreshAttemptRecommendationIfNeeded($quiz, $attempt);
         $cleanPdfText = !empty($quiz->reference_pdf_text)
             ? implode(' ', $this->ai->extractCleanSentences((string) $quiz->reference_pdf_text))
             : null;
@@ -761,6 +763,7 @@ class QuizController extends Controller
             $answers,
             $quiz->reference_pdf_text ?? null,
             $quiz->reference_pdf_name ?? null,
+            $quiz->reference_pdf_data ?? null,
         );
         $cheatingCount = (int) ($validated['cheating_attempts_count'] ?? 0);
         $violations = $validated['violations'] ?? [];
@@ -843,6 +846,64 @@ class QuizController extends Controller
                     : [],
             ]
         ], 201);
+    }
+
+    /**
+     * Refresh legacy attempt recommendations so:
+     * 1) Perfect scores have zero improvement steps or external links, and
+     * 2) Non-perfect scores on PDF quizzes provide Learning Ideas derived directly from the attached PDF.
+     */
+    private function refreshAttemptRecommendationIfNeeded(Quiz $quiz, ?QuizAttempt $attempt): void
+    {
+        if (! $attempt) {
+            return;
+        }
+
+        $score = (int) $attempt->score;
+        $maxScore = max(1, (int) $attempt->max_score);
+        $rec = is_array($attempt->recommendation) ? $attempt->recommendation : [];
+        $source = (string) ($rec['source'] ?? '');
+        $hasPdf = ! empty($quiz->reference_pdf_name) || ! empty($quiz->reference_pdf_text) || ! empty($quiz->reference_pdf_data);
+
+        // Case 1: Perfect score should have no improvement steps or links
+        if ($score >= $maxScore) {
+            if (! empty($rec['action_steps']) || ! empty($rec['references']) || ! empty($rec['focus_topics']) || ! in_array($source, ['perfect', 'pdf-perfect'], true)) {
+                $updated = [
+                    'summary' => 'Perfect Score! You answered every question correctly and demonstrated 100% mastery of this assessment. No further study improvements or reference links are needed.',
+                    'focus_topics' => [],
+                    'action_steps' => [],
+                    'references' => [],
+                    'source' => $hasPdf ? 'pdf-perfect' : 'perfect',
+                ];
+                $attempt->recommendation = $updated;
+                try {
+                    $attempt->save();
+                } catch (\Throwable) {
+                    // Non-blocking
+                }
+            }
+            return;
+        }
+
+        // Case 2: Non-perfect score with an attached PDF whose recommendation was generated before pdf-learning-ideas
+        if ($hasPdf && ! in_array($source, ['pdf-learning-ideas', 'gemini-pdf'], true)) {
+            $updated = $this->ai->recommend(
+                (string) $quiz->topic,
+                $score,
+                $maxScore,
+                $quiz->questions ?? [],
+                is_array($attempt->answers) ? $attempt->answers : [],
+                $quiz->reference_pdf_text ?? null,
+                $quiz->reference_pdf_name ?? null,
+                null, // Fast local PDF learning ideas refresh on read
+            );
+            $attempt->recommendation = $updated;
+            try {
+                $attempt->save();
+            } catch (\Throwable) {
+                // Non-blocking
+            }
+        }
     }
 
     /**

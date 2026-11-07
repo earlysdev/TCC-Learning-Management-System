@@ -592,7 +592,26 @@ export default function StudentDashboard() {
             </GlassCard>
           )}
 
-          {quizResult.recommendation && (
+          {Number(quizResult.score) >= Number(quizResult.max_score) && Number(quizResult.max_score) > 0 ? (
+            <GlassCard style={{ borderLeft: '4px solid var(--success)', background: 'rgba(76, 175, 80, 0.08)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.65rem' }}>
+                <div style={{ background: 'rgba(76, 175, 80, 0.25)', padding: '0.5rem', borderRadius: 'var(--radius-md)', color: '#a5d6a7' }}>
+                  <CheckCircle2 size={20} />
+                </div>
+                <div>
+                  <span style={{ fontSize: '0.75rem', color: '#a5d6a7', fontWeight: 700, textTransform: 'uppercase' }}>
+                    PERFECT SCORE ACHIEVED • 100% MASTERY
+                  </span>
+                  <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'white', margin: 0 }}>
+                    No Further Improvement Needed
+                  </h3>
+                </div>
+              </div>
+              <p style={{ color: '#e8f5e9', lineHeight: 1.6, margin: 0 }}>
+                Outstanding work! You answered every question correctly on this assessment. Because you achieved a perfect score, no additional study improvements or external reference links are required.
+              </p>
+            </GlassCard>
+          ) : quizResult.recommendation ? (
             <GlassCard style={{ borderLeft: '4px solid var(--accent-purple-light)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
                 <div style={{ background: 'var(--accent-purple)', padding: '0.5rem', borderRadius: 'var(--radius-md)', color: 'white' }}>
@@ -600,9 +619,17 @@ export default function StudentDashboard() {
                 </div>
                 <div>
                   <span style={{ fontSize: '0.75rem', color: 'var(--accent-purple-light)', fontWeight: 700, textTransform: 'uppercase' }}>
-                    {quizResult.recommendation.source === 'gemini' ? 'AI STUDY RECOMMENDATION (GEMINI)' : 'PERSONALIZED STUDY RECOMMENDATION'}
+                    {selectedQuiz.reference_pdf_name
+                      ? `LEARNING IDEAS BASED ON ATTACHED PDF (${selectedQuiz.reference_pdf_name})`
+                      : quizResult.recommendation.source === 'gemini'
+                        ? 'AI STUDY RECOMMENDATION (GEMINI)'
+                        : 'PERSONALIZED STUDY RECOMMENDATION'}
                   </span>
-                  <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'white' }}>Suggested Next Steps</h3>
+                  <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'white' }}>
+                    {selectedQuiz.reference_pdf_name
+                      ? "What to Review from Your Instructor's PDF Handout"
+                      : 'Suggested Next Steps'}
+                  </h3>
                 </div>
               </div>
 
@@ -613,7 +640,7 @@ export default function StudentDashboard() {
               {quizResult.recommendation.focus_topics?.length > 0 && (
                 <div style={{ marginBottom: '1.25rem' }}>
                   <div style={{ fontSize: '0.85rem', color: 'var(--neutral-400)', fontWeight: 600, marginBottom: '0.5rem' }}>
-                    TOPICS TO REVIEW:
+                    {selectedQuiz.reference_pdf_name ? 'MISSED CONCEPTS FROM ATTACHED PDF:' : 'TOPICS TO REVIEW:'}
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                     {quizResult.recommendation.focus_topics.map((t, i) => (
@@ -628,9 +655,11 @@ export default function StudentDashboard() {
               {quizResult.recommendation.action_steps?.length > 0 && (
                 <div>
                   <div style={{ fontSize: '0.85rem', color: 'var(--neutral-400)', fontWeight: 600, marginBottom: '0.5rem' }}>
-                    ACTION STEPS:
+                    {selectedQuiz.reference_pdf_name
+                      ? `LEARNING IDEAS FROM ${selectedQuiz.reference_pdf_name.toUpperCase()}:`
+                      : 'ACTION STEPS:'}
                   </div>
-                  <ul style={{ margin: 0, paddingLeft: '1.25rem', color: 'var(--neutral-200)', display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.9rem' }}>
+                  <ul style={{ margin: 0, paddingLeft: '1.25rem', color: 'var(--neutral-200)', display: 'flex', flexDirection: 'column', gap: '0.45rem', fontSize: '0.9rem' }}>
                     {quizResult.recommendation.action_steps.map((s, i) => (
                       <li key={i}>{s}</li>
                     ))}
@@ -638,52 +667,95 @@ export default function StudentDashboard() {
                 </div>
               )}
 
-              {quizResult.recommendation.references && quizResult.recommendation.references.length > 0 && (
+              {selectedQuiz.reference_pdf_name ? (
                 <div style={{ marginTop: '1.25rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1.25rem' }}>
                   <div style={{ fontSize: '0.85rem', color: 'var(--accent-purple-light)', fontWeight: 700, marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <ExternalLink size={14} /> STUDY REFERENCES & LEARNING MATERIALS:
+                    <FileText size={14} /> INSTRUCTOR&apos;S ATTACHED REFERENCE PDF:
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                    {quizResult.recommendation.references.map((ref, i) => (
-                      <a
-                        key={i}
-                        href={ref.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{
-                          display: 'flex',
-                          alignItems: 'flex-start',
-                          gap: '0.75rem',
-                          padding: '0.75rem 1rem',
-                          borderRadius: 'var(--radius-md)',
-                          background: 'rgba(255,255,255,0.05)',
-                          border: '1px solid rgba(255,255,255,0.08)',
-                          textDecoration: 'none',
-                          transition: 'all 0.2s',
-                          color: 'white',
-                        }}
-                        onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(139,92,246,0.15)'; e.currentTarget.style.borderColor = 'rgba(139,92,246,0.3)'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; }}
-                      >
-                        <div style={{ background: 'var(--accent-purple)', padding: '0.4rem', borderRadius: 'var(--radius-sm)', flexShrink: 0, marginTop: '0.1rem' }}>
-                          <ExternalLink size={14} style={{ color: 'white' }} />
+                  <button
+                    type="button"
+                    onClick={() => setDetailsModalQuiz(selectedQuiz)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      width: '100%',
+                      textAlign: 'left',
+                      gap: '0.75rem',
+                      padding: '0.85rem 1rem',
+                      borderRadius: 'var(--radius-md)',
+                      background: 'rgba(139, 92, 246, 0.14)',
+                      border: '1px solid rgba(139, 92, 246, 0.4)',
+                      color: 'white',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0 }}>
+                      <div style={{ background: 'var(--accent-purple)', padding: '0.45rem', borderRadius: 'var(--radius-sm)', flexShrink: 0 }}>
+                        <FileText size={15} style={{ color: 'white' }} />
+                      </div>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--accent-purple-light)' }}>
+                          {selectedQuiz.reference_pdf_name}
                         </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--accent-purple-light)' }}>{ref.title}</div>
-                          {ref.description && (
-                            <div style={{ fontSize: '0.8rem', color: 'var(--neutral-300)', marginTop: '0.2rem', lineHeight: 1.4 }}>{ref.description}</div>
-                          )}
-                          {ref.source_name && (
-                            <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', marginTop: '0.25rem' }}>Source: {ref.source_name}</div>
-                          )}
+                        <div style={{ fontSize: '0.8rem', color: 'var(--neutral-300)', marginTop: '0.15rem' }}>
+                          Click to open and study the instructor&apos;s attached PDF handout for the questions you missed.
                         </div>
-                      </a>
-                    ))}
-                  </div>
+                      </div>
+                    </div>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#c4b5fd', textDecoration: 'underline', flexShrink: 0 }}>
+                      Open PDF Handout
+                    </span>
+                  </button>
                 </div>
+              ) : (
+                quizResult.recommendation.references && quizResult.recommendation.references.length > 0 && (
+                  <div style={{ marginTop: '1.25rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1.25rem' }}>
+                    <div style={{ fontSize: '0.85rem', color: 'var(--accent-purple-light)', fontWeight: 700, marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <ExternalLink size={14} /> STUDY REFERENCES & LEARNING MATERIALS:
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                      {quizResult.recommendation.references.map((ref, i) => (
+                        <a
+                          key={i}
+                          href={ref.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: '0.75rem',
+                            padding: '0.75rem 1rem',
+                            borderRadius: 'var(--radius-md)',
+                            background: 'rgba(255,255,255,0.05)',
+                            border: '1px solid rgba(255,255,255,0.08)',
+                            textDecoration: 'none',
+                            transition: 'all 0.2s',
+                            color: 'white',
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(139,92,246,0.15)'; e.currentTarget.style.borderColor = 'rgba(139,92,246,0.3)'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; }}
+                        >
+                          <div style={{ background: 'var(--accent-purple)', padding: '0.4rem', borderRadius: 'var(--radius-sm)', flexShrink: 0, marginTop: '0.1rem' }}>
+                            <ExternalLink size={14} style={{ color: 'white' }} />
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--accent-purple-light)' }}>{ref.title}</div>
+                            {ref.description && (
+                              <div style={{ fontSize: '0.8rem', color: 'var(--neutral-300)', marginTop: '0.2rem', lineHeight: 1.4 }}>{ref.description}</div>
+                            )}
+                            {ref.source_name && (
+                              <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', marginTop: '0.25rem' }}>Source: {ref.source_name}</div>
+                            )}
+                          </div>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )
               )}
             </GlassCard>
-          )}
+          ) : null}
 
           <Button variant="primary" onClick={() => { setSelectedQuiz(null); setQuizResult(null); }}>
             Back to Quizzes List
@@ -1171,91 +1243,147 @@ export default function StudentDashboard() {
         </GlassCard>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          {completedQuizzes.filter(q => q.recommendation).map(q => (
-            <GlassCard key={q.id} style={{ borderLeft: '4px solid var(--accent-purple-light)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                <div>
-                  <Badge variant="primary">{q.subject}</Badge>
-                  <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: 'white', marginTop: '0.25rem' }}>{q.title}</h3>
+          {completedQuizzes.filter(q => q.recommendation).map(q => {
+            const isPerfect = Number(q.score) >= Number(q.max_score) && Number(q.max_score) > 0;
+            return (
+              <GlassCard
+                key={q.id}
+                style={{
+                  borderLeft: isPerfect ? '4px solid var(--success)' : '4px solid var(--accent-purple-light)',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                  <div>
+                    <Badge variant="primary">{q.subject}</Badge>
+                    <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: 'white', marginTop: '0.25rem' }}>{q.title}</h3>
+                  </div>
+                  <Badge variant={Number(q.percentage) >= 75 ? 'success' : 'warning'}>
+                    Score: {q.score}/{q.max_score} ({Number(q.percentage).toFixed(0)}%)
+                  </Badge>
                 </div>
-                <Badge variant={Number(q.percentage) >= 75 ? 'success' : 'warning'}>
-                  Score: {q.score}/{q.max_score} ({Number(q.percentage).toFixed(0)}%)
-                </Badge>
-              </div>
 
-              <p style={{ color: 'var(--neutral-200)', fontSize: '0.95rem', lineHeight: 1.6, marginBottom: '1rem' }}>
-                {q.recommendation?.summary}
-              </p>
+                {isPerfect ? (
+                  <p style={{ color: '#a5d6a7', fontSize: '0.95rem', lineHeight: 1.6, margin: 0, fontWeight: 600 }}>
+                    ✓ Perfect Score Achieved (100% Mastery) — You answered every question correctly. No further study improvements or external reference links are required.
+                  </p>
+                ) : (
+                  <>
+                    <p style={{ color: 'var(--neutral-200)', fontSize: '0.95rem', lineHeight: 1.6, marginBottom: '1rem' }}>
+                      {q.recommendation?.summary}
+                    </p>
 
-              {q.recommendation?.focus_topics && q.recommendation.focus_topics.length > 0 && (
-                <div style={{ marginBottom: '0.75rem' }}>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--neutral-400)', fontWeight: 600, marginBottom: '0.4rem' }}>
-                    KEY TOPICS TO REVIEW:
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-                    {q.recommendation.focus_topics.map((t, idx) => (
-                      <span key={idx} style={{ background: 'rgba(255,255,255,0.08)', padding: '0.25rem 0.6rem', borderRadius: 'var(--radius-full)', color: 'white', fontSize: '0.8rem' }}>
-                        {t}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {q.recommendation?.action_steps && q.recommendation.action_steps.length > 0 && (
-                <div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--neutral-400)', fontWeight: 600, marginBottom: '0.4rem' }}>
-                    ACTION PLAN:
-                  </div>
-                  <ul style={{ margin: 0, paddingLeft: '1.2rem', color: 'var(--neutral-300)', fontSize: '0.85rem' }}>
-                    {q.recommendation.action_steps.map((s, idx) => (
-                      <li key={idx}>{s}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {q.recommendation?.references && q.recommendation.references.length > 0 && (
-                <div style={{ marginTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1rem' }}>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--accent-purple-light)', fontWeight: 700, marginBottom: '0.6rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <ExternalLink size={13} /> STUDY REFERENCES:
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                    {q.recommendation.references.map((ref, idx) => (
-                      <a
-                        key={idx}
-                        href={ref.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.6rem',
-                          padding: '0.6rem 0.85rem',
-                          borderRadius: 'var(--radius-md)',
-                          background: 'rgba(255,255,255,0.04)',
-                          border: '1px solid rgba(255,255,255,0.06)',
-                          textDecoration: 'none',
-                          transition: 'all 0.2s',
-                          color: 'white',
-                        }}
-                        onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(139,92,246,0.12)'; e.currentTarget.style.borderColor = 'rgba(139,92,246,0.25)'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'; }}
-                      >
-                        <ExternalLink size={14} style={{ color: 'var(--accent-purple-light)', flexShrink: 0 }} />
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--accent-purple-light)' }}>{ref.title}</div>
-                          {ref.source_name && (
-                            <div style={{ fontSize: '0.72rem', color: 'var(--neutral-400)' }}>{ref.source_name}</div>
-                          )}
+                    {q.recommendation?.focus_topics && q.recommendation.focus_topics.length > 0 && (
+                      <div style={{ marginBottom: '0.75rem' }}>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--neutral-400)', fontWeight: 600, marginBottom: '0.4rem' }}>
+                          {q.reference_pdf_name ? 'MISSED CONCEPTS FROM ATTACHED PDF:' : 'KEY TOPICS TO REVIEW:'}
                         </div>
-                      </a>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </GlassCard>
-          ))}
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                          {q.recommendation.focus_topics.map((t, idx) => (
+                            <span key={idx} style={{ background: 'rgba(255,255,255,0.08)', padding: '0.25rem 0.6rem', borderRadius: 'var(--radius-full)', color: 'white', fontSize: '0.8rem' }}>
+                              {t}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {q.recommendation?.action_steps && q.recommendation.action_steps.length > 0 && (
+                      <div>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--neutral-400)', fontWeight: 600, marginBottom: '0.4rem' }}>
+                          {q.reference_pdf_name
+                            ? `LEARNING IDEAS FROM ${q.reference_pdf_name.toUpperCase()}:`
+                            : 'ACTION PLAN:'}
+                        </div>
+                        <ul style={{ margin: 0, paddingLeft: '1.2rem', color: 'var(--neutral-300)', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                          {q.recommendation.action_steps.map((s, idx) => (
+                            <li key={idx}>{s}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {q.reference_pdf_name ? (
+                      <div style={{ marginTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1rem' }}>
+                        <button
+                          type="button"
+                          onClick={() => setDetailsModalQuiz(q)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            width: '100%',
+                            textAlign: 'left',
+                            gap: '0.6rem',
+                            padding: '0.65rem 0.9rem',
+                            borderRadius: 'var(--radius-md)',
+                            background: 'rgba(139, 92, 246, 0.14)',
+                            border: '1px solid rgba(139, 92, 246, 0.4)',
+                            color: 'white',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0 }}>
+                            <FileText size={15} style={{ color: 'var(--accent-purple-light)', flexShrink: 0 }} />
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--accent-purple-light)' }}>
+                                Instructor&apos;s Attached PDF: {q.reference_pdf_name}
+                              </div>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--neutral-300)' }}>
+                                Click to open and review the attached reference handout
+                              </div>
+                            </div>
+                          </div>
+                          <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#c4b5fd', textDecoration: 'underline', flexShrink: 0 }}>
+                            Open PDF
+                          </span>
+                        </button>
+                      </div>
+                    ) : (
+                      q.recommendation?.references && q.recommendation.references.length > 0 && (
+                        <div style={{ marginTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1rem' }}>
+                          <div style={{ fontSize: '0.8rem', color: 'var(--accent-purple-light)', fontWeight: 700, marginBottom: '0.6rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <ExternalLink size={13} /> STUDY REFERENCES:
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            {q.recommendation.references.map((ref, idx) => (
+                              <a
+                                key={idx}
+                                href={ref.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '0.6rem',
+                                  padding: '0.6rem 0.85rem',
+                                  borderRadius: 'var(--radius-md)',
+                                  background: 'rgba(255,255,255,0.04)',
+                                  border: '1px solid rgba(255,255,255,0.06)',
+                                  textDecoration: 'none',
+                                  transition: 'all 0.2s',
+                                  color: 'white',
+                                }}
+                                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(139,92,246,0.12)'; e.currentTarget.style.borderColor = 'rgba(139,92,246,0.25)'; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'; }}
+                              >
+                                <ExternalLink size={14} style={{ color: 'var(--accent-purple-light)', flexShrink: 0 }} />
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--accent-purple-light)' }}>{ref.title}</div>
+                                  {ref.source_name && (
+                                    <div style={{ fontSize: '0.72rem', color: 'var(--neutral-400)' }}>{ref.source_name}</div>
+                                  )}
+                                </div>
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    )}
+                  </>
+                )}
+              </GlassCard>
+            );
+          })}
         </div>
       )}
     </div>
