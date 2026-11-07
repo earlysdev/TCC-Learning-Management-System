@@ -4,14 +4,14 @@ import {
   AlertTriangle,
   CheckCircle2,
   ChevronLeft,
-  ChevronsDown,
-  ChevronsUp,
+  ChevronRight,
   Clock3,
   Eye,
   ExternalLink,
   FileQuestion,
   FileText,
   Info,
+  Lock,
   LockKeyhole,
   MonitorOff,
   Send,
@@ -609,6 +609,7 @@ export default function StudentQuizTakePage() {
 
   const handleAnswer = (questionIndex: number, value: StudentAnswerValue, displayQuestionNum = questionIndex + 1) => {
     setCurrentQuestionNum(displayQuestionNum);
+    setError(null);
     setAnswers((current) => {
       const next = [...current];
       next[questionIndex] = value;
@@ -621,6 +622,7 @@ export default function StudentQuizTakePage() {
 
   const handleToggleMultiAnswer = (questionIndex: number, optionIndex: number, displayQuestionNum = questionIndex + 1) => {
     setCurrentQuestionNum(displayQuestionNum);
+    setError(null);
     setAnswers((current) => {
       const next = [...current];
       const existing = Array.isArray(next[questionIndex]) ? [...(next[questionIndex] as number[])] : [];
@@ -1182,6 +1184,73 @@ export default function StudentQuizTakePage() {
     );
   }
 
+  const orderedIndices =
+    questionOrder.length > 0
+      ? questionOrder
+      : (quiz.questions?.map((_, idx) => idx) ?? []);
+  const totalQuestions = orderedIndices.length;
+  const activeStepIndex =
+    totalQuestions > 0
+      ? Math.max(0, Math.min(totalQuestions - 1, currentQuestionNum - 1))
+      : 0;
+
+  let firstUnansweredDisplayIdx = totalQuestions;
+  for (let i = 0; i < totalQuestions; i += 1) {
+    const origIdx = orderedIndices[i];
+    const q = quiz.questions?.[origIdx];
+    if (!isAnswerProvided(answers[origIdx], q)) {
+      firstUnansweredDisplayIdx = i;
+      break;
+    }
+  }
+
+  const maxUnlockedDisplayIdx =
+    totalQuestions > 0
+      ? Math.min(totalQuestions - 1, firstUnansweredDisplayIdx)
+      : 0;
+  const activeOriginalIndex = orderedIndices[activeStepIndex] ?? 0;
+  const activeQuestion = quiz.questions?.[activeOriginalIndex];
+  const isCurrentQuestionAnswered = activeQuestion
+    ? isAnswerProvided(answers[activeOriginalIndex], activeQuestion)
+    : false;
+  const isLastQuestion = activeStepIndex >= totalQuestions - 1;
+  const allQuestionsAnswered =
+    totalQuestions > 0 && firstUnansweredDisplayIdx >= totalQuestions;
+
+  const goToQuestionStep = (targetDisplayIdx: number) => {
+    if (targetDisplayIdx < 0 || targetDisplayIdx >= totalQuestions) return;
+    if (targetDisplayIdx > maxUnlockedDisplayIdx) {
+      const requiredNum = firstUnansweredDisplayIdx + 1;
+      const msg = `Please answer Question ${requiredNum} first before moving to Question ${targetDisplayIdx + 1}.`;
+      setError(msg);
+      showToast(msg, 'warning');
+      return;
+    }
+    setError(null);
+    setCurrentQuestionNum(targetDisplayIdx + 1);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const goToPreviousQuestion = () => {
+    if (activeStepIndex > 0) {
+      goToQuestionStep(activeStepIndex - 1);
+    }
+  };
+
+  const goToNextQuestion = () => {
+    if (!isCurrentQuestionAnswered) {
+      const msg = `Please answer Question ${activeStepIndex + 1} first before moving to Question ${activeStepIndex + 2}.`;
+      setError(msg);
+      showToast(msg, 'warning');
+      return;
+    }
+    if (activeStepIndex < totalQuestions - 1) {
+      setError(null);
+      setCurrentQuestionNum(activeStepIndex + 2);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
   return (
     <main 
       className="quiz-take-page" 
@@ -1230,9 +1299,90 @@ export default function StudentQuizTakePage() {
             <p>{quiz.topic}</p>
           )}
           <div className="quiz-progress-block">
-            <div><span>Progress</span><strong>{answeredCount} / {quiz.questions?.length ?? 0}</strong></div>
-            <div className="quiz-progress-track"><span style={{ width: `${(answeredCount / Math.max(quiz.questions?.length ?? 1, 1)) * 100}%` }} /></div>
+            <div><span>Progress</span><strong>{answeredCount} / {totalQuestions}</strong></div>
+            <div className="quiz-progress-track"><span style={{ width: `${(answeredCount / Math.max(totalQuestions, 1)) * 100}%` }} /></div>
           </div>
+
+          {totalQuestions > 0 && (
+            <div
+              style={{
+                background: 'rgba(255, 255, 255, 0.04)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: '10px',
+                padding: '0.7rem 0.75rem',
+                marginBottom: '0.9rem',
+              }}
+            >
+              <div
+                style={{
+                  fontSize: '0.68rem',
+                  fontWeight: 800,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.6px',
+                  color: '#cbd5e1',
+                  marginBottom: '0.5rem',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}
+              >
+                <span>Question Lock Sequence</span>
+                <span style={{ color: '#c4b5fd' }}>Q{activeStepIndex + 1} / Q{totalQuestions}</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(42px, 1fr))', gap: '0.4rem' }}>
+                {orderedIndices.map((origIdx, dispIdx) => {
+                  const qItem = quiz.questions?.[origIdx];
+                  const isAnswered = isAnswerProvided(answers[origIdx], qItem);
+                  const isCurrent = dispIdx === activeStepIndex;
+                  const isLocked = dispIdx > maxUnlockedDisplayIdx;
+                  return (
+                    <button
+                      key={origIdx}
+                      type="button"
+                      data-proctor-label={`Question Navigator Q${dispIdx + 1}`}
+                      onClick={() => goToQuestionStep(dispIdx)}
+                      title={
+                        isLocked
+                          ? `Locked — Answer Question ${firstUnansweredDisplayIdx + 1} first`
+                          : `Question ${dispIdx + 1}${isAnswered ? ' (Answered)' : ''}`
+                      }
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.2rem',
+                        height: '32px',
+                        borderRadius: '7px',
+                        fontSize: '0.75rem',
+                        fontWeight: 800,
+                        cursor: isLocked ? 'not-allowed' : 'pointer',
+                        opacity: isLocked ? 0.55 : 1,
+                        background: isCurrent
+                          ? 'rgba(139, 92, 246, 0.38)'
+                          : isAnswered
+                            ? 'rgba(76, 175, 80, 0.22)'
+                            : 'rgba(255, 255, 255, 0.05)',
+                        border: isCurrent
+                          ? '1.5px solid #a78bfa'
+                          : isAnswered
+                            ? '1px solid rgba(76, 175, 80, 0.5)'
+                            : '1px solid rgba(255, 255, 255, 0.14)',
+                        color: isCurrent
+                          ? '#ffffff'
+                          : isAnswered
+                            ? '#a5d6a7'
+                            : '#94a3b8',
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      {isLocked ? <Lock size={11} /> : isAnswered ? '✓' : null}
+                      <span>{dispIdx + 1}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <button
             type="button"
@@ -1278,8 +1428,10 @@ export default function StudentQuizTakePage() {
         <section className="quiz-question-area">
           <div className="quiz-question-heading">
             <div>
-              <p className="quiz-result-eyebrow">Secure Full-Screen Assessment Window</p>
-              <h2>Answer each question</h2>
+              <p className="quiz-result-eyebrow">Secure Full-Screen Assessment Window • Sequential Question Lock</p>
+              <h2>
+                Question {activeStepIndex + 1} of {totalQuestions}
+              </h2>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
               {quiz.reference_pdf_name && (
@@ -1297,16 +1449,9 @@ export default function StudentQuizTakePage() {
                   <FileText size={15} /> View PDF Handout
                 </Button>
               )}
-              <div className="quiz-question-count"><FileQuestion size={18} /> {quiz.questions?.length ?? 0} questions</div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })}
-                title="Direct Scroll to Bottom"
-              >
-                <ChevronsDown size={15} /> Scroll to Bottom
-              </Button>
+              <div className="quiz-question-count">
+                <FileQuestion size={18} /> {answeredCount} / {totalQuestions} answered
+              </div>
             </div>
           </div>
 
@@ -1354,9 +1499,79 @@ export default function StudentQuizTakePage() {
           {error && <div className="quiz-inline-error" role="alert"><AlertTriangle size={18} /> {error}</div>}
 
           <form onSubmit={submitQuiz} className="quiz-question-form">
-            {(questionOrder.length > 0 ? questionOrder : (quiz.questions?.map((_, idx) => idx) ?? [])).map((originalIndex, displayIndex) => {
-              const question = quiz.questions?.[originalIndex];
-              if (!question) return null;
+            {/* Step-by-Step Sequential Question Progress Bar */}
+            {totalQuestions > 1 && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '0.75rem',
+                  flexWrap: 'wrap',
+                  padding: '0.75rem 1rem',
+                  borderRadius: '12px',
+                  background: 'rgba(255, 255, 255, 0.04)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  {orderedIndices.map((origIdx, dispIdx) => {
+                    const qItem = quiz.questions?.[origIdx];
+                    const isAnswered = isAnswerProvided(answers[origIdx], qItem);
+                    const isCurrent = dispIdx === activeStepIndex;
+                    const isLocked = dispIdx > maxUnlockedDisplayIdx;
+                    return (
+                      <button
+                        key={origIdx}
+                        type="button"
+                        onClick={() => goToQuestionStep(dispIdx)}
+                        data-proctor-label={`Step Pill Q${dispIdx + 1}`}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.35rem',
+                          padding: '0.35rem 0.7rem',
+                          borderRadius: '999px',
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          cursor: isLocked ? 'not-allowed' : 'pointer',
+                          opacity: isLocked ? 0.55 : 1,
+                          background: isCurrent
+                            ? 'rgba(139, 92, 246, 0.32)'
+                            : isAnswered
+                              ? 'rgba(76, 175, 80, 0.2)'
+                              : 'rgba(255, 255, 255, 0.05)',
+                          border: isCurrent
+                            ? '1.5px solid #a78bfa'
+                            : isAnswered
+                              ? '1px solid rgba(76, 175, 80, 0.45)'
+                              : '1px solid rgba(255, 255, 255, 0.12)',
+                          color: isCurrent
+                            ? '#ffffff'
+                            : isAnswered
+                              ? '#a5d6a7'
+                              : '#cbd5e1',
+                          transition: 'all 0.15s',
+                        }}
+                      >
+                        {isLocked ? <Lock size={12} /> : isAnswered ? <CheckCircle2 size={13} /> : null}
+                        <span>Q{dispIdx + 1}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <span style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 600 }}>
+                  {isCurrentQuestionAnswered
+                    ? `✓ Question ${activeStepIndex + 1} answered`
+                    : `🔒 Answer Question ${activeStepIndex + 1} first to unlock Next`}
+                </span>
+              </div>
+            )}
+
+            {activeQuestion && (() => {
+              const displayIndex = activeStepIndex;
+              const originalIndex = activeOriginalIndex;
+              const question = activeQuestion;
               const qType = question.type ?? 'multiple_choice';
               const qPoints = Number(question.points) > 0 ? Number(question.points) : 1;
               const typeBadgeMap: Record<string, string> = {
@@ -1375,21 +1590,40 @@ export default function StudentQuizTakePage() {
                   data-proctor-label={`Question ${displayIndex + 1}`}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem', flexWrap: 'wrap' }}>
-                    <span
-                      style={{
-                        fontSize: '0.72rem',
-                        fontWeight: 700,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.5px',
-                        padding: '0.18rem 0.55rem',
-                        borderRadius: '999px',
-                        background: 'rgba(139, 92, 246, 0.16)',
-                        border: '1px solid rgba(139, 92, 246, 0.38)',
-                        color: '#ddd6fe',
-                      }}
-                    >
-                      {typeBadgeMap[qType] || 'Multiple Choice'}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <span
+                        style={{
+                          fontSize: '0.72rem',
+                          fontWeight: 700,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px',
+                          padding: '0.18rem 0.55rem',
+                          borderRadius: '999px',
+                          background: 'rgba(139, 92, 246, 0.16)',
+                          border: '1px solid rgba(139, 92, 246, 0.38)',
+                          color: '#ddd6fe',
+                        }}
+                      >
+                        {typeBadgeMap[qType] || 'Multiple Choice'}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: '0.72rem',
+                          fontWeight: 700,
+                          padding: '0.18rem 0.55rem',
+                          borderRadius: '999px',
+                          background: isCurrentQuestionAnswered
+                            ? 'rgba(76, 175, 80, 0.18)'
+                            : 'rgba(245, 158, 11, 0.16)',
+                          border: isCurrentQuestionAnswered
+                            ? '1px solid rgba(76, 175, 80, 0.45)'
+                            : '1px solid rgba(245, 158, 11, 0.45)',
+                          color: isCurrentQuestionAnswered ? '#a5d6a7' : '#fde68a',
+                        }}
+                      >
+                        {isCurrentQuestionAnswered ? '✓ Answered' : 'Required Before Next'}
+                      </span>
+                    </div>
                     <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#fbbf24' }}>
                       {qPoints} {qPoints === 1 ? 'pt' : 'pts'}
                     </span>
@@ -1403,6 +1637,12 @@ export default function StudentQuizTakePage() {
                         value={typeof currentAns === 'string' ? currentAns : ''}
                         onFocus={() => setCurrentQuestionNum(displayIndex + 1)}
                         onChange={(e) => handleAnswer(originalIndex, e.target.value, displayIndex + 1)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !isLastQuestion) {
+                            e.preventDefault();
+                            goToNextQuestion();
+                          }
+                        }}
                         placeholder="Type your answer here..."
                         data-proctor-label={`Question ${displayIndex + 1} · Identification Input`}
                         autoComplete="off"
@@ -1498,22 +1738,103 @@ export default function StudentQuizTakePage() {
                   )}
                 </fieldset>
               );
-            })}
-            <div className="quiz-submit-row" data-proctor-label="Submit Assessment Section">
-              <span><Clock3 size={17} /> Review your answers before submitting.</span>
+            })()}
+
+            {/* Sequential Question Navigation & Submit Bar */}
+            <div
+              className="quiz-submit-row"
+              data-proctor-label="Sequential Question Navigation Section"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '1rem',
+                flexWrap: 'wrap',
+              }}
+            >
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-                  title="Direct Scroll to Top"
+                  disabled={activeStepIndex === 0}
+                  onClick={goToPreviousQuestion}
+                  data-proctor-label="Previous Question Button"
                 >
-                  <ChevronsUp size={15} /> Scroll to Top
+                  <ChevronLeft size={16} /> Previous Question
                 </Button>
-                <Button variant="accent" size="lg" type="submit" disabled={submitting || isBlocked}>
-                  <Send size={18} /> {submitting ? 'Submitting…' : 'Submit Assessment'}
-                </Button>
+                <span
+                  style={{
+                    fontSize: '0.84rem',
+                    color: isCurrentQuestionAnswered ? '#a5d6a7' : '#fde68a',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    fontWeight: 600,
+                  }}
+                >
+                  {isCurrentQuestionAnswered ? (
+                    <>
+                      <CheckCircle2 size={16} />
+                      {isLastQuestion
+                        ? `Question ${activeStepIndex + 1} answered. Ready to submit assessment!`
+                        : `Question ${activeStepIndex + 1} answered. Click "Next" to proceed to Question ${activeStepIndex + 2}.`}
+                    </>
+                  ) : (
+                    <>
+                      <Lock size={15} />
+                      {isLastQuestion
+                        ? `Answer Question ${activeStepIndex + 1} first before submitting.`
+                        : `Answer Question ${activeStepIndex + 1} first before moving to Question ${activeStepIndex + 2}.`}
+                    </>
+                  )}
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                {!isLastQuestion ? (
+                  <Button
+                    type="button"
+                    variant="accent"
+                    size="lg"
+                    disabled={!isCurrentQuestionAnswered}
+                    onClick={goToNextQuestion}
+                    data-proctor-label="Next Question Button"
+                    title={
+                      isCurrentQuestionAnswered
+                        ? `Move to Question ${activeStepIndex + 2}`
+                        : `You must answer Question ${activeStepIndex + 1} first before moving to Question ${activeStepIndex + 2}`
+                    }
+                    style={{
+                      opacity: isCurrentQuestionAnswered ? 1 : 0.6,
+                      cursor: isCurrentQuestionAnswered ? 'pointer' : 'not-allowed',
+                    }}
+                  >
+                    {isCurrentQuestionAnswered ? (
+                      <>
+                        Next Question (Q{activeStepIndex + 2}) <ChevronRight size={18} />
+                      </>
+                    ) : (
+                      <>
+                        <Lock size={16} /> Answer Q{activeStepIndex + 1} to Unlock Next
+                      </>
+                    )}
+                  </Button>
+                ) : (
+                  <Button
+                    variant="accent"
+                    size="lg"
+                    type="submit"
+                    disabled={submitting || isBlocked || !allQuestionsAnswered}
+                    data-proctor-label="Submit Assessment Button"
+                    style={{
+                      opacity: allQuestionsAnswered ? 1 : 0.6,
+                      cursor: allQuestionsAnswered ? 'pointer' : 'not-allowed',
+                    }}
+                  >
+                    <Send size={18} /> {submitting ? 'Submitting…' : 'Submit Assessment'}
+                  </Button>
+                )}
               </div>
             </div>
           </form>

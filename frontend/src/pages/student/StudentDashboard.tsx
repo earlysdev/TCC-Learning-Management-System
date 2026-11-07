@@ -35,6 +35,7 @@ export default function StudentDashboard() {
   const [detailsModalQuiz, setDetailsModalQuiz] = useState<Quiz | null>(null);
   const [privacyModalQuiz, setPrivacyModalQuiz] = useState<Quiz | null>(null);
   const [answers, setAnswers] = useState<StudentAnswerValue[]>([]);
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [takingQuizId, setTakingQuizId] = useState<number | null>(null);
   const [lockedQuizIds, setLockedQuizIds] = useState<number[]>(() => {
@@ -108,6 +109,7 @@ export default function StudentDashboard() {
     setError(null);
     setQuizResult(null);
     setAnswers([]);
+    setCurrentStepIndex(0);
     setSubmitting(true);
     try {
       const data = await lmsFetch<{ quiz: Quiz; attempt: typeof quizResult }>(`/student/quizzes/${quiz.id}`);
@@ -841,6 +843,19 @@ export default function StudentDashboard() {
       );
     }
 
+    const totalInlineQuestions = selectedQuiz.questions?.length || 0;
+    const clampedStepIdx = totalInlineQuestions > 0
+      ? Math.max(0, Math.min(totalInlineQuestions - 1, currentStepIndex))
+      : 0;
+    const currentInlineQuestion = selectedQuiz.questions?.[clampedStepIdx];
+    const isCurrentInlineAnswered = currentInlineQuestion
+      ? isAnswerProvided(answers[clampedStepIdx], currentInlineQuestion)
+      : false;
+    const isLastInlineQuestion = clampedStepIdx >= totalInlineQuestions - 1;
+    const allInlineAnswered = (selectedQuiz.questions || []).every((q, idx) =>
+      isAnswerProvided(answers[idx], q)
+    );
+
     return (
       <div style={{ maxWidth: '800px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
         <Button variant="outline" size="sm" onClick={() => setSelectedQuiz(null)}>
@@ -851,14 +866,14 @@ export default function StudentDashboard() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
             <Badge variant="primary">{selectedQuiz.subject}</Badge>
             <span style={{ fontSize: '0.85rem', color: 'var(--neutral-300)' }}>
-              {selectedQuiz.questions?.length || 0} Questions
+              Question {clampedStepIdx + 1} of {totalInlineQuestions}
             </span>
           </div>
           <h1 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'white', marginBottom: '0.5rem' }}>
             {selectedQuiz.title}
           </h1>
           <p style={{ color: 'var(--neutral-300)', fontSize: '0.95rem' }}>
-            {selectedQuiz.instructions || 'Choose the best answer for each question. You may only submit this quiz once.'}
+            {selectedQuiz.instructions || 'Choose the best answer for each question. You must answer the current question before moving to the next question.'}
           </p>
         </GlassCard>
 
@@ -869,7 +884,9 @@ export default function StudentDashboard() {
         )}
 
         <form onSubmit={handleSubmitQuiz} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          {selectedQuiz.questions?.map((q, qIndex) => {
+          {currentInlineQuestion && (() => {
+            const q = currentInlineQuestion;
+            const qIndex = clampedStepIdx;
             const qType = q.type ?? 'multiple_choice';
             const currentAns = answers[qIndex];
             return (
@@ -889,6 +906,7 @@ export default function StudentDashboard() {
                       type="text"
                       value={typeof currentAns === 'string' ? currentAns : ''}
                       onChange={(e) => {
+                        setError(null);
                         const next = [...answers];
                         next[qIndex] = e.target.value;
                         setAnswers(next);
@@ -911,6 +929,7 @@ export default function StudentDashboard() {
                       rows={4}
                       value={typeof currentAns === 'string' ? currentAns : ''}
                       onChange={(e) => {
+                        setError(null);
                         const next = [...answers];
                         next[qIndex] = e.target.value;
                         setAnswers(next);
@@ -952,6 +971,7 @@ export default function StudentDashboard() {
                             type="checkbox"
                             checked={isSelected}
                             onChange={() => {
+                              setError(null);
                               const next = [...answers];
                               const arr = Array.isArray(next[qIndex]) ? [...(next[qIndex] as number[])] : [];
                               const pos = arr.indexOf(optIndex);
@@ -997,6 +1017,7 @@ export default function StudentDashboard() {
                             value={optIndex} 
                             checked={isSelected}
                             onChange={() => {
+                              setError(null);
                               const next = [...answers];
                               next[qIndex] = optIndex;
                               setAnswers(next);
@@ -1014,11 +1035,54 @@ export default function StudentDashboard() {
                 )}
               </GlassCard>
             );
-          })}
+          })()}
 
-          <Button variant="accent" size="lg" type="submit" disabled={submitting} style={{ width: '100%', marginTop: '0.5rem' }}>
-            <Send size={18} /> {submitting ? 'Submitting Answers...' : 'Submit Quiz Now'}
-          </Button>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={clampedStepIdx === 0}
+              onClick={() => {
+                setError(null);
+                setCurrentStepIndex((prev) => Math.max(0, prev - 1));
+              }}
+            >
+              <ArrowLeft size={16} /> Previous Question
+            </Button>
+
+            {!isLastInlineQuestion ? (
+              <Button
+                type="button"
+                variant="accent"
+                disabled={!isCurrentInlineAnswered}
+                onClick={() => {
+                  if (!isCurrentInlineAnswered) {
+                    const msg = `Please answer Question ${clampedStepIdx + 1} first before moving to the next question.`;
+                    setError(msg);
+                    showToast(msg, 'warning');
+                    return;
+                  }
+                  setError(null);
+                  setCurrentStepIndex((prev) => Math.min(totalInlineQuestions - 1, prev + 1));
+                }}
+              >
+                {isCurrentInlineAnswered ? (
+                  <>Next Question <ArrowRight size={16} /></>
+                ) : (
+                  <><Lock size={15} /> Answer Question {clampedStepIdx + 1} First</>
+                )}
+              </Button>
+            ) : (
+              <Button
+                variant="accent"
+                size="lg"
+                type="submit"
+                disabled={submitting || !allInlineAnswered}
+              >
+                <Send size={18} /> {submitting ? 'Submitting Answers...' : 'Submit Quiz Now'}
+              </Button>
+            )}
+          </div>
         </form>
       </div>
     );
