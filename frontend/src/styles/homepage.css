@@ -355,6 +355,20 @@ html {
   width: 100%;
 }
 
+/* Section divider line (matches the clean edge under the hero slider) */
+.section::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.65) 0%, rgba(0, 0, 0, 0.35) 100%);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 10px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  z-index: 1;
+}
+
 .section-title {
   font-size: clamp(1.5rem, 2.5vw, 1.95rem);
   font-weight: 800;
