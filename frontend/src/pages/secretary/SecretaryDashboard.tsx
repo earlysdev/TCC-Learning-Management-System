@@ -1405,6 +1405,8 @@ export default function SecretaryDashboard() {
       yearLevelBlocksMap[activeTargetYear] || []
     );
 
+    const gridColsTemplate = '112px minmax(0, 1fr) 38px 38px 38px 132px';
+
     const renderSemesterCurriculumCard = (
       yrLevel: string,
       sem: '1st Semester' | '2nd Semester' | 'Summer',
@@ -1423,11 +1425,15 @@ export default function SecretaryDashboard() {
             border: '1px solid rgba(255, 255, 255, 0.09)',
             overflow: 'hidden',
             width: '100%',
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
           }}
         >
+          {/* Semester Title Bar */}
           <div
             style={{
-              padding: '0.65rem 1rem',
+              padding: '0.65rem 0.9rem',
               background:
                 sem === 'Summer'
                   ? 'rgba(245, 158, 11, 0.16)'
@@ -1437,12 +1443,13 @@ export default function SecretaryDashboard() {
               justifyContent: 'space-between',
               alignItems: 'center',
               gap: '0.5rem',
+              flexShrink: 0,
             }}
           >
             <span
               style={{
                 fontWeight: 800,
-                fontSize: '0.85rem',
+                fontSize: '0.84rem',
                 color: 'white',
                 textTransform: 'uppercase',
                 letterSpacing: '0.5px',
@@ -1455,113 +1462,136 @@ export default function SecretaryDashboard() {
             </span>
           </div>
 
-          <table
+          {/* Column Header Strip */}
+          <div
             style={{
-              width: '100%',
-              tableLayout: 'fixed',
-              borderCollapse: 'collapse',
-              textAlign: 'left',
-              color: 'white',
-              fontSize: '0.81rem',
+              display: 'grid',
+              gridTemplateColumns: gridColsTemplate,
+              alignItems: 'center',
+              background: 'rgba(255, 255, 255, 0.04)',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+              color: 'var(--neutral-300)',
+              fontSize: '0.72rem',
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.4px',
+              flexShrink: 0,
             }}
           >
-            <colgroup>
-              <col style={{ width: '112px' }} />
-              <col />
-              <col style={{ width: '38px' }} />
-              <col style={{ width: '38px' }} />
-              <col style={{ width: '38px' }} />
-              <col style={{ width: '110px' }} />
-            </colgroup>
-            <thead>
-              <tr
+            <div style={{ padding: '0.5rem 0.65rem', whiteSpace: 'nowrap' }}>Course Code</div>
+            <div style={{ padding: '0.5rem 0.65rem' }}>Descriptive Title</div>
+            <div style={{ padding: '0.5rem 0.2rem', textAlign: 'center' }}>Lec</div>
+            <div style={{ padding: '0.5rem 0.2rem', textAlign: 'center' }}>Lab</div>
+            <div style={{ padding: '0.5rem 0.2rem', textAlign: 'center' }}>TU</div>
+            <div style={{ padding: '0.5rem 0.65rem' }}>Preq</div>
+          </div>
+
+          {/* Flex-Stretched Course Rows Body (Eliminates any bottom gap between unequal semester counts) */}
+          <div
+            style={{
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'stretch',
+            }}
+          >
+            {semItems.map((subj) => (
+              <div
+                key={subj.code}
                 style={{
-                  background: 'rgba(255, 255, 255, 0.04)',
-                  borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-                  color: 'var(--neutral-300)',
-                  fontSize: '0.73rem',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.4px',
+                  flex: 1,
+                  display: 'grid',
+                  gridTemplateColumns: gridColsTemplate,
+                  alignItems: 'center',
+                  minHeight: '40px',
+                  borderBottom: '1px solid rgba(255, 255, 255, 0.045)',
+                  fontSize: '0.81rem',
+                  color: 'white',
                 }}
               >
-                <th style={{ padding: '0.55rem 0.65rem' }}>Course Code</th>
-                <th style={{ padding: '0.55rem 0.65rem' }}>Descriptive Title</th>
-                <th style={{ padding: '0.55rem 0.25rem', textAlign: 'center' }}>Lec</th>
-                <th style={{ padding: '0.55rem 0.25rem', textAlign: 'center' }}>Lab</th>
-                <th style={{ padding: '0.55rem 0.25rem', textAlign: 'center' }}>TU</th>
-                <th style={{ padding: '0.55rem 0.65rem' }}>Preq</th>
-              </tr>
-            </thead>
-            <tbody>
-              {semItems.map((subj) => (
-                <tr key={subj.code} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.045)' }}>
-                  <td style={{ padding: '0.55rem 0.65rem', verticalAlign: 'middle' }}>
-                    <span
-                      style={{
-                        display: 'inline-block',
-                        fontFamily: 'monospace',
-                        fontWeight: 800,
-                        fontSize: '0.75rem',
-                        padding: '0.15rem 0.42rem',
-                        borderRadius: '6px',
-                        background: 'rgba(139, 92, 246, 0.18)',
-                        border: '1px solid rgba(139, 92, 246, 0.35)',
-                        color: '#ddd6fe',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {subj.code}
-                    </span>
-                  </td>
-                  <td
+                <div style={{ padding: '0.45rem 0.65rem' }}>
+                  <span
                     style={{
-                      padding: '0.55rem 0.65rem',
-                      fontWeight: 600,
-                      color: '#f8fafc',
-                      lineHeight: 1.35,
-                      wordBreak: 'break-word',
-                    }}
-                  >
-                    {subj.name}
-                  </td>
-                  <td style={{ padding: '0.55rem 0.25rem', textAlign: 'center', color: '#cbd5e1' }}>{subj.lec}</td>
-                  <td style={{ padding: '0.55rem 0.25rem', textAlign: 'center', color: '#cbd5e1' }}>{subj.lab}</td>
-                  <td style={{ padding: '0.55rem 0.25rem', textAlign: 'center', fontWeight: 800, color: '#fbbf24' }}>{subj.units}</td>
-                  <td
-                    style={{
-                      padding: '0.55rem 0.65rem',
-                      color: subj.prerequisite === 'none' ? 'var(--neutral-400)' : '#93c5fd',
-                      fontSize: '0.73rem',
+                      display: 'inline-block',
                       fontFamily: 'monospace',
-                      wordBreak: 'break-word',
-                      lineHeight: 1.3,
+                      fontWeight: 800,
+                      fontSize: '0.74rem',
+                      padding: '0.15rem 0.42rem',
+                      borderRadius: '6px',
+                      background: 'rgba(139, 92, 246, 0.18)',
+                      border: '1px solid rgba(139, 92, 246, 0.35)',
+                      color: '#ddd6fe',
+                      whiteSpace: 'nowrap',
                     }}
                   >
-                    {subj.prerequisite}
-                  </td>
-                </tr>
-              ))}
-              <tr style={{ background: 'rgba(255, 255, 255, 0.05)', fontWeight: 800 }}>
-                <td
-                  colSpan={2}
+                    {subj.code}
+                  </span>
+                </div>
+                <div
                   style={{
-                    padding: '0.55rem 0.65rem',
-                    textAlign: 'right',
-                    color: '#cbd5e1',
-                    fontSize: '0.74rem',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
+                    padding: '0.45rem 0.65rem',
+                    fontWeight: 600,
+                    color: '#f8fafc',
+                    lineHeight: 1.3,
                   }}
                 >
-                  Total Credits
-                </td>
-                <td style={{ padding: '0.55rem 0.25rem', textAlign: 'center', color: 'white' }}>{totalLec}</td>
-                <td style={{ padding: '0.55rem 0.25rem', textAlign: 'center', color: 'white' }}>{totalLab}</td>
-                <td style={{ padding: '0.55rem 0.25rem', textAlign: 'center', color: '#a5d6a7' }}>{totalTu}</td>
-                <td style={{ padding: '0.55rem 0.65rem' }} />
-              </tr>
-            </tbody>
-          </table>
+                  {subj.name}
+                </div>
+                <div style={{ padding: '0.45rem 0.2rem', textAlign: 'center', color: '#cbd5e1' }}>
+                  {subj.lec}
+                </div>
+                <div style={{ padding: '0.45rem 0.2rem', textAlign: 'center', color: '#cbd5e1' }}>
+                  {subj.lab}
+                </div>
+                <div style={{ padding: '0.45rem 0.2rem', textAlign: 'center', fontWeight: 800, color: '#fbbf24' }}>
+                  {subj.units}
+                </div>
+                <div
+                  style={{
+                    padding: '0.45rem 0.65rem',
+                    color: subj.prerequisite === 'none' ? 'var(--neutral-400)' : '#93c5fd',
+                    fontSize: '0.72rem',
+                    fontFamily: 'monospace',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {subj.prerequisite}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Flush Bottom Total Credits Footer */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: gridColsTemplate,
+              alignItems: 'center',
+              minHeight: '40px',
+              background: 'rgba(255, 255, 255, 0.055)',
+              fontWeight: 800,
+              fontSize: '0.81rem',
+              flexShrink: 0,
+            }}
+          >
+            <div
+              style={{
+                gridColumn: '1 / span 2',
+                padding: '0.5rem 0.65rem',
+                textAlign: 'right',
+                color: '#cbd5e1',
+                fontSize: '0.74rem',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+              }}
+            >
+              Total Credits
+            </div>
+            <div style={{ padding: '0.5rem 0.2rem', textAlign: 'center', color: 'white' }}>{totalLec}</div>
+            <div style={{ padding: '0.5rem 0.2rem', textAlign: 'center', color: 'white' }}>{totalLab}</div>
+            <div style={{ padding: '0.5rem 0.2rem', textAlign: 'center', color: '#a5d6a7' }}>{totalTu}</div>
+            <div style={{ padding: '0.5rem 0.65rem' }} />
+          </div>
         </div>
       );
     };
@@ -1615,10 +1645,10 @@ export default function SecretaryDashboard() {
           </div>
 
           <form onSubmit={handleCreateSectionAndYearLevel} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '1rem', alignItems: 'end' }}>
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
-                  <label style={{ fontSize: '0.84rem', color: 'var(--neutral-200)', fontWeight: 700 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '1rem', alignItems: 'start' }}>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: '22px', marginBottom: '0.45rem' }}>
+                  <label style={{ fontSize: '0.84rem', color: 'var(--neutral-200)', fontWeight: 700, margin: 0 }}>
                     Year Level (1st – 4th Year)
                   </label>
                   <button
@@ -1632,6 +1662,7 @@ export default function SecretaryDashboard() {
                       fontWeight: 700,
                       cursor: 'pointer',
                       textDecoration: 'underline',
+                      padding: 0,
                     }}
                   >
                     {newSectionYearMode === 'existing' ? '+ Custom Year Level' : 'Select Standard Year (1st–4th)'}
@@ -1643,6 +1674,7 @@ export default function SecretaryDashboard() {
                     value={newSectionYearLevel}
                     onChange={(e) => setNewSectionYearLevel(e.target.value)}
                     className="form-select"
+                    style={{ height: '44px', margin: 0, width: '100%', boxSizing: 'border-box' }}
                   >
                     {allAvailableYearLevels.map((yrLbl) => (
                       <option key={yrLbl} value={yrLbl}>
@@ -1651,18 +1683,21 @@ export default function SecretaryDashboard() {
                     ))}
                   </select>
                 ) : (
-                  <Input
+                  <input
+                    type="text"
+                    className="form-input"
                     placeholder="e.g. 1st Year, 4th Year, or Bridging Year"
                     value={newCustomYearLevelInput}
                     onChange={(e) => setNewCustomYearLevelInput(e.target.value)}
                     required
+                    style={{ height: '44px', margin: 0, width: '100%', boxSizing: 'border-box' }}
                   />
                 )}
               </div>
 
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
-                  <label style={{ fontSize: '0.84rem', color: 'var(--neutral-200)', fontWeight: 700 }}>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: '22px', marginBottom: '0.45rem' }}>
+                  <label style={{ fontSize: '0.84rem', color: 'var(--neutral-200)', fontWeight: 700, margin: 0 }}>
                     Class Section / Block Name
                   </label>
                   <button
@@ -1675,25 +1710,34 @@ export default function SecretaryDashboard() {
                       fontSize: '0.75rem',
                       fontWeight: 700,
                       cursor: 'pointer',
+                      padding: 0,
                     }}
                   >
                     Suggested: {suggestedBlock}
                   </button>
                 </div>
-                <Input
+                <input
+                  type="text"
+                  className="form-input"
                   placeholder="e.g. Block - 1F or 1F"
                   value={newSectionName}
                   onChange={(e) => setNewSectionName(e.target.value)}
                   required
+                  style={{ height: '44px', margin: 0, width: '100%', boxSizing: 'border-box' }}
                 />
               </div>
 
-              <div>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: '22px', marginBottom: '0.45rem' }}>
+                  <span style={{ fontSize: '0.78rem', color: 'var(--neutral-400)', fontWeight: 600 }}>
+                    Action
+                  </span>
+                </div>
                 <Button
                   type="submit"
                   variant="accent"
                   disabled={creatingSection}
-                  style={{ width: '100%', height: '42px' }}
+                  style={{ width: '100%', height: '44px', margin: 0, boxSizing: 'border-box' }}
                 >
                   <Plus size={17} /> {creatingSection ? 'Creating Section...' : 'Create Section / Block'}
                 </Button>
@@ -1701,7 +1745,7 @@ export default function SecretaryDashboard() {
             </div>
 
             {/* Quick-fill chips for 1st to 4th Year next blocks */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', paddingTop: '0.25rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', paddingTop: '0.15rem' }}>
               <span style={{ fontSize: '0.76rem', color: 'var(--neutral-400)', fontWeight: 600 }}>
                 Quick Presets:
               </span>
@@ -1747,9 +1791,9 @@ export default function SecretaryDashboard() {
             const yearUnits = yearCourses.reduce((sum, c) => sum + c.units, 0);
 
             return (
-              <GlassCard key={yearLbl} style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '1rem' }}>
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.6rem' }}>
+              <GlassCard key={yearLbl} style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '0.9rem' }}>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.85rem' }}>
                     <div>
                       <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'white', margin: 0 }}>{yearLbl}</h3>
                       <span style={{ fontSize: '0.78rem', color: 'var(--neutral-300)' }}>
@@ -1764,9 +1808,9 @@ export default function SecretaryDashboard() {
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem', marginTop: '0.85rem' }}>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                     {blocks.length === 0 ? (
-                      <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--neutral-400)', fontSize: '0.85rem', background: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-sm)' }}>
+                      <div style={{ flex: 1, padding: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', color: 'var(--neutral-400)', fontSize: '0.85rem', background: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-sm)' }}>
                         No sections created for {yearLbl} yet.
                       </div>
                     ) : (
@@ -1785,11 +1829,13 @@ export default function SecretaryDashboard() {
                           <div
                             key={blk}
                             style={{
+                              flex: 1,
+                              minHeight: '42px',
                               display: 'flex',
                               justifyContent: 'space-between',
                               alignItems: 'center',
                               gap: '0.5rem',
-                              padding: '0.6rem 0.85rem',
+                              padding: '0.55rem 0.85rem',
                               background: 'rgba(255,255,255,0.04)',
                               border: '1px solid var(--glass-border)',
                               borderRadius: 'var(--radius-sm)',
@@ -2224,19 +2270,22 @@ export default function SecretaryDashboard() {
       )}
 
       {/* Filters row */}
-      <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
         <div style={{ flex: 1, minWidth: '240px' }}>
-          <Input 
+          <input
+            type="text"
+            className="form-input"
             placeholder="Search by student name, ID, block, or email..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
+            style={{ height: '42px', margin: 0, width: '100%', boxSizing: 'border-box' }}
           />
         </div>
         <select 
           value={blockFilter} 
           onChange={e => setBlockFilter(e.target.value)}
           className="form-select"
-          style={{ width: '220px' }}
+          style={{ width: '220px', height: '42px', margin: 0, boxSizing: 'border-box' }}
         >
           <option value="">All Year Levels &amp; Blocks</option>
           {Object.entries(yearLevelBlocksMap).map(([yearLbl, blocks]) => (
@@ -2252,7 +2301,7 @@ export default function SecretaryDashboard() {
           value={statusFilter} 
           onChange={e => setStatusFilter(e.target.value)}
           className="form-select"
-          style={{ width: '160px' }}
+          style={{ width: '160px', height: '42px', margin: 0, boxSizing: 'border-box' }}
         >
           <option value="">All Statuses</option>
           <option value="active">Active</option>
