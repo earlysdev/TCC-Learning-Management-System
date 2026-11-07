@@ -386,19 +386,46 @@ html {
 }
 
 .section-about {
-  background: linear-gradient(180deg, rgba(28, 4, 7, 0.82) 0%, rgba(44, 7, 11, 0.78) 100%);
+  background:
+    radial-gradient(ellipse 60% 45% at 50% 0%, rgba(245, 158, 11, 0.14) 0%, transparent 70%),
+    linear-gradient(180deg, rgba(26, 4, 7, 0.82) 0%, rgba(58, 9, 15, 0.78) 50%, rgba(26, 4, 7, 0.9) 100%),
+    url('/assets/images/tcc-campus.jpg') center / cover no-repeat;
+  background-attachment: scroll, scroll, fixed;
 }
 
 .section-programs {
-  background: linear-gradient(180deg, rgba(44, 7, 11, 0.78) 0%, rgba(24, 4, 7, 0.84) 100%);
+  background:
+    radial-gradient(ellipse 55% 40% at 15% 20%, rgba(245, 158, 11, 0.12) 0%, transparent 70%),
+    radial-gradient(ellipse 55% 40% at 85% 80%, rgba(127, 18, 30, 0.35) 0%, transparent 70%),
+    linear-gradient(180deg, rgba(26, 4, 7, 0.9) 0%, rgba(62, 10, 17, 0.8) 50%, rgba(26, 4, 7, 0.9) 100%),
+    url('/assets/images/tcc-programs.png') center / cover no-repeat;
+  background-attachment: scroll, scroll, scroll, fixed;
 }
 
 .section-features {
-  background: linear-gradient(180deg, rgba(24, 4, 7, 0.84) 0%, rgba(44, 7, 11, 0.78) 100%);
+  background:
+    radial-gradient(ellipse 60% 45% at 50% 100%, rgba(245, 158, 11, 0.12) 0%, transparent 70%),
+    linear-gradient(180deg, rgba(26, 4, 7, 0.9) 0%, rgba(58, 9, 15, 0.8) 50%, rgba(26, 4, 7, 0.9) 100%),
+    url('/assets/images/tcc-lobby.png') center / cover no-repeat;
+  background-attachment: scroll, scroll, fixed;
 }
 
 .section-download {
-  background: linear-gradient(180deg, rgba(44, 7, 11, 0.78) 0%, rgba(22, 4, 7, 0.92) 100%);
+  background:
+    radial-gradient(ellipse 50% 50% at 80% 50%, rgba(245, 158, 11, 0.14) 0%, transparent 70%),
+    linear-gradient(180deg, rgba(26, 4, 7, 0.9) 0%, rgba(54, 8, 14, 0.82) 50%, rgba(22, 4, 7, 0.95) 100%),
+    url('/assets/images/tcc-banner.jpg') center / cover no-repeat;
+  background-attachment: scroll, scroll, fixed;
+}
+
+/* Fixed backgrounds are unreliable on touch devices; fall back to scroll */
+@media (max-width: 992px), (hover: none) {
+  .section-about,
+  .section-programs,
+  .section-features,
+  .section-download {
+    background-attachment: scroll;
+  }
 }
 
 /* CARDS - WHITE FROSTED */
