@@ -999,19 +999,34 @@ export default function SecretaryDashboard() {
   const renderCreateAccount = () => {
     const pwStrength = evaluatePasswordStrength(password);
     const fillPct = Math.min(100, Math.round((currentAutoAssignment.currentCount / MAX_STUDENTS_PER_SECTION) * 100));
+    const yearStudentsTotal = students.filter(
+      (s) => getYearLevelFromBlock(s.section, s.grade) === yearLevel
+    ).length;
+    const yearTotalCapacity = currentAutoAssignment.blockUsage.length * MAX_STUDENTS_PER_SECTION;
 
     return (
-      <div style={{ maxWidth: '780px', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-        <div>
-          <span style={{ fontSize: '0.8rem', color: 'var(--primary-300)', letterSpacing: '1px', textTransform: 'uppercase', fontWeight: 600 }}>
-            REGISTRATION &amp; AUTO-SECTIONING
-          </span>
-          <h1 style={{ fontSize: '2rem', fontWeight: 800, color: 'white', marginTop: '0.25rem' }}>
-            Create New Account
-          </h1>
-          <p style={{ color: 'var(--neutral-300)' }}>
-            Register a verified student learner or faculty teacher. Students are automatically assigned to the first vacant section in their Year Level (50 students max per section).
-          </p>
+      <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        {/* Full-Width Top Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+          <div>
+            <span style={{ fontSize: '0.8rem', color: 'var(--primary-300)', letterSpacing: '1px', textTransform: 'uppercase', fontWeight: 600 }}>
+              REGISTRATION &amp; AUTO-SECTIONING
+            </span>
+            <h1 style={{ fontSize: '2rem', fontWeight: 800, color: 'white', marginTop: '0.25rem' }}>
+              Create New Account
+            </h1>
+            <p style={{ color: 'var(--neutral-300)' }}>
+              Register a verified student learner or faculty teacher. Students are automatically assigned to the first vacant section in their Year Level (50 students max per section).
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <Button variant="outline" onClick={() => handleSectionChange('blocks')}>
+              <Layers size={16} /> Manage Sections &amp; Years
+            </Button>
+            <Button variant="outline" onClick={() => handleSectionChange('student_records')}>
+              <BookOpen size={16} /> Student Directory ({students.length})
+            </Button>
+          </div>
         </div>
 
         {notice && (
@@ -1026,355 +1041,603 @@ export default function SecretaryDashboard() {
           </div>
         )}
 
-        <GlassCard>
-          <form onSubmit={handleCreateUser} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--neutral-300)', fontWeight: 600, marginBottom: '0.4rem' }}>
-                Account Role
-              </label>
-              <div style={{ display: 'flex', gap: '1rem' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'white', cursor: 'pointer' }}>
-                  <input 
-                    type="radio" 
-                    name="role" 
-                    value="student" 
-                    checked={newUserRole === 'student'} 
-                    onChange={() => setNewUserRole('student')}
-                    style={{ accentColor: 'var(--primary-400)' }}
-                  />
-                  Student
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'white', cursor: 'pointer' }}>
-                  <input 
-                    type="radio" 
-                    name="role" 
-                    value="teacher" 
-                    checked={newUserRole === 'teacher'} 
-                    onChange={() => setNewUserRole('teacher')}
-                    style={{ accentColor: 'var(--primary-400)' }}
-                  />
-                  Teacher
-                </label>
-              </div>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-              <Input 
-                label="First Name"
-                placeholder="e.g. Juan"
-                value={firstName}
-                onChange={e => setFirstName(e.target.value)}
-                required
-              />
-              <Input 
-                label="Last Name"
-                placeholder="e.g. Dela Cruz"
-                value={lastName}
-                onChange={e => setLastName(e.target.value)}
-                required
-              />
-            </div>
-
-            <Input 
-              label="Email Address"
-              type="email"
-              placeholder="e.g. juan.delacruz@tcc.edu.ph"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              required
-            />
-
-            {/* Strong Password Generator & Field */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-                <label style={{ fontSize: '0.85rem', color: 'var(--neutral-200)', fontWeight: 600 }}>
-                  Initial Password
-                </label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                  <button
-                    type="button"
-                    onClick={handleGenerateStrongPassword}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.35rem',
-                      padding: '0.3rem 0.7rem',
-                      borderRadius: '8px',
-                      background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.22), rgba(139, 92, 246, 0.25))',
-                      border: '1px solid rgba(251, 191, 36, 0.45)',
-                      color: '#fde68a',
-                      fontSize: '0.76rem',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <KeyRound size={13} /> Generate Strong Password
-                  </button>
-                  {password && (
-                    <button
-                      type="button"
-                      onClick={handleCopyPassword}
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.3rem',
-                        padding: '0.3rem 0.6rem',
-                        borderRadius: '8px',
-                        background: 'rgba(255, 255, 255, 0.07)',
-                        border: '1px solid rgba(255, 255, 255, 0.16)',
-                        color: copiedPassword ? '#86efac' : '#e2e8f0',
-                        fontSize: '0.75rem',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {copiedPassword ? <Check size={13} /> : <Copy size={13} />}
-                      {copiedPassword ? 'Copied' : 'Copy'}
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div style={{ position: 'relative' }}>
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="Enter initial password or click Generate Strong Password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  minLength={8}
-                  className="form-input"
-                  style={{
-                    width: '100%',
-                    paddingRight: '2.75rem',
-                    fontFamily: showPassword ? 'monospace' : 'inherit',
-                    letterSpacing: showPassword ? '0.4px' : 'normal',
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((prev) => !prev)}
-                  title={showPassword ? 'Hide password' : 'Show password'}
-                  style={{
-                    position: 'absolute',
-                    right: '0.75rem',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--neutral-300)',
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    padding: 0,
-                  }}
-                >
-                  {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
-                </button>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: '0.76rem', color: 'var(--neutral-400)' }}>
-                  Minimum 8 characters. Click <strong style={{ color: '#fde68a' }}>Generate Strong Password</strong> for a secure 12-character credential.
-                </span>
-                {password && (
-                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: pwStrength.color }}>
-                    {pwStrength.label}
-                  </span>
-                )}
-              </div>
-              {password && (
-                <div style={{ width: '100%', height: '5px', background: 'rgba(255,255,255,0.08)', borderRadius: '999px', overflow: 'hidden' }}>
-                  <div
-                    style={{
-                      width: `${pwStrength.score}%`,
-                      height: '100%',
-                      background: pwStrength.color,
-                      transition: 'width 0.2s ease',
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-
-            {newUserRole === 'student' && (
-              <>
-                <Input 
-                  label="Student ID"
-                  placeholder="e.g. 20273710"
-                  value={lrn}
-                  onChange={e => setLrn(e.target.value.replace(/\D/g, '').slice(0, 12))}
-                  maxLength={12}
-                  required
-                  helpText="Students can use their Student ID (e.g. 20273710) as their login username."
-                />
-
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem', alignItems: 'start' }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--neutral-300)', fontWeight: 600, marginBottom: '0.4rem' }}>
-                      Year Level
-                    </label>
-                    <select 
-                      value={yearLevel}
-                      onChange={e => setYearLevel(e.target.value)}
-                      className="form-select"
-                    >
-                      {allAvailableYearLevels.map((yrLbl) => {
-                        const blks = yearLevelBlocksMap[yrLbl] || [];
-                        return (
-                          <option key={yrLbl} value={yrLbl}>
-                            {yrLbl} ({blks.length} {blks.length === 1 ? 'Section' : 'Sections'})
-                          </option>
-                        );
-                      })}
-                    </select>
-                    <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--neutral-400)', marginTop: '0.35rem' }}>
-                      Select the student&apos;s Year Level. The system automatically assigns the section.
-                    </span>
-                  </div>
-
-                  {/* Auto-Assigned Section Box (No manual selection needed; 50 students per section rule) */}
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
-                      <label style={{ fontSize: '0.85rem', color: 'var(--neutral-300)', fontWeight: 600 }}>
-                        Assigned Class Section (Automatic)
-                      </label>
-                      <span
-                        style={{
-                          fontSize: '0.68rem',
-                          fontWeight: 800,
-                          padding: '0.12rem 0.5rem',
-                          borderRadius: '999px',
-                          background: 'rgba(16, 185, 129, 0.18)',
-                          border: '1px solid rgba(16, 185, 129, 0.4)',
-                          color: '#6ee7b7',
-                          letterSpacing: '0.4px',
-                          textTransform: 'uppercase',
-                        }}
-                      >
-                        Auto-Assigned • 50 Max
-                      </span>
-                    </div>
-
-                    <div
-                      style={{
-                        padding: '0.7rem 0.9rem',
-                        borderRadius: '10px',
-                        background: 'rgba(255, 255, 255, 0.05)',
-                        border: '1px solid rgba(255, 255, 255, 0.14)',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '0.45rem',
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
-                        <span style={{ fontWeight: 800, fontSize: '1rem', color: 'white', whiteSpace: 'nowrap' }}>
-                          {currentAutoAssignment.assignedBlock}
-                        </span>
-                        <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#fbbf24', whiteSpace: 'nowrap' }}>
-                          {currentAutoAssignment.currentCount} / {MAX_STUDENTS_PER_SECTION} Students
-                        </span>
-                      </div>
-
-                      <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.08)', borderRadius: '999px', overflow: 'hidden' }}>
-                        <div
-                          style={{
-                            width: `${fillPct}%`,
-                            height: '100%',
-                            background: fillPct >= 90 ? '#f59e0b' : '#10b981',
-                            transition: 'width 0.25s ease',
-                          }}
-                        />
-                      </div>
-
-                      <div style={{ fontSize: '0.74rem', color: 'var(--neutral-300)', lineHeight: 1.35 }}>
-                        <strong style={{ color: '#a7f3d0' }}>{currentAutoAssignment.vacantSlots} vacant slots</strong> remaining in{' '}
-                        <strong style={{ color: 'white' }}>{currentAutoAssignment.assignedBlock}</strong>. Once it reaches{' '}
-                        <strong>{MAX_STUDENTS_PER_SECTION}/{MAX_STUDENTS_PER_SECTION}</strong>, the next student automatically moves to{' '}
-                        <strong style={{ color: '#c4b5fd' }}>{currentAutoAssignment.nextFallbackBlock}</strong>.
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Live Year Level Section Capacity Strip */}
+        {/* Full-Width 2-Column Balanced Workspace Grid */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))',
+            gap: '1.35rem',
+            alignItems: 'stretch',
+          }}
+        >
+          {/* Left Column: Account Registration Form */}
+          <GlassCard style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+            <form onSubmit={handleCreateUser} style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem', height: '100%', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
                 <div
                   style={{
-                    padding: '0.75rem 0.9rem',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    paddingBottom: '0.75rem',
+                    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                  }}
+                >
+                  <div>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--primary-300)', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                      OFFICIAL ACCOUNT REGISTRATION
+                    </span>
+                    <h2 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'white', margin: '0.15rem 0 0' }}>
+                      Account Credentials &amp; Academic Profile
+                    </h2>
+                  </div>
+                  <Badge variant="primary">S.Y. 2025–2026</Badge>
+                </div>
+
+                {/* Segmented Account Role Cards */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.84rem', color: 'var(--neutral-200)', fontWeight: 700, marginBottom: '0.45rem' }}>
+                    Account Role
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <button
+                      type="button"
+                      onClick={() => setNewUserRole('student')}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '0.7rem 0.95rem',
+                        borderRadius: '10px',
+                        background:
+                          newUserRole === 'student'
+                            ? 'rgba(139, 92, 246, 0.22)'
+                            : 'rgba(255, 255, 255, 0.04)',
+                        border:
+                          newUserRole === 'student'
+                            ? '1px solid rgba(167, 139, 250, 0.6)'
+                            : '1px solid rgba(255, 255, 255, 0.1)',
+                        color: 'white',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                        <GraduationCap size={18} style={{ color: newUserRole === 'student' ? '#c4b5fd' : 'var(--neutral-400)' }} />
+                        <div>
+                          <div style={{ fontWeight: 800, fontSize: '0.88rem' }}>Student Learner</div>
+                          <div style={{ fontSize: '0.72rem', color: 'var(--neutral-300)' }}>Auto-assigned to 50-cap block</div>
+                        </div>
+                      </div>
+                      <input
+                        type="radio"
+                        name="role"
+                        value="student"
+                        checked={newUserRole === 'student'}
+                        onChange={() => setNewUserRole('student')}
+                        style={{ accentColor: 'var(--primary-400)' }}
+                      />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setNewUserRole('teacher')}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '0.7rem 0.95rem',
+                        borderRadius: '10px',
+                        background:
+                          newUserRole === 'teacher'
+                            ? 'rgba(245, 158, 11, 0.18)'
+                            : 'rgba(255, 255, 255, 0.04)',
+                        border:
+                          newUserRole === 'teacher'
+                            ? '1px solid rgba(251, 191, 36, 0.55)'
+                            : '1px solid rgba(255, 255, 255, 0.1)',
+                        color: 'white',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                        <Users size={18} style={{ color: newUserRole === 'teacher' ? '#fde68a' : 'var(--neutral-400)' }} />
+                        <div>
+                          <div style={{ fontWeight: 800, fontSize: '0.88rem' }}>Faculty Teacher</div>
+                          <div style={{ fontSize: '0.72rem', color: 'var(--neutral-300)' }}>BSIT course &amp; quiz instructor</div>
+                        </div>
+                      </div>
+                      <input
+                        type="radio"
+                        name="role"
+                        value="teacher"
+                        checked={newUserRole === 'teacher'}
+                        onChange={() => setNewUserRole('teacher')}
+                        style={{ accentColor: 'var(--primary-400)' }}
+                      />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Row 1: First Name & Last Name */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.84rem', color: 'var(--neutral-200)', fontWeight: 700, height: '22px', marginBottom: '0.4rem' }}>
+                      First Name
+                    </label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. Juan"
+                      value={firstName}
+                      onChange={e => setFirstName(e.target.value)}
+                      required
+                      style={{ height: '44px', margin: 0, width: '100%', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.84rem', color: 'var(--neutral-200)', fontWeight: 700, height: '22px', marginBottom: '0.4rem' }}>
+                      Last Name
+                    </label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. Dela Cruz"
+                      value={lastName}
+                      onChange={e => setLastName(e.target.value)}
+                      required
+                      style={{ height: '44px', margin: 0, width: '100%', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                </div>
+
+                {/* Row 2: Email Address & Student ID side-by-side (or full width Email for Teacher) */}
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: newUserRole === 'student' ? 'repeat(auto-fit, minmax(200px, 1fr))' : '1fr',
+                    gap: '1rem',
+                    alignItems: 'start',
+                  }}
+                >
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.84rem', color: 'var(--neutral-200)', fontWeight: 700, height: '22px', marginBottom: '0.4rem' }}>
+                      Official Email Address
+                    </label>
+                    <input
+                      type="email"
+                      className="form-input"
+                      placeholder="e.g. juan.delacruz@tcc.edu.ph"
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                      required
+                      style={{ height: '44px', margin: 0, width: '100%', boxSizing: 'border-box' }}
+                    />
+                  </div>
+
+                  {newUserRole === 'student' && (
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: '22px', marginBottom: '0.4rem' }}>
+                        <label style={{ fontSize: '0.84rem', color: 'var(--neutral-200)', fontWeight: 700, margin: 0 }}>
+                          Student ID (Login Username)
+                        </label>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--neutral-400)' }}>Max 12 digits</span>
+                      </div>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="e.g. 20273710"
+                        value={lrn}
+                        onChange={e => setLrn(e.target.value.replace(/\D/g, '').slice(0, 12))}
+                        maxLength={12}
+                        required
+                        style={{ height: '44px', margin: 0, width: '100%', boxSizing: 'border-box', fontFamily: 'monospace' }}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Row 3: Strong Password Generator & Field */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', minHeight: '24px' }}>
+                    <label style={{ fontSize: '0.84rem', color: 'var(--neutral-200)', fontWeight: 700, margin: 0 }}>
+                      Initial Password
+                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                      <button
+                        type="button"
+                        onClick={handleGenerateStrongPassword}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.35rem',
+                          padding: '0.28rem 0.68rem',
+                          borderRadius: '8px',
+                          background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.22), rgba(139, 92, 246, 0.25))',
+                          border: '1px solid rgba(251, 191, 36, 0.45)',
+                          color: '#fde68a',
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <KeyRound size={13} /> Generate Strong Password
+                      </button>
+                      {password && (
+                        <button
+                          type="button"
+                          onClick={handleCopyPassword}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.3rem',
+                            padding: '0.28rem 0.6rem',
+                            borderRadius: '8px',
+                            background: 'rgba(255, 255, 255, 0.07)',
+                            border: '1px solid rgba(255, 255, 255, 0.16)',
+                            color: copiedPassword ? '#86efac' : '#e2e8f0',
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {copiedPassword ? <Check size={13} /> : <Copy size={13} />}
+                          {copiedPassword ? 'Copied' : 'Copy'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      placeholder="Enter initial password or click Generate Strong Password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      minLength={8}
+                      className="form-input"
+                      style={{
+                        height: '44px',
+                        margin: 0,
+                        width: '100%',
+                        boxSizing: 'border-box',
+                        paddingRight: '2.75rem',
+                        fontFamily: showPassword ? 'monospace' : 'inherit',
+                        letterSpacing: showPassword ? '0.4px' : 'normal',
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      title={showPassword ? 'Hide password' : 'Show password'}
+                      style={{
+                        position: 'absolute',
+                        right: '0.75rem',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--neutral-300)',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        padding: 0,
+                      }}
+                    >
+                      {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '0.74rem', color: 'var(--neutral-400)' }}>
+                      Minimum 8 characters. Click <strong style={{ color: '#fde68a' }}>Generate Strong Password</strong> for a 12-character credential.
+                    </span>
+                    {password && (
+                      <span style={{ fontSize: '0.74rem', fontWeight: 700, color: pwStrength.color }}>
+                        {pwStrength.label}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ width: '100%', height: '5px', background: 'rgba(255,255,255,0.08)', borderRadius: '999px', overflow: 'hidden' }}>
+                    <div
+                      style={{
+                        width: `${password ? pwStrength.score : 0}%`,
+                        height: '100%',
+                        background: pwStrength.color,
+                        transition: 'width 0.2s ease',
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Row 4 (Student): Year Level & Auto-Assigned Section — Locked 100% on the exact same horizontal line */}
+                {newUserRole === 'student' && (
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
+                      gap: '1rem',
+                      alignItems: 'start',
+                    }}
+                  >
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: '24px', marginBottom: '0.4rem' }}>
+                        <label style={{ fontSize: '0.84rem', color: 'var(--neutral-200)', fontWeight: 700, margin: 0 }}>
+                          Year Level
+                        </label>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--neutral-400)' }}>Select 1st–4th Yr</span>
+                      </div>
+                      <select
+                        value={yearLevel}
+                        onChange={e => setYearLevel(e.target.value)}
+                        className="form-select"
+                        style={{ height: '46px', margin: 0, width: '100%', boxSizing: 'border-box' }}
+                      >
+                        {allAvailableYearLevels.map((yrLbl) => {
+                          const blks = yearLevelBlocksMap[yrLbl] || [];
+                          return (
+                            <option key={yrLbl} value={yrLbl}>
+                              {yrLbl} ({blks.length} {blks.length === 1 ? 'Section' : 'Sections'})
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.4rem', height: '24px', marginBottom: '0.4rem' }}>
+                        <label style={{ fontSize: '0.84rem', color: 'var(--neutral-200)', fontWeight: 700, margin: 0, whiteSpace: 'nowrap' }}>
+                          Assigned Section (Auto)
+                        </label>
+                        <span
+                          style={{
+                            fontSize: '0.66rem',
+                            fontWeight: 800,
+                            padding: '0.12rem 0.5rem',
+                            borderRadius: '999px',
+                            background: 'rgba(16, 185, 129, 0.18)',
+                            border: '1px solid rgba(16, 185, 129, 0.45)',
+                            color: '#6ee7b7',
+                            letterSpacing: '0.3px',
+                            textTransform: 'uppercase',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          Auto • 50 Max
+                        </span>
+                      </div>
+
+                      <div
+                        style={{
+                          height: '46px',
+                          padding: '0 0.85rem',
+                          borderRadius: '8px',
+                          background: 'rgba(16, 185, 129, 0.1)',
+                          border: '1px solid rgba(16, 185, 129, 0.4)',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          gap: '0.5rem',
+                          boxSizing: 'border-box',
+                        }}
+                      >
+                        <span style={{ fontWeight: 800, fontSize: '0.96rem', color: 'white', whiteSpace: 'nowrap' }}>
+                          {currentAutoAssignment.assignedBlock}
+                        </span>
+                        <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#a7f3d0', whiteSpace: 'nowrap' }}>
+                          {currentAutoAssignment.currentCount} / {MAX_STUDENTS_PER_SECTION} Enrolled ({currentAutoAssignment.vacantSlots} Vacant)
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <Button variant="accent" size="lg" type="submit" disabled={busy} style={{ width: '100%', height: '48px', marginTop: '0.25rem' }}>
+                <UserPlus size={18} />{' '}
+                {busy
+                  ? 'Creating User Account...'
+                  : newUserRole === 'student'
+                    ? `Register Student into ${yearLevel} • ${currentAutoAssignment.assignedBlock}`
+                    : 'Register Faculty Teacher Account'}
+              </Button>
+            </form>
+          </GlassCard>
+
+          {/* Right Column: Live Section Capacity Monitor & Recent Enrollments */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            <GlassCard style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '1rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.95rem' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: '0.5rem',
+                    paddingBottom: '0.75rem',
+                    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                  }}
+                >
+                  <div>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#6ee7b7', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                      LIVE SECTION CAPACITY QUEUE (50 STUDENTS / SECTION)
+                    </span>
+                    <h2 style={{ fontSize: '1.18rem', fontWeight: 800, color: 'white', margin: '0.15rem 0 0' }}>
+                      {yearLevel} Auto-Sectioning Monitor
+                    </h2>
+                  </div>
+                  <Badge variant="success">
+                    {yearStudentsTotal} / {yearTotalCapacity} Enrolled
+                  </Badge>
+                </div>
+
+                {/* Year Level Quick-Switch Tabs */}
+                <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
+                  {allAvailableYearLevels.map((yrLbl) => {
+                    const active = yearLevel === yrLbl;
+                    return (
+                      <button
+                        key={yrLbl}
+                        type="button"
+                        onClick={() => setYearLevel(yrLbl)}
+                        style={{
+                          flex: 1,
+                          minWidth: '95px',
+                          padding: '0.4rem 0.65rem',
+                          borderRadius: '8px',
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap',
+                          background: active ? 'var(--accent-purple)' : 'rgba(255, 255, 255, 0.05)',
+                          border: active ? '1px solid #c4b5fd' : '1px solid rgba(255, 255, 255, 0.1)',
+                          color: active ? 'white' : 'var(--neutral-300)',
+                        }}
+                      >
+                        {yrLbl}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Active Auto-Assigned Section Highlight Banner */}
+                <div
+                  style={{
+                    padding: '0.85rem 1rem',
                     borderRadius: '10px',
-                    background: 'rgba(255, 255, 255, 0.03)',
-                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    background: 'rgba(16, 185, 129, 0.1)',
+                    border: '1px solid rgba(16, 185, 129, 0.35)',
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '0.5rem',
                   }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-                    <span style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--neutral-300)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                      {yearLevel} Section Capacity Queue (50 Students Per Section)
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span style={{ fontWeight: 800, fontSize: '1.05rem', color: 'white' }}>
+                        Next Assigned: {currentAutoAssignment.assignedBlock}
+                      </span>
+                      <Badge variant="success">Active Target</Badge>
+                    </div>
+                    <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#fbbf24' }}>
+                      {currentAutoAssignment.currentCount} / {MAX_STUDENTS_PER_SECTION} Students
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => handleSectionChange('blocks')}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: 'var(--accent-purple-light)',
-                        fontSize: '0.76rem',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        textDecoration: 'underline',
-                      }}
-                    >
-                      + Manage Sections &amp; Year Levels
-                    </button>
                   </div>
 
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem' }}>
-                    {currentAutoAssignment.blockUsage.map((item) => {
-                      const isActiveTarget = item.block === currentAutoAssignment.assignedBlock;
-                      return (
-                        <div
-                          key={item.block}
-                          style={{
-                            padding: '0.3rem 0.65rem',
-                            borderRadius: '8px',
-                            fontSize: '0.75rem',
-                            fontWeight: 700,
-                            whiteSpace: 'nowrap',
-                            background: item.isFull
-                              ? 'rgba(239, 68, 68, 0.16)'
-                              : isActiveTarget
-                                ? 'rgba(16, 185, 129, 0.2)'
-                                : 'rgba(255, 255, 255, 0.05)',
-                            border: item.isFull
-                              ? '1px solid rgba(239, 68, 68, 0.4)'
-                              : isActiveTarget
-                                ? '1px solid rgba(16, 185, 129, 0.5)'
-                                : '1px solid rgba(255, 255, 255, 0.1)',
-                            color: item.isFull ? '#fca5a5' : isActiveTarget ? '#a7f3d0' : 'var(--neutral-300)',
-                          }}
-                        >
-                          {item.block}: {item.count}/{MAX_STUDENTS_PER_SECTION}
-                          {item.isFull ? ' (FULL)' : isActiveTarget ? ' • NEXT' : ''}
-                        </div>
-                      );
-                    })}
+                  <div style={{ width: '100%', height: '7px', background: 'rgba(255,255,255,0.08)', borderRadius: '999px', overflow: 'hidden' }}>
+                    <div
+                      style={{
+                        width: `${fillPct}%`,
+                        height: '100%',
+                        background: fillPct >= 90 ? '#f59e0b' : '#10b981',
+                        transition: 'width 0.25s ease',
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ fontSize: '0.76rem', color: 'var(--neutral-200)', lineHeight: 1.4 }}>
+                    <strong style={{ color: '#a7f3d0' }}>{currentAutoAssignment.vacantSlots} vacant slots</strong> remaining in{' '}
+                    <strong style={{ color: 'white' }}>{currentAutoAssignment.assignedBlock}</strong>. Once it reaches{' '}
+                    <strong>{MAX_STUDENTS_PER_SECTION}/{MAX_STUDENTS_PER_SECTION}</strong>, enrollment automatically advances to{' '}
+                    <strong style={{ color: '#c4b5fd' }}>{currentAutoAssignment.nextFallbackBlock}</strong>.
                   </div>
                 </div>
-              </>
-            )}
 
-            <Button variant="accent" size="lg" type="submit" disabled={busy} style={{ marginTop: '0.5rem' }}>
-              <UserPlus size={18} />{' '}
-              {busy
-                ? 'Creating User Account...'
-                : newUserRole === 'student'
-                  ? `Register Student into ${currentAutoAssignment.assignedBlock}`
-                  : 'Register Faculty Account'}
-            </Button>
-          </form>
-        </GlassCard>
+                {/* All Sections Capacity Breakdown for Selected Year Level */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                  {currentAutoAssignment.blockUsage.map((item) => {
+                    const isTarget = item.block === currentAutoAssignment.assignedBlock;
+                    const itemPct = Math.min(100, Math.round((item.count / MAX_STUDENTS_PER_SECTION) * 100));
+                    return (
+                      <div
+                        key={item.block}
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '110px 1fr 110px 88px',
+                          alignItems: 'center',
+                          gap: '0.65rem',
+                          padding: '0.5rem 0.75rem',
+                          borderRadius: '8px',
+                          background: isTarget ? 'rgba(16, 185, 129, 0.12)' : 'rgba(255, 255, 255, 0.035)',
+                          border: isTarget
+                            ? '1px solid rgba(16, 185, 129, 0.4)'
+                            : '1px solid rgba(255, 255, 255, 0.08)',
+                        }}
+                      >
+                        <span style={{ fontWeight: 700, fontSize: '0.84rem', color: 'white', whiteSpace: 'nowrap' }}>
+                          {item.block}
+                        </span>
+                        <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.08)', borderRadius: '999px', overflow: 'hidden' }}>
+                          <div
+                            style={{
+                              width: `${itemPct}%`,
+                              height: '100%',
+                              background: item.isFull ? '#ef4444' : isTarget ? '#10b981' : '#6366f1',
+                            }}
+                          />
+                        </div>
+                        <span style={{ fontSize: '0.76rem', color: 'var(--neutral-300)', fontWeight: 600, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                          {item.count} / {MAX_STUDENTS_PER_SECTION} Students
+                        </span>
+                        <span
+                          style={{
+                            fontSize: '0.68rem',
+                            fontWeight: 800,
+                            textAlign: 'center',
+                            padding: '0.15rem 0.4rem',
+                            borderRadius: '999px',
+                            whiteSpace: 'nowrap',
+                            background: item.isFull
+                              ? 'rgba(239, 68, 68, 0.2)'
+                              : isTarget
+                                ? 'rgba(16, 185, 129, 0.22)'
+                                : 'rgba(255, 255, 255, 0.06)',
+                            color: item.isFull ? '#fca5a5' : isTarget ? '#6ee7b7' : 'var(--neutral-400)',
+                          }}
+                        >
+                          {item.isFull ? 'FULL 50/50' : isTarget ? 'NEXT AUTO' : `${item.vacant} VACANT`}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  paddingTop: '0.65rem',
+                  borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                  fontSize: '0.78rem',
+                }}
+              >
+                <span style={{ color: 'var(--neutral-400)' }}>
+                  Need another section under {yearLevel}?
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleSectionChange('blocks')}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--accent-purple-light)',
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    textDecoration: 'underline',
+                  }}
+                >
+                  + Create Section / Manage Year Levels
+                </button>
+              </div>
+            </GlassCard>
+          </div>
+        </div>
       </div>
     );
   };
