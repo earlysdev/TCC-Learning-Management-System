@@ -5,23 +5,49 @@ namespace App\Services;
 use App\Mail\LmsVerificationMail;
 use App\Models\User;
 use App\Models\VerificationCode;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class LmsOtpService
 {
     /**
+     * Ensure database tables for OTP verification exist.
+     */
+    public function ensureTablesExist(): void
+    {
+        if (! Schema::hasTable('verification_codes')) {
+            try {
+                Artisan::call('migrate', ['--force' => true]);
+            } catch (\Throwable $e) {
+                Log::warning('LmsOtpService auto-migrate check failed: ' . $e->getMessage());
+            }
+        }
+    }
+
+    /**
      * Create and send a new verification code.
      */
     public function issue(User $user, string $purpose, array $payload = [], array $meta = []): array
     {
+        $this->ensureTablesExist();
+
+        if (! Schema::hasTable('verification_codes')) {
+            throw new \RuntimeException('Verification codes table is pending database migration.');
+        }
+
         // Invalidate any older unused codes for this user & purpose
-        VerificationCode::where('user_id', $user->id)
-            ->where('purpose', $purpose)
-            ->whereNull('consumed_at')
-            ->update(['consumed_at' => now()]);
+        try {
+            VerificationCode::where('user_id', $user->id)
+                ->where('purpose', $purpose)
+                ->whereNull('consumed_at')
+                ->update(['consumed_at' => now()]);
+        } catch (\Throwable $e) {
+            Log::warning('Could not invalidate older codes: ' . $e->getMessage());
+        }
 
         $rawCode = str_pad((string) random_int(100000, 999999), 6, '0', STR_PAD_LEFT);
         $challenge = Str::random(48);
@@ -46,7 +72,7 @@ class LmsOtpService
             Log::warning("Failed to send LMS OTP email to {$user->email}: " . $e->getMessage());
         }
 
-        // Masked email hint (e.g. j***z@tcc.edu.ph)
+        // Masked email hint (e.g. d***n@tcc.edu.ph)
         $emailParts = explode('@', $user->email);
         $local = $emailParts[0] ?? 'user';
         $domain = $emailParts[1] ?? 'tcc.edu.ph';
@@ -60,7 +86,6 @@ class LmsOtpService
             'email_hint' => $maskedEmail,
             'expires_at' => $record->expires_at->toIso8601String(),
             'mail_sent' => $mailSent,
-            // Only expose raw code in local log or debug mode when mail is not smtp
             'debug_code' => config('app.debug') && config('mail.default') === 'log' ? $rawCode : null,
         ];
     }
@@ -70,6 +95,15 @@ class LmsOtpService
      */
     public function verify(string $challenge, string $code, string $purpose): array
     {
+        $this->ensureTablesExist();
+
+        if (! Schema::hasTable('verification_codes')) {
+            return [
+                'success' => false,
+                'message' => 'Verification service unavailable. Please try again.',
+            ];
+        }
+
         $record = VerificationCode::with('user')
             ->where('challenge', $challenge)
             ->where('purpose', $purpose)
@@ -131,6 +165,15 @@ class LmsOtpService
      */
     public function resend(string $challenge, array $meta = []): array
     {
+        $this->ensureTablesExist();
+
+        if (! Schema::hasTable('verification_codes')) {
+            return [
+                'success' => false,
+                'message' => 'Verification service unavailable. Please try again.',
+            ];
+        }
+
         $record = VerificationCode::with('user')
             ->where('challenge', $challenge)
             ->whereNull('consumed_at')

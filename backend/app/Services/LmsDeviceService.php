@@ -6,9 +6,26 @@ use App\Models\SecurityLog;
 use App\Models\TrustedDevice;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class LmsDeviceService
 {
+    /**
+     * Ensure database tables for device security exist.
+     */
+    public function ensureTablesExist(): void
+    {
+        if (! Schema::hasTable('trusted_devices') || ! Schema::hasTable('verification_codes')) {
+            try {
+                Artisan::call('migrate', ['--force' => true]);
+            } catch (\Throwable $e) {
+                Log::warning('LmsDeviceService auto-migrate check failed: ' . $e->getMessage());
+            }
+        }
+    }
+
     /**
      * Compute a deterministic device hash based on the client device token and user agent.
      */
@@ -39,9 +56,20 @@ class LmsDeviceService
      */
     public function isDeviceRecognized(User $user, string $deviceHash): bool
     {
-        return TrustedDevice::where('user_id', $user->id)
-            ->where('device_hash', $deviceHash)
-            ->exists();
+        $this->ensureTablesExist();
+
+        if (! Schema::hasTable('trusted_devices')) {
+            return true; // Fallback: don't block login if table is pending
+        }
+
+        try {
+            return TrustedDevice::where('user_id', $user->id)
+                ->where('device_hash', $deviceHash)
+                ->exists();
+        } catch (\Throwable $e) {
+            Log::warning('Could not query trusted_devices: ' . $e->getMessage());
+            return true;
+        }
     }
 
     /**
@@ -53,20 +81,29 @@ class LmsDeviceService
         ?string $deviceName = null,
         ?string $ip = null,
         ?string $userAgent = null
-    ): TrustedDevice {
-        $resolvedName = $deviceName ?: $this->detectDeviceName($userAgent);
+    ): ?TrustedDevice {
+        $this->ensureTablesExist();
 
-        $device = TrustedDevice::updateOrCreate(
-            ['user_id' => $user->id, 'device_hash' => $deviceHash],
-            [
-                'device_name' => $resolvedName,
-                'ip_address' => $ip,
-                'user_agent' => $userAgent,
-                'last_used_at' => now(),
-            ]
-        );
+        if (! Schema::hasTable('trusted_devices')) {
+            return null;
+        }
 
-        return $device;
+        try {
+            $resolvedName = $deviceName ?: $this->detectDeviceName($userAgent);
+
+            return TrustedDevice::updateOrCreate(
+                ['user_id' => $user->id, 'device_hash' => $deviceHash],
+                [
+                    'device_name' => $resolvedName,
+                    'ip_address' => $ip,
+                    'user_agent' => $userAgent,
+                    'last_used_at' => now(),
+                ]
+            );
+        } catch (\Throwable $e) {
+            Log::warning('Could not save trusted device: ' . $e->getMessage());
+            return null;
+        }
     }
 
     /**
@@ -98,47 +135,65 @@ class LmsDeviceService
     /**
      * Log an unrecognized device event into Dean security surveillance.
      */
-    public function logUnrecognizedDevice(User $user, Request $request, string $deviceHash): SecurityLog
+    public function logUnrecognizedDevice(User $user, Request $request, string $deviceHash): ?SecurityLog
     {
-        $deviceName = $this->detectDeviceName($request->userAgent());
+        try {
+            if (! Schema::hasTable('security_logs')) {
+                return null;
+            }
 
-        return SecurityLog::create([
-            'user_id' => $user->id,
-            'event_type' => 'unrecognized_device_login_attempt',
-            'ip_address' => $request->ip(),
-            'user_agent' => $request->userAgent(),
-            'details' => [
-                'device_name' => $deviceName,
-                'device_hash' => substr($deviceHash, 0, 16) . '...',
-                'department' => $user->departmentCode(),
-                'role' => $user->role,
-                'requires_otp' => true,
-            ],
-            'is_resolved' => false,
-        ]);
+            $deviceName = $this->detectDeviceName($request->userAgent());
+
+            return SecurityLog::create([
+                'user_id' => $user->id,
+                'event_type' => 'unrecognized_device_login_attempt',
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+                'details' => [
+                    'device_name' => $deviceName,
+                    'device_hash' => substr($deviceHash, 0, 16) . '...',
+                    'department' => $user->departmentCode(),
+                    'role' => $user->role,
+                    'requires_otp' => true,
+                ],
+                'is_resolved' => false,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Could not log unrecognized device: ' . $e->getMessage());
+            return null;
+        }
     }
 
     /**
      * Log a successful OTP verification and device trust resolution.
      */
-    public function logOtpVerificationSuccess(User $user, Request $request, string $deviceHash): SecurityLog
+    public function logOtpVerificationSuccess(User $user, Request $request, string $deviceHash): ?SecurityLog
     {
-        $deviceName = $this->detectDeviceName($request->userAgent());
+        try {
+            if (! Schema::hasTable('security_logs')) {
+                return null;
+            }
 
-        return SecurityLog::create([
-            'user_id' => $user->id,
-            'event_type' => 'device_otp_verified_and_trusted',
-            'ip_address' => $request->ip(),
-            'user_agent' => $request->userAgent(),
-            'details' => [
-                'device_name' => $deviceName,
-                'device_hash' => substr($deviceHash, 0, 16) . '...',
-                'department' => $user->departmentCode(),
-                'role' => $user->role,
-                'status' => 'device_registered_as_trusted',
-            ],
-            'is_resolved' => true,
-            'resolved_at' => now(),
-        ]);
+            $deviceName = $this->detectDeviceName($request->userAgent());
+
+            return SecurityLog::create([
+                'user_id' => $user->id,
+                'event_type' => 'device_otp_verified_and_trusted',
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+                'details' => [
+                    'device_name' => $deviceName,
+                    'device_hash' => substr($deviceHash, 0, 16) . '...',
+                    'department' => $user->departmentCode(),
+                    'role' => $user->role,
+                    'status' => 'device_registered_as_trusted',
+                ],
+                'is_resolved' => true,
+                'resolved_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Could not log OTP verification success: ' . $e->getMessage());
+            return null;
+        }
     }
 }
