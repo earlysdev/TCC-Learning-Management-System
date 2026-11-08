@@ -54,6 +54,7 @@ export default function LoginPage() {
   const [otpEmailHint, setOtpEmailHint] = useState<string | null>(null);
   const [otpDeviceName, setOtpDeviceName] = useState<string | null>(null);
   const [otpCode, setOtpCode] = useState('');
+  const [otpDebugCode, setOtpDebugCode] = useState<string | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
 
   // Forgot / Reset Password flow state
@@ -63,6 +64,7 @@ export default function LoginPage() {
   const [resetChallenge, setResetChallenge] = useState<string | null>(null);
   const [resetEmailHint, setResetEmailHint] = useState<string | null>(null);
   const [resetCode, setResetCode] = useState('');
+  const [resetDebugCode, setResetDebugCode] = useState<string | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -114,10 +116,11 @@ export default function LoginPage() {
         setOtpDeviceName(data.device_name || 'Unrecognized Web Client');
         setResendCooldown(45);
         if (data.debug_code) {
+          setOtpDebugCode(data.debug_code);
           setOtpCode(data.debug_code);
-          showToast(`Development OTP auto-detected: ${data.debug_code}`, 'info');
+          showToast(`Demo verification code: ${data.debug_code}`, 'info');
         }
-        showToast('Unrecognized device detected. Please verify using the 6-digit OTP sent to your school email.', 'warning');
+        showToast('Unrecognized device detected. Please verify using your 6-digit OTP code.', 'warning');
         return;
       }
 
@@ -206,8 +209,9 @@ export default function LoginPage() {
       setNotice(data.message || 'A new verification code has been dispatched.');
       showToast('Verification code resent to your email.', 'success');
       if (data.debug_code) {
+        setOtpDebugCode(data.debug_code);
         setOtpCode(data.debug_code);
-        showToast(`Auto-filled development code: ${data.debug_code}`, 'info');
+        showToast(`Verification code: ${data.debug_code}`, 'info');
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to resend code.';
@@ -254,8 +258,9 @@ export default function LoginPage() {
       showToast(msg, 'success');
 
       if (data.debug_code) {
+        setResetDebugCode(data.debug_code);
         setResetCode(data.debug_code);
-        showToast(`Development reset code: ${data.debug_code}`, 'info');
+        showToast(`Demo reset code: ${data.debug_code}`, 'info');
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to request password reset.';
@@ -378,6 +383,48 @@ export default function LoginPage() {
             <p className="login-card-subtitle" style={{ marginBottom: '1.1rem' }}>
               Unrecognized device detected. Enter the 6-digit OTP code sent to <strong>{otpEmailHint}</strong> to authorize this session.
             </p>
+
+            {otpDebugCode && (
+              <div style={{
+                background: 'rgba(245, 158, 11, 0.15)',
+                border: '1px solid rgba(245, 158, 11, 0.35)',
+                borderRadius: '8px',
+                padding: '0.65rem 0.85rem',
+                marginBottom: '1rem',
+                textAlign: 'center'
+              }}>
+                <div style={{ fontSize: '0.74rem', color: '#fef08a', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.5px' }}>
+                  Institutional Demo Verification Code
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem', marginTop: '0.35rem' }}>
+                  <span style={{ fontFamily: 'monospace', fontSize: '1.35rem', fontWeight: 800, letterSpacing: '6px', color: '#fde047' }}>
+                    {otpDebugCode}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOtpCode(otpDebugCode);
+                      showToast('Code auto-filled!', 'success');
+                    }}
+                    style={{
+                      background: 'var(--primary-600)',
+                      color: 'white',
+                      border: 'none',
+                      padding: '0.25rem 0.6rem',
+                      borderRadius: '4px',
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Auto-Fill
+                  </button>
+                </div>
+                <div style={{ fontSize: '0.7rem', color: 'rgba(255, 255, 255, 0.7)', marginTop: '0.3rem' }}>
+                  Demo institutional account simulation. Click Auto-Fill or enter code above.
+                </div>
+              </div>
+            )}
 
             <form onSubmit={handleVerifyOtp}>
               <div className="login-form-group">
@@ -519,6 +566,48 @@ export default function LoginPage() {
               </form>
             ) : (
               <form onSubmit={handleCompletePasswordReset}>
+                {resetDebugCode && (
+                  <div style={{
+                    background: 'rgba(245, 158, 11, 0.15)',
+                    border: '1px solid rgba(245, 158, 11, 0.35)',
+                    borderRadius: '8px',
+                    padding: '0.65rem 0.85rem',
+                    marginBottom: '1rem',
+                    textAlign: 'center'
+                  }}>
+                    <div style={{ fontSize: '0.74rem', color: '#fef08a', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.5px' }}>
+                      Institutional Demo Reset Code
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem', marginTop: '0.35rem' }}>
+                      <span style={{ fontFamily: 'monospace', fontSize: '1.35rem', fontWeight: 800, letterSpacing: '6px', color: '#fde047' }}>
+                        {resetDebugCode}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setResetCode(resetDebugCode);
+                          showToast('Reset code auto-filled!', 'success');
+                        }}
+                        style={{
+                          background: 'var(--primary-600)',
+                          color: 'white',
+                          border: 'none',
+                          padding: '0.25rem 0.6rem',
+                          borderRadius: '4px',
+                          fontSize: '0.72rem',
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Auto-Fill
+                      </button>
+                    </div>
+                    <div style={{ fontSize: '0.7rem', color: 'rgba(255, 255, 255, 0.7)', marginTop: '0.3rem' }}>
+                      Demo institutional account simulation. Click Auto-Fill or enter code below.
+                    </div>
+                  </div>
+                )}
+
                 <div className="login-form-group">
                   <label className="login-form-label" htmlFor="resetCode">
                     6-Digit Verification Code

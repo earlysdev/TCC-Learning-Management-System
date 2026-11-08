@@ -68,6 +68,7 @@ export default function ProfileUpdateCard() {
   // Password change state
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
+  const [debugCode, setDebugCode] = useState<string | null>(null);
   const [challenge, setChallenge] = useState<string | null>(null);
   const [emailHint, setEmailHint] = useState<string | null>(null);
   const [requestingCode, setRequestingCode] = useState(false);
@@ -119,8 +120,9 @@ export default function ProfileUpdateCard() {
       showToast(msg, 'success');
 
       if (res.debug_code) {
+        setDebugCode(res.debug_code);
         setCode(res.debug_code);
-        showToast(`Auto-filled development authorization code: ${res.debug_code}`, 'info');
+        showToast(`Demo authorization code: ${res.debug_code}`, 'info');
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to send authorization code.';
@@ -436,6 +438,43 @@ export default function ProfileUpdateCard() {
               <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--neutral-300)' }}>
                 For security compliance, changing your account password requires a 6-digit one-time code dispatched to {emailHint || email}.
               </p>
+
+              {debugCode && (
+                <div style={{
+                  background: 'rgba(245, 158, 11, 0.15)',
+                  border: '1px solid rgba(245, 158, 11, 0.35)',
+                  borderRadius: '6px',
+                  padding: '0.55rem 0.8rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '0.5rem',
+                  flexWrap: 'wrap'
+                }}>
+                  <div style={{ fontSize: '0.75rem', color: '#fef08a' }}>
+                    <strong>Demo Code:</strong> <span style={{ fontFamily: 'monospace', fontSize: '1rem', fontWeight: 800, letterSpacing: '3px', color: '#fde047', marginLeft: '0.35rem' }}>{debugCode}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCode(debugCode);
+                      showToast('Code auto-filled!', 'success');
+                    }}
+                    style={{
+                      background: 'var(--primary-600)',
+                      color: 'white',
+                      border: 'none',
+                      padding: '0.2rem 0.55rem',
+                      borderRadius: '4px',
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Auto-Fill
+                  </button>
+                </div>
+              )}
 
               <div>
                 <input
