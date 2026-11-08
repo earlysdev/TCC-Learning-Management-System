@@ -256,6 +256,7 @@ export const ROLE_CONFIGS: Record<UserRole, RoleConfig> = {
       { label: 'Overview', path: '/dean/dashboard', icon: LayoutDashboard },
       { label: 'User Management', path: '/dean/users', icon: Users },
       { label: 'Student Management', path: '/dean/students', icon: GraduationCap },
+      { label: 'Create Account', path: '/dean/accounts', icon: UserPlus },
       { label: 'Quiz Oversight', path: '/dean/quizzes', icon: ShieldCheck },
       { label: 'Security & Proctoring', path: '/dean/security', icon: ShieldCheck },
       { label: 'Analytics', path: '/dean/analytics', icon: BarChart },

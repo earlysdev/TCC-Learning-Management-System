@@ -73,11 +73,31 @@ class UserController extends Controller
     }
 
     /**
+     * Count enrolled students in a section within the same department (department-isolated capacity).
+     */
+    private function countStudentsInSection(string $section, ?string $department = null, ?int $excludeUserId = null): int
+    {
+        $query = User::where('role', 'student')->where('section', $section);
+
+        if ($department) {
+            $query->where(function ($q) use ($department) {
+                $q->where('department', $department)->orWhereNull('department');
+            });
+        }
+
+        if ($excludeUserId) {
+            $query->where('id', '!=', $excludeUserId);
+        }
+
+        return $query->count();
+    }
+
+    /**
      * Automatically find the first vacant section (< 50 students) for the given Year Level.
      * Example: If 1st Year Block - 1A has 49 students, it returns Block - 1A.
      * Once Block - 1A reaches 50 students, it moves to Block - 1B, and so on.
      */
-    private function resolveAutoAssignedSection(string $grade, ?string $preferredSection = null): string
+    private function resolveAutoAssignedSection(string $grade, ?string $preferredSection = null, ?string $department = null): string
     {
         $defaultBlocksByYear = [
             '1st Year' => ['Block - 1A', 'Block - 1B', 'Block - 1C', 'Block - 1D', 'Block - 1E'],
@@ -89,10 +109,13 @@ class UserController extends Controller
         $candidates = $defaultBlocksByYear[$grade] ?? [];
 
         if (Schema::hasTable('sections')) {
-            $dbSections = Section::where('grade', $grade)
-                ->orderBy('id')
-                ->pluck('name')
-                ->toArray();
+            $sectionQuery = Section::where('grade', $grade);
+            if ($department && Schema::hasColumn('sections', 'department')) {
+                $sectionQuery->where(function ($q) use ($department) {
+                    $q->where('department', $department)->orWhereNull('department');
+                });
+            }
+            $dbSections = $sectionQuery->orderBy('id')->pluck('name')->toArray();
 
             foreach ($dbSections as $secName) {
                 $clean = trim((string) $secName);
@@ -105,22 +128,15 @@ class UserController extends Controller
         // If a preferred section was passed and belongs to this Year Level and still has < 50 students, allow it
         if ($preferredSection && strtolower(trim($preferredSection)) !== 'auto') {
             $cleanPreferred = trim($preferredSection);
-            if (in_array($cleanPreferred, $candidates, true)) {
-                $count = User::where('role', 'student')
-                    ->where('section', $cleanPreferred)
-                    ->count();
-                if ($count < self::MAX_STUDENTS_PER_SECTION) {
-                    return $cleanPreferred;
-                }
+            if (in_array($cleanPreferred, $candidates, true)
+                && $this->countStudentsInSection($cleanPreferred, $department) < self::MAX_STUDENTS_PER_SECTION) {
+                return $cleanPreferred;
             }
         }
 
         // Sequential assignment: pick the first section in the Year Level with < 50 students
         foreach ($candidates as $secName) {
-            $count = User::where('role', 'student')
-                ->where('section', $secName)
-                ->count();
-            if ($count < self::MAX_STUDENTS_PER_SECTION) {
+            if ($this->countStudentsInSection($secName, $department) < self::MAX_STUDENTS_PER_SECTION) {
                 return $secName;
             }
         }
@@ -152,13 +168,32 @@ class UserController extends Controller
         }
 
         if (Schema::hasTable('sections')) {
+            $sectionAttributes = ['display_name' => $nextSection];
+            if ($department && Schema::hasColumn('sections', 'department')) {
+                $sectionAttributes['department'] = $department;
+            }
             Section::firstOrCreate(
                 ['grade' => $grade, 'name' => $nextSection],
-                ['display_name' => $nextSection]
+                $sectionAttributes
             );
         }
 
         return $nextSection;
+    }
+
+    /**
+     * Roles each account manager may create.
+     * Secretary: Students & Teachers. Dean: Students, Teachers & Secretaries.
+     */
+    private function creatableRolesFor(?User $actor): array
+    {
+        $role = strtolower((string) $actor?->role);
+
+        return match ($role) {
+            'dean', 'principal', 'developer' => ['student', 'teacher', 'secretary'],
+            'secretary' => ['student', 'teacher'],
+            default => [],
+        };
     }
 
     public function store(Request $request)
@@ -177,6 +212,14 @@ class UserController extends Controller
             'school_year' => 'nullable|string|max:9',
         ]);
 
+        $allowedRoles = $this->creatableRolesFor($request->user());
+        if (! in_array($validated['role'], $allowedRoles, true)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'You are not authorized to create a ' . $validated['role'] . ' account.',
+            ], 403);
+        }
+
         $validated['department'] = !empty($validated['department'])
             ? strtoupper(trim($validated['department']))
             : ($request->user()?->departmentCode() ?? config('lms.default_department', 'CIT'));
@@ -193,7 +236,16 @@ class UserController extends Controller
         if ($validated['role'] === 'student') {
             $targetGrade = !empty($validated['grade']) ? trim($validated['grade']) : '1st Year';
             $validated['grade'] = $targetGrade;
-            $validated['section'] = $this->resolveAutoAssignedSection($targetGrade, $validated['section'] ?? null);
+            $validated['section'] = $this->resolveAutoAssignedSection(
+                $targetGrade,
+                $validated['section'] ?? null,
+                $validated['department']
+            );
+        } else {
+            // Staff accounts are not enrolled into class sections
+            $validated['grade'] = null;
+            $validated['section'] = null;
+            $validated['lrn'] = null;
         }
 
         $validated['password'] = Hash::make($validated['password']);
@@ -243,6 +295,42 @@ class UserController extends Controller
             $validated['grade'] = $yearMap[$matches[1]] ?? null;
         }
 
+        // Only the Dean may modify Dean/Secretary accounts; nobody edits a Dean account through this endpoint.
+        $actorRole = strtolower((string) $request->user()?->role);
+        $isDeanActor = in_array($actorRole, ['dean', 'principal', 'developer'], true);
+        if (in_array($user->role, ['dean', 'principal'], true)
+            || ($user->role === 'secretary' && ! $isDeanActor)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'You are not authorized to modify this account.',
+            ], 403);
+        }
+
+        $previousPlacement = trim(($user->grade ?? '') . ' • ' . ($user->section ?? ''), ' •');
+
+        // Section / Year Level reassignment for students: enforce 50-student capacity
+        if ($user->role === 'student' && !empty($validated['section'])) {
+            $targetSection = trim($validated['section']);
+            $targetGrade = !empty($validated['grade']) ? trim($validated['grade']) : ($user->grade ?: '1st Year');
+
+            if (strtolower($targetSection) === 'auto') {
+                $targetSection = $this->resolveAutoAssignedSection($targetGrade, null, $user->department);
+            } elseif (strcasecmp($targetSection, (string) $user->section) !== 0) {
+                $occupied = $this->countStudentsInSection($targetSection, $user->department, $user->id);
+                if ($occupied >= self::MAX_STUDENTS_PER_SECTION) {
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => "{$targetSection} is already at full capacity ({$occupied}/" . self::MAX_STUDENTS_PER_SECTION . '). Please choose another section.',
+                    ], 422);
+                }
+            }
+
+            $validated['section'] = $targetSection;
+            $validated['grade'] = $targetGrade;
+        } elseif ($user->role !== 'student') {
+            unset($validated['grade'], $validated['section']);
+        }
+
         if (isset($validated['password'])) {
             $validated['password'] = Hash::make($validated['password']);
         } else {
@@ -251,10 +339,23 @@ class UserController extends Controller
 
         $user->update($validated);
 
+        $newPlacement = trim(($user->grade ?? '') . ' • ' . ($user->section ?? ''), ' •');
+        $description = $user->role === 'student' && $previousPlacement !== $newPlacement
+            ? "Reassigned {$user->name} from " . ($previousPlacement ?: 'Unassigned') . " to {$newPlacement}"
+            : "Updated {$user->role} account details for {$user->name}";
+
+        \App\Models\ActivityLog::create([
+            'user_id' => $request->user()?->id,
+            'action' => 'update_user',
+            'description' => $description,
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
+
         return response()->json([
             'status' => 'success',
-            'message' => 'User updated successfully',
-            'data' => $user
+            'message' => $description . '.',
+            'data' => $user->fresh()
         ]);
     }
 

@@ -231,3 +231,55 @@
     padding: 0.85rem 0.65rem 1.5rem;
   }
 }
+
+/* Dean Enrollment Controls & Segmented Controls (LMSWO-00068) */
+.dean-enroll-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .dean-enroll-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.dean-role-switch {
+  display: flex;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  gap: 4px;
+}
+
+.dean-role-switch button {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 0.55rem 0.85rem;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--neutral-300);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.dean-role-switch button:hover {
+  color: white;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.dean-role-switch button.active {
+  color: white;
+  background: linear-gradient(135deg, var(--primary-600), var(--primary-700));
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
