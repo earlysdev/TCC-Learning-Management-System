@@ -50,7 +50,8 @@ class DemoSeeder extends Seeder
                 'role' => 'student',
                 'grade' => '1st Year',
                 'section' => 'Block - 1A',
-                'school_year' => '2025-2026',
+                'department' => 'CIT',
+                'school_year' => '2026-2027',
             ],
             [
                 'name' => 'Kay Waga',
@@ -59,9 +60,10 @@ class DemoSeeder extends Seeder
                 'email' => 'teacher@tcc.edu.ph',
                 'lrn' => null,
                 'role' => 'teacher',
+                'department' => 'CIT',
                 'grade' => null,
                 'section' => null,
-                'school_year' => null,
+                'school_year' => '2026-2027',
             ],
             [
                 'name' => 'Nikko Perez',
@@ -70,9 +72,10 @@ class DemoSeeder extends Seeder
                 'email' => 'secretary@tcc.edu.ph',
                 'lrn' => null,
                 'role' => 'secretary',
+                'department' => 'CIT',
                 'grade' => null,
                 'section' => null,
-                'school_year' => null,
+                'school_year' => '2026-2027',
             ],
             [
                 'name' => 'Gabriel Casiño',
@@ -81,9 +84,10 @@ class DemoSeeder extends Seeder
                 'email' => 'dean@tcc.edu.ph',
                 'lrn' => null,
                 'role' => 'dean',
+                'department' => 'CIT',
                 'grade' => null,
                 'section' => null,
-                'school_year' => null,
+                'school_year' => '2026-2027',
             ],
         ];
 
@@ -110,6 +114,7 @@ class DemoSeeder extends Seeder
                         'grade' => $yearLevel,
                         'name' => $blockName,
                         'display_name' => $blockName,
+                        'department' => 'CIT',
                     ]
                 );
             }
@@ -126,14 +131,14 @@ class DemoSeeder extends Seeder
                     'name' => $subj['name'],
                     'code' => $subj['code'],
                     'grade' => $subj['grade'],
-                    'department' => 'BSIT',
+                    'department' => 'CIT',
                     'description' => $desc,
                 ]
             );
         }
 
         SystemSetting::where('key', 'maintenance_mode')->delete();
-        SystemSetting::set('school_year', '2025-2026', 'string', 'Current school year');
+        SystemSetting::set('school_year', '2026-2027', 'string', 'Current school year');
 
         $deanUser = User::where('email', 'dean@tcc.edu.ph')->first();
         $studentUser = User::where('email', 'student@tcc.edu.ph')->first();
@@ -142,7 +147,7 @@ class DemoSeeder extends Seeder
             $welcomeAnnouncement = Announcement::create([
                 'user_id' => $deanUser->id,
                 'title' => 'Welcome to Tagoloan Community College (TCC) Online Assessment Portal',
-                'content' => 'All BSIT 1st Year to 4th Year students are reminded to observe strict academic integrity during online assessments. Full-screen proctoring and AI study diagnostics are active for SY 2025-2026.',
+                'content' => 'All BSIT 1st Year to 4th Year students are reminded to observe strict academic integrity during online assessments. Full-screen proctoring and AI study diagnostics are active for SY 2026-2027.',
                 'target_role' => null,
                 'is_pinned' => true,
             ]);
@@ -160,7 +165,7 @@ class DemoSeeder extends Seeder
             ActivityLog::create([
                 'user_id' => $deanUser->id,
                 'action' => 'system_initialized',
-                'description' => 'Initialized TCC BSIT Curriculum (58 Courses, 1st-4th Year excluding Practicum, 20 College Blocks) for SY 2025-2026',
+                'description' => 'Initialized TCC BSIT Curriculum (58 Courses, 1st-4th Year excluding Practicum, 20 College Blocks) for SY 2026-2027',
                 'ip_address' => '127.0.0.1',
                 'user_agent' => 'TCC-System-Seeder',
             ]);

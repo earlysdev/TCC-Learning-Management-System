@@ -28,6 +28,32 @@ export interface RoleConfig {
   navItems: NavItem[];
 }
 
+export const CURRENT_SCHOOL_YEAR = '2026–2027';
+export const CURRENT_SCHOOL_YEAR_SLUG = '2026-2027';
+
+export interface DepartmentInfo {
+  code: string;
+  name: string;
+  shortName: string;
+}
+
+export const COLLEGE_DEPARTMENTS: DepartmentInfo[] = [
+  { code: 'CIT', name: 'College of Information Technology', shortName: 'Information Technology' },
+  { code: 'CED', name: 'College of Education', shortName: 'Education' },
+  { code: 'CAS', name: 'College of Arts and Sciences', shortName: 'Arts & Sciences' },
+  { code: 'CCJPS', name: 'College of Criminal Justice and Public Safety', shortName: 'Criminology' },
+  { code: 'CBA', name: 'College of Business Administration', shortName: 'Business Administration' },
+  { code: 'CHM', name: 'College of Hospitality Management', shortName: 'Hospitality Management' },
+  { code: 'COM', name: 'College of Midwifery', shortName: 'Midwifery' },
+  { code: 'CLIS', name: 'College of Library Information Science', shortName: 'Library Information Science' },
+];
+
+export function getDepartmentName(code?: string | null): string {
+  if (!code) return 'College of Information Technology';
+  const found = COLLEGE_DEPARTMENTS.find(d => d.code.toUpperCase() === code.toUpperCase());
+  return found ? found.name : `${code} Department`;
+}
+
 export const YEAR_LEVEL_OPTIONS: string[] = [
   '1st Year',
   '2nd Year',

@@ -16,7 +16,8 @@ class SecurityLog extends Model
         'user_agent',
         'details',
         'is_resolved',
-        'resolved_at'
+        'resolved_at',
+        'resolved_by',
     ];
 
     protected $casts = [
@@ -28,5 +29,10 @@ class SecurityLog extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function resolver()
+    {
+        return $this->belongsTo(User::class, 'resolved_by');
     }
 }

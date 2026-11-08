@@ -11,7 +11,7 @@ import {
 import { 
   Users, ShieldCheck, AlertTriangle, TrendingUp, 
   CheckCircle2, AlertCircle, 
-  Check, Activity, Send, GraduationCap, Layers
+  Check, CheckCheck, Activity, Send, GraduationCap, Layers
 } from 'lucide-react';
 import GlassCard from '../../components/ui/GlassCard';
 import StatCard from '../../components/ui/StatCard';
@@ -157,8 +157,40 @@ export default function PrincipalDashboard() {
       setNotice(msg);
       showToast(msg, 'success');
       setSecurityLogs(prev => prev.map(l => l.id === logId ? { ...l, is_resolved: true, resolved_at: new Date().toISOString() } : l));
+      setMetrics(prev => ({
+        ...prev,
+        security_alerts: Math.max(0, (Number(prev.security_alerts) || 1) - 1),
+      }));
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Could not resolve security log';
+      setError(msg);
+      showToast(msg, 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleResolveAllSecurityLogs = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await lmsFetch<{ message?: string; resolved_count?: number }>('/security-logs/resolve-all', {
+        method: 'PATCH',
+      });
+      const msg = res.message || 'All unresolved security alerts have been successfully resolved.';
+      setNotice(msg);
+      showToast(msg, 'success');
+      setSecurityLogs(prev => prev.map(l => ({
+        ...l,
+        is_resolved: true,
+        resolved_at: l.resolved_at || new Date().toISOString(),
+      })));
+      setMetrics(prev => ({
+        ...prev,
+        security_alerts: 0,
+      }));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Could not resolve security logs';
       setError(msg);
       showToast(msg, 'error');
     } finally {
@@ -773,16 +805,29 @@ export default function PrincipalDashboard() {
 
   const renderSecurity = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      <div>
-        <span style={{ fontSize: '0.8rem', color: 'var(--error)', letterSpacing: '1px', textTransform: 'uppercase', fontWeight: 600 }}>
-          SECURITY SURVEILLANCE
-        </span>
-        <h1 style={{ fontSize: '2rem', fontWeight: 800, color: 'white', marginTop: '0.25rem' }}>
-          Security &amp; Access Logs
-        </h1>
-        <p style={{ color: 'var(--neutral-300)' }}>
-          Monitor authentication events, failed logins, and suspicious activities.
-        </p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+        <div>
+          <span style={{ fontSize: '0.8rem', color: '#fbbf24', letterSpacing: '1px', textTransform: 'uppercase', fontWeight: 700 }}>
+            INSTITUTIONAL SURVEILLANCE &amp; ALL-IN-ONE RESOLUTION
+          </span>
+          <h1 style={{ fontSize: '2rem', fontWeight: 800, color: 'white', marginTop: '0.25rem' }}>
+            Security &amp; Access Logs
+          </h1>
+          <p style={{ color: 'var(--neutral-300)' }}>
+            Monitor authentication events, unrecognized device alerts, and failed login incidents across departments.
+          </p>
+        </div>
+        {securityLogs.some(l => !l.is_resolved) && (
+          <Button
+            variant="accent"
+            size="md"
+            disabled={busy}
+            onClick={handleResolveAllSecurityLogs}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700 }}
+          >
+            <CheckCheck size={18} /> All-in-One Resolve ({securityLogs.filter(l => !l.is_resolved).length} Pending)
+          </Button>
+        )}
       </div>
 
       {notice && (

@@ -4,7 +4,7 @@ import {
   BookOpen, Sparkles, BarChart2,
   ArrowRight, Eye, 
   Target, Heart, CheckCircle2, ChevronLeft, ChevronRight, ChevronDown,
-  Download, Smartphone, Menu, X, GraduationCap, ShieldCheck,
+  Menu, X, GraduationCap, ShieldCheck,
   Compass, Library, Award, Laptop, Building2
 } from 'lucide-react';
 
@@ -175,9 +175,6 @@ export default function LandingPage() {
               <a href="#about" className="nav-btn" onClick={(e) => scrollToSection(e, 'about')}>About TCC</a>
               <a href="#programs" className="nav-btn" onClick={(e) => scrollToSection(e, 'programs')}>Colleges</a>
               <a href="#features" className="nav-btn" onClick={(e) => scrollToSection(e, 'features')}>Features</a>
-              <a href="#download-app" className="nav-btn" onClick={(e) => scrollToSection(e, 'download-app')}>
-                <Smartphone size={15} /> Mobile App
-              </a>
               <Link to="/login" className="nav-btn nav-btn-primary">
                 Sign In <ArrowRight size={15} />
               </Link>
@@ -204,9 +201,6 @@ export default function LandingPage() {
               </a>
               <a href="#features" className="mobile-nav-link" onClick={(e) => scrollToSection(e, 'features')}>
                 Platform Features
-              </a>
-              <a href="#download-app" className="mobile-nav-link" onClick={(e) => scrollToSection(e, 'download-app')}>
-                <Smartphone size={16} /> Mobile App (.apk)
               </a>
               <Link to="/login" className="mobile-nav-link mobile-nav-link-primary" onClick={() => setMobileMenuOpen(false)}>
                 Sign In to Workspace <ArrowRight size={16} />
@@ -459,72 +453,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Mobile App Download Section (Phone Mockup) */}
-      <section id="download-app" className="section section-download">
-        <div className="container">
-          <div className="download-box">
-            <div className="download-info">
-              <span className="download-tag">
-                <Smartphone size={15} /> MOBILE LEARNING SPACE
-              </span>
-              <h2 className="download-title">
-                Learn Anywhere, Anytime with TCC LMS Mobile.
-              </h2>
-              <p className="download-desc">
-                Take quizzes, check study recommendations, and review class grades straight from your smartphone. Download the official Tagoloan Community College mobile app for Android devices.
-              </p>
-              <div className="download-note">
-                <p style={{ margin: 0 }}>
-                  <strong>Note:</strong> Students, faculty members, and academic secretaries can access both mobile and web portals. Executive leadership (Dean) utilizes the desktop web version for institutional surveillance and administrative reporting.
-                </p>
-              </div>
-              <button
-                type="button"
-                disabled
-                aria-disabled="true"
-                className="btn btn-accent btn-md"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  opacity: 0.65,
-                  cursor: 'not-allowed',
-                  pointerEvents: 'none',
-                  userSelect: 'none',
-                }}
-              >
-                <Download size={18} /> Mobile App Coming Soon · Web Portal Currently Active
-              </button>
-            </div>
-
-            {/* Smartphone Mockup */}
-            <div className="phone-mockup-wrapper">
-              <div className="phone-mockup">
-                <div className="phone-notch" />
-                <div className="phone-screen">
-                  <div className="phone-screen-logo-wrap">
-                    <img src="/assets/images/logo.png" alt="TCC Seal" className="phone-screen-logo" />
-                  </div>
-                  <h4 className="phone-screen-title">TCC LMS</h4>
-                  <p className="phone-screen-sub">Mobile Learning Space</p>
-                  
-                  <div className="phone-screen-form">
-                    <div className="phone-form-input" />
-                    <div className="phone-form-input" />
-                    <div className="phone-form-btn">
-                      Sign In
-                    </div>
-                  </div>
-                  <span className="phone-screen-footer">
-                    Tagoloan Community College
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* Footer */}
       <footer className="site-footer-glass">
         <div className="container">
@@ -554,13 +482,12 @@ export default function LandingPage() {
               <p><a href="#about" style={{ color: 'rgba(255,255,255,0.85)' }} onClick={(e) => scrollToSection(e, 'about')}>About TCC</a></p>
               <p><a href="#programs" style={{ color: 'rgba(255,255,255,0.85)' }} onClick={(e) => scrollToSection(e, 'programs')}>Colleges & Programs</a></p>
               <p><a href="#features" style={{ color: 'rgba(255,255,255,0.85)' }} onClick={(e) => scrollToSection(e, 'features')}>Platform Features</a></p>
-              <p><a href="#download-app" style={{ color: 'rgba(255,255,255,0.85)' }} onClick={(e) => scrollToSection(e, 'download-app')}>Mobile App</a></p>
               <p><Link to="/login" style={{ color: '#fbbf24', fontWeight: 600 }}>Sign In to Portal</Link></p>
             </div>
           </div>
 
           <div className="footer-bottom">
-            <p>© 2026 Tagoloan Community College (TCC). All rights reserved. Vincit Omnia Veritas.</p>
+            <p>© 2026-2027 Tagoloan Community College (TCC). All rights reserved. Vincit Omnia Veritas.</p>
           </div>
         </div>
       </footer>

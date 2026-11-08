@@ -1,5 +1,14 @@
 export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? 'http://localhost:8000/api' : '/api')
 
+export function getDeviceId(): string {
+  let deviceId = localStorage.getItem('tcc_device_id')
+  if (!deviceId) {
+    deviceId = 'tcc-dev-' + Math.random().toString(36).substring(2, 10) + '-' + Date.now().toString(36)
+    localStorage.setItem('tcc_device_id', deviceId)
+  }
+  return deviceId
+}
+
 export function getLmsToken(): string | null {
   return localStorage.getItem('lms-token') ?? sessionStorage.getItem('lms-token')
 }
@@ -16,6 +25,7 @@ export function getLmsUser(): {
   status?: string
   initials?: string
   lrn?: string
+  department?: string
 } | null {
   const value = localStorage.getItem('lms-user') ?? sessionStorage.getItem('lms-user')
   if (!value) return null
@@ -32,6 +42,7 @@ export function getLmsUser(): {
       status?: string
       initials?: string
       lrn?: string
+      department?: string
     }
   } catch { return null }
 }
@@ -39,6 +50,7 @@ export function getLmsUser(): {
 export async function lmsFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers)
   headers.set('Accept', 'application/json')
+  headers.set('X-Device-Id', getDeviceId())
   if (init.body) headers.set('Content-Type', 'application/json')
   const token = getLmsToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
@@ -78,4 +90,3 @@ export async function signOut(): Promise<void> {
   sessionStorage.removeItem('lms-token')
   sessionStorage.removeItem('lms-user')
 }
-

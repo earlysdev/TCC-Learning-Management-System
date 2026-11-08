@@ -3,21 +3,33 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\ActivityLog;
+use App\Models\SecurityLog;
 use App\Models\User;
+use App\Models\VerificationCode;
+use App\Services\LmsDeviceService;
+use App\Services\LmsOtpService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
+    public function __construct(
+        private readonly LmsDeviceService $deviceService,
+        private readonly LmsOtpService $otpService
+    ) {}
+
     public function login(Request $request): JsonResponse
     {
         $credentials = $request->validate([
             'identifier' => ['required', 'string', 'max:255'],
             'password' => ['required', 'string'],
+            'remember' => ['sometimes', 'boolean'],
+            'device_id' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'device_name' => ['sometimes', 'nullable', 'string', 'max:120'],
         ]);
 
         $legacyAliases = [
@@ -50,11 +62,12 @@ class AuthController extends Controller
 
         if (! $user || ! $passwordMatches) {
             if ($user) {
-                \App\Models\SecurityLog::create([
+                SecurityLog::create([
                     'user_id' => $user->id,
                     'event_type' => 'login_failed',
                     'ip_address' => $request->ip(),
                     'user_agent' => $request->userAgent(),
+                    'details' => ['identifier' => $identifier],
                 ]);
             }
             throw ValidationException::withMessages([
@@ -63,7 +76,7 @@ class AuthController extends Controller
         }
 
         if ($user->status === 'inactive') {
-            \App\Models\SecurityLog::create([
+            SecurityLog::create([
                 'user_id' => $user->id,
                 'event_type' => 'inactive_account_login_blocked',
                 'ip_address' => $request->ip(),
@@ -74,31 +87,208 @@ class AuthController extends Controller
             ]);
         }
 
-        \App\Models\ActivityLog::create([
+        $remember = (bool) ($credentials['remember'] ?? $request->boolean('remember'));
+        $deviceHash = $this->deviceService->computeDeviceHash($request);
+        $isRecognized = $this->deviceService->isDeviceRecognized($user, $deviceHash);
+
+        // Check if device recognition requires OTP
+        $otpSetting = config('lms.device_otp', 'auto');
+        $requiresOtp = false;
+
+        if (! $isRecognized) {
+            if ($otpSetting === 'true' || $otpSetting === true) {
+                $requiresOtp = true;
+            } elseif ($otpSetting === 'auto') {
+                $requiresOtp = true;
+            }
+        }
+
+        if ($requiresOtp) {
+            $this->deviceService->logUnrecognizedDevice($user, $request, $deviceHash);
+
+            $meta = [
+                'ip_address' => $request->ip(),
+                'device_name' => $this->deviceService->detectDeviceName($request->userAgent()),
+            ];
+
+            $otp = $this->otpService->issue(
+                $user,
+                VerificationCode::PURPOSE_LOGIN_DEVICE,
+                [
+                    'remember' => $remember,
+                    'device_hash' => $deviceHash,
+                    'device_name' => $credentials['device_name'] ?? $meta['device_name'],
+                ],
+                $meta
+            );
+
+            return response()->json([
+                'requires_otp' => true,
+                'challenge' => $otp['challenge'],
+                'email_hint' => $otp['email_hint'],
+                'device_name' => $meta['device_name'],
+                'message' => 'Unrecognized device detected. A 6-digit verification code has been dispatched to your registered institutional email.',
+                'debug_code' => $otp['debug_code'] ?? null,
+            ]);
+        }
+
+        // Recognized device: update last used timestamp
+        $this->deviceService->trustDevice(
+            $user,
+            $deviceHash,
+            $credentials['device_name'] ?? null,
+            $request->ip(),
+            $request->userAgent()
+        );
+
+        return $this->finalizeLogin($user, $request, $remember);
+    }
+
+    /**
+     * Complete login after unrecognized device OTP verification.
+     */
+    public function verifyLoginOtp(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'challenge' => ['required', 'string'],
+            'code' => ['required', 'string', 'min:6', 'max:8'],
+            'device_name' => ['sometimes', 'nullable', 'string', 'max:120'],
+        ]);
+
+        $result = $this->otpService->verify(
+            $validated['challenge'],
+            $validated['code'],
+            VerificationCode::PURPOSE_LOGIN_DEVICE
+        );
+
+        if (! $result['success']) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $result['message'],
+                'attempts_remaining' => $result['attempts_remaining'] ?? 0,
+            ], 422);
+        }
+
+        /** @var User $user */
+        $user = $result['user'];
+        $payload = $result['payload'] ?? [];
+        $deviceHash = $payload['device_hash'] ?? $this->deviceService->computeDeviceHash($request);
+        $deviceName = $validated['device_name'] ?? ($payload['device_name'] ?? null);
+
+        // Register device as trusted
+        $this->deviceService->trustDevice(
+            $user,
+            $deviceHash,
+            $deviceName,
+            $request->ip(),
+            $request->userAgent()
+        );
+
+        $this->deviceService->logOtpVerificationSuccess($user, $request, $deviceHash);
+
+        $remember = (bool) ($payload['remember'] ?? false);
+
+        return $this->finalizeLogin($user, $request, $remember, 'Device verified and trusted. Signed in successfully.');
+    }
+
+    /**
+     * Resend an OTP code for an active verification challenge.
+     */
+    public function resendLoginOtp(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'challenge' => ['required', 'string'],
+        ]);
+
+        $meta = [
+            'ip_address' => $request->ip(),
+            'device_name' => $this->deviceService->detectDeviceName($request->userAgent()),
+        ];
+
+        $res = $this->otpService->resend($validated['challenge'], $meta);
+
+        if (! $res['success']) {
+            return response()->json(['status' => 'error', 'message' => $res['message']], 422);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => $res['message'],
+            'expires_at' => $res['expires_at'],
+            'debug_code' => $res['debug_code'] ?? null,
+        ]);
+    }
+
+    private function finalizeLogin(User $user, Request $request, bool $remember = false, ?string $customMessage = null): JsonResponse
+    {
+        ActivityLog::create([
             'user_id' => $user->id,
             'action' => 'login',
+            'description' => "Signed in from {$this->deviceService->detectDeviceName($request->userAgent())}",
             'ip_address' => $request->ip(),
             'user_agent' => $request->userAgent(),
         ]);
 
-        \App\Models\SecurityLog::create([
+        SecurityLog::create([
             'user_id' => $user->id,
             'event_type' => 'login_success',
             'ip_address' => $request->ip(),
             'user_agent' => $request->userAgent(),
+            'details' => [
+                'remember' => $remember,
+                'device' => $this->deviceService->detectDeviceName($request->userAgent()),
+                'department' => $user->departmentCode(),
+            ],
+            'is_resolved' => true,
+            'resolved_at' => now(),
         ]);
 
         $user->update(['last_active_at' => now()]);
 
+        // Sanctum token creation: name includes remember indicator
+        $tokenName = $remember ? 'lms-remembered-device' : 'lms-web-session';
+        $plainToken = $user->createToken($tokenName)->plainTextToken;
+
         return response()->json([
-            'token' => $user->createToken('lms-web')->plainTextToken,
+            'token' => $plainToken,
             'user' => $this->userPayload($user),
+            'remember' => $remember,
+            'message' => $customMessage ?? 'Signed in successfully.',
         ]);
     }
 
     public function me(Request $request): JsonResponse
     {
         return response()->json(['user' => $this->userPayload($request->user())]);
+    }
+
+    /**
+     * Request a one-time authorization code to change password from Settings.
+     */
+    public function requestPasswordChangeCode(Request $request): JsonResponse
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        $meta = [
+            'ip_address' => $request->ip(),
+            'device_name' => $this->deviceService->detectDeviceName($request->userAgent()),
+        ];
+
+        $otp = $this->otpService->issue(
+            $user,
+            VerificationCode::PURPOSE_PASSWORD_CHANGE,
+            ['action' => 'profile_password_change'],
+            $meta
+        );
+
+        return response()->json([
+            'status' => 'success',
+            'challenge' => $otp['challenge'],
+            'email_hint' => $otp['email_hint'],
+            'message' => "A 6-digit authorization code has been dispatched to {$otp['email_hint']}. Enter it below along with your new strong password.",
+            'debug_code' => $otp['debug_code'] ?? null,
+        ]);
     }
 
     public function updateProfile(Request $request): JsonResponse
@@ -108,28 +298,73 @@ class AuthController extends Controller
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email,' . $user->id],
+            'email' => ['sometimes', 'string', 'email', 'max:255'],
             'password' => ['nullable', 'string', 'min:8'],
+            'code' => ['sometimes', 'nullable', 'string', 'min:6', 'max:8'],
+            'challenge' => ['sometimes', 'nullable', 'string'],
         ]);
+
+        // Requirement: Institutional School Email is PROTECTED and cannot be altered
+        if (! empty($validated['email']) && strtolower(trim($validated['email'])) !== strtolower($user->email)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Institutional school email addresses cannot be altered. Please contact the College Secretary or Dean for record corrections.',
+            ], 422);
+        }
 
         $parts = preg_split('/\s+/', trim($validated['name']), 2);
         $updates = [
             'name' => trim($validated['name']),
             'first_name' => $parts[0] ?? $user->first_name,
             'last_name' => $parts[1] ?? $user->last_name,
-            'email' => trim($validated['email']),
         ];
 
-        if (!empty($validated['password'])) {
+        // Changing password requires 6-digit code authorization
+        if (! empty($validated['password'])) {
+            $code = trim((string) ($validated['code'] ?? ''));
+            $challenge = trim((string) ($validated['challenge'] ?? ''));
+
+            if (empty($code) || empty($challenge)) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'A verification code is required to update your account password. Click "Request Code" to receive one at your school email.',
+                    'requires_code' => true,
+                ], 422);
+            }
+
+            $verifyResult = $this->otpService->verify(
+                $challenge,
+                $code,
+                VerificationCode::PURPOSE_PASSWORD_CHANGE
+            );
+
+            if (! $verifyResult['success']) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => $verifyResult['message'],
+                    'attempts_remaining' => $verifyResult['attempts_remaining'] ?? 0,
+                ], 422);
+            }
+
             $updates['password'] = Hash::make($validated['password']);
+
+            SecurityLog::create([
+                'user_id' => $user->id,
+                'event_type' => 'password_changed_with_otp',
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+                'details' => ['method' => 'profile_settings_otp'],
+                'is_resolved' => true,
+                'resolved_at' => now(),
+            ]);
         }
 
         $user->update($updates);
 
-        \App\Models\ActivityLog::create([
+        ActivityLog::create([
             'user_id' => $user->id,
             'action' => 'update_profile',
-            'description' => "Updated personal profile information ({$user->email})",
+            'description' => "Updated personal profile" . (!empty($validated['password']) ? " and reset security password" : ""),
             'ip_address' => $request->ip(),
             'user_agent' => $request->userAgent(),
         ]);
@@ -147,41 +382,114 @@ class AuthController extends Controller
         return response()->json(['message' => 'Signed out.']);
     }
 
+    /**
+     * Request a password reset OTP code.
+     */
     public function forgotPassword(Request $request): JsonResponse
     {
         $validated = $request->validate(['identifier' => ['required', 'string', 'max:255']]);
+
         $user = User::query()
             ->where('email', $validated['identifier'])
             ->orWhere('lrn', $validated['identifier'])
             ->first();
 
-        if ($user) {
-            Password::sendResetLink(['email' => $user->email]);
+        if (! $user) {
+            return response()->json([
+                'status' => 'success',
+                'message' => 'If an account matches our records, a 6-digit verification code has been dispatched to its institutional email.',
+            ]);
         }
 
+        $meta = [
+            'ip_address' => $request->ip(),
+            'device_name' => $this->deviceService->detectDeviceName($request->userAgent()),
+        ];
+
+        $otp = $this->otpService->issue(
+            $user,
+            VerificationCode::PURPOSE_PASSWORD_RESET,
+            ['identifier' => $validated['identifier']],
+            $meta
+        );
+
+        SecurityLog::create([
+            'user_id' => $user->id,
+            'event_type' => 'password_reset_requested',
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'details' => ['email_hint' => $otp['email_hint']],
+            'is_resolved' => true,
+            'resolved_at' => now(),
+        ]);
+
         return response()->json([
-            'message' => 'If the account exists, password reset instructions have been sent to its email address.',
+            'status' => 'success',
+            'requires_code' => true,
+            'challenge' => $otp['challenge'],
+            'email_hint' => $otp['email_hint'],
+            'message' => "A 6-digit password reset verification code has been sent to {$otp['email_hint']}.",
+            'debug_code' => $otp['debug_code'] ?? null,
         ]);
     }
 
+    /**
+     * Reset password using the verified 6-digit OTP code.
+     */
     public function resetPassword(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'token' => ['required', 'string'],
-            'email' => ['required', 'email'],
+            'challenge' => ['required', 'string'],
+            'code' => ['required', 'string', 'min:6', 'max:8'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
         ]);
 
-        $status = Password::reset($validated, function (User $user, string $password): void {
-            $user->forceFill(['password' => Hash::make($password), 'remember_token' => Str::random(60)])->save();
-            $user->tokens()->delete();
-        });
+        $result = $this->otpService->verify(
+            $validated['challenge'],
+            $validated['code'],
+            VerificationCode::PURPOSE_PASSWORD_RESET
+        );
 
-        if ($status !== Password::PASSWORD_RESET) {
-            return response()->json(['message' => __($status)], 422);
+        if (! $result['success']) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $result['message'],
+                'attempts_remaining' => $result['attempts_remaining'] ?? 0,
+            ], 422);
         }
 
-        return response()->json(['message' => 'Your password has been reset. You can now sign in.']);
+        /** @var User $user */
+        $user = $result['user'];
+        $user->forceFill([
+            'password' => Hash::make($validated['password']),
+            'remember_token' => Str::random(60),
+        ])->save();
+
+        // Revoke all prior active sessions for security
+        $user->tokens()->delete();
+
+        ActivityLog::create([
+            'user_id' => $user->id,
+            'action' => 'password_reset_completed',
+            'description' => 'Password reset completed via email OTP verification',
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
+
+        SecurityLog::create([
+            'user_id' => $user->id,
+            'event_type' => 'password_reset_success',
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'details' => ['method' => 'email_otp_verified'],
+            'is_resolved' => true,
+            'resolved_at' => now(),
+        ]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Your password has been successfully reset. You may now sign in with your new password.',
+        ]);
     }
 
     /** @return array */
@@ -198,6 +506,8 @@ class AuthController extends Controller
             'role' => $normalizedRole,
             'grade' => $user->grade,
             'section' => $user->section,
+            'department' => $user->departmentCode(),
+            'school_year' => $user->school_year ?? config('lms.school_year', '2026-2027'),
             'status' => $user->status,
             'initials' => $user->initials,
         ];

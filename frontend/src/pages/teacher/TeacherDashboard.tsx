@@ -1269,9 +1269,15 @@ export default function TeacherDashboard() {
             </div>
           </div>
           <div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', textTransform: 'uppercase', fontWeight: 600 }}>Academic Department</div>
+            <div style={{ color: '#fbbf24', fontWeight: 700, marginTop: '0.2rem' }}>
+              {user?.department ? `${user.department} Department` : 'College of Information Technology (CIT)'}
+            </div>
+          </div>
+          <div>
             <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', textTransform: 'uppercase', fontWeight: 600 }}>School Year</div>
             <div style={{ color: 'white', fontWeight: 600, marginTop: '0.2rem' }}>
-              2025–2026
+              2026–2027
             </div>
           </div>
         </div>

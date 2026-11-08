@@ -27,6 +27,7 @@ class Quiz extends Model
         'target_student_ids',
         'time_limit_minutes',
         'shuffle_questions',
+        'department',
     ];
 
     protected function casts(): array

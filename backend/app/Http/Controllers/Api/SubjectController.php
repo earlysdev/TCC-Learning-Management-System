@@ -131,6 +131,13 @@ class SubjectController extends Controller
 
         $query = Subject::query();
 
+        $user = $request->user();
+        if ($request->has('department') && !empty($request->department) && $request->department !== 'all') {
+            $query->where('department', $request->department);
+        } elseif ($user && ! $user->isInstitutionWide()) {
+            $query->where('department', $user->departmentCode());
+        }
+
         if ($request->filled('grade') && $request->grade !== 'all' && $request->grade !== 'All Grades') {
             $query->where(function ($q) use ($request) {
                 $q->where('grade', $request->grade)

@@ -768,7 +768,7 @@ export default function SecretaryDashboard() {
       title = 'Graduating Students Roster (4th Year)';
       const rows = graduatingStudentsList;
       count = rows.length;
-      scopeSummary = '4th Year BSIT (Blocks 4A–4E) • S.Y. 2025–2026';
+      scopeSummary = '4th Year BSIT (Blocks 4A–4E) • S.Y. 2026–2027';
       const header = ['No.', 'Student ID', 'Candidate Name', 'Year Level', 'Assigned Block', 'Email Address', 'Graduation Status'];
       const body = rows.map((s, idx) => [
         String(idx + 1),
@@ -780,7 +780,7 @@ export default function SecretaryDashboard() {
         (s.status || 'active').toUpperCase(),
       ]);
       csvContent = [header.join(','), ...body.map((r) => r.join(','))].join('\n');
-      filename = `TCC_Graduating_Roster_SY2025_2026_${new Date().toISOString().slice(0, 10)}.csv`;
+      filename = `TCC_Graduating_Roster_SY2026_2027_${new Date().toISOString().slice(0, 10)}.csv`;
     } else if (reportId === 'section_capacity') {
       docCode = 'TCC-REG-FORM-03';
       title = 'Section & Block Capacity Utilization Report';
@@ -864,7 +864,7 @@ export default function SecretaryDashboard() {
         'TCC-REG-FORM-02',
         'Graduating Students Roster (4th Year)',
         'Classic Printable Sheet (PDF)',
-        '4th Year BSIT (Blocks 4A–4E) • S.Y. 2025–2026',
+        '4th Year BSIT (Blocks 4A–4E) • S.Y. 2026–2027',
         graduatingStudentsList.length
       );
     } else if (reportId === 'section_capacity') {
@@ -1071,7 +1071,7 @@ export default function SecretaryDashboard() {
                       Account Credentials &amp; Academic Profile
                     </h2>
                   </div>
-                  <Badge variant="primary">S.Y. 2025–2026</Badge>
+                  <Badge variant="primary">S.Y. 2026–2027</Badge>
                 </div>
 
                 {/* Segmented Account Role Cards */}
@@ -2715,7 +2715,7 @@ export default function SecretaryDashboard() {
         seriesLabel: 'ACADEMIC CANDIDACY ROSTER',
         title: 'Graduating Students Roster',
         description:
-          'Official summary of 4th Year graduating BSIT students (Blocks 4A–4E) and graduation candidates for Academic Year 2025–2026.',
+          'Official summary of 4th Year graduating BSIT students (Blocks 4A–4E) and graduation candidates for Academic Year 2026–2027.',
         recordCount: graduatingStudentsList.length,
         recordUnit: '4th Year Candidates',
         accentColor: '#c4b5fd',
@@ -3223,7 +3223,7 @@ export default function SecretaryDashboard() {
                       COLLEGE OF INFORMATION TECHNOLOGY • OFFICE OF THE COLLEGE SECRETARY
                     </div>
                     <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: '0.15rem' }}>
-                      Baluarte, Tagoloan, Misamis Oriental • Academic Year 2025–2026
+                      Baluarte, Tagoloan, Misamis Oriental • Academic Year 2026–2027
                     </div>
                   </div>
 
@@ -3248,7 +3248,7 @@ export default function SecretaryDashboard() {
                       </div>
                       <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f172a', margin: '0.15rem 0 0' }}>
                         {activePreviewReport === 'student_masterlist' && 'Complete BSIT Student Masterlist'}
-                        {activePreviewReport === 'graduating_roster' && '4th Year Graduating Students Roster (S.Y. 2025–2026)'}
+                        {activePreviewReport === 'graduating_roster' && '4th Year Graduating Students Roster (S.Y. 2026–2027)'}
                         {activePreviewReport === 'section_capacity' && 'Class Section & Block Capacity Utilization Report'}
                         {activePreviewReport === 'curriculum_prospectus' && 'Official BSIT 1st–4th Year Curriculum Prospectus'}
                       </h3>
@@ -3513,7 +3513,7 @@ export default function SecretaryDashboard() {
           <div>
             <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', textTransform: 'uppercase', fontWeight: 600 }}>Current School Year</div>
             <div style={{ color: 'white', fontWeight: 600, marginTop: '0.2rem' }}>
-              2025–2026
+              2026–2027
             </div>
           </div>
         </div>

@@ -44,6 +44,13 @@ class SectionController extends Controller
 
         $query = Section::query();
 
+        $user = $request->user();
+        if ($request->has('department') && !empty($request->department) && $request->department !== 'all') {
+            $query->where('department', $request->department);
+        } elseif ($user && ! $user->isInstitutionWide()) {
+            $query->where('department', $user->departmentCode());
+        }
+
         if ($request->has('grade') && !empty($request->grade)) {
             $query->where('grade', $request->grade);
         }
@@ -88,7 +95,12 @@ class SectionController extends Controller
             'grade' => ['required', 'string', 'max:40'],
             'name' => ['required', 'string', 'max:80'],
             'display_name' => ['nullable', 'string', 'max:100'],
+            'department' => ['nullable', 'string', 'max:16'],
         ]);
+
+        $department = !empty($validated['department'])
+            ? strtoupper(trim($validated['department']))
+            : ($request->user()?->departmentCode() ?? 'CIT');
 
         $grade = trim($validated['grade']);
         $rawName = trim($validated['name']);
@@ -122,6 +134,7 @@ class SectionController extends Controller
             'grade' => $grade,
             'name' => $name,
             'display_name' => $displayName,
+            'department' => $department,
         ]);
 
         ActivityLog::create([
@@ -153,7 +166,12 @@ class SectionController extends Controller
             'grade' => ['required', 'string', 'max:40'],
             'name' => ['required', 'string', 'max:80'],
             'display_name' => ['nullable', 'string', 'max:100'],
+            'department' => ['nullable', 'string', 'max:16'],
         ]);
+
+        $department = !empty($validated['department'])
+            ? strtoupper(trim($validated['department']))
+            : ($request->user()?->departmentCode() ?? 'CIT');
 
         $grade = trim($validated['grade']);
         $rawName = trim($validated['name']);

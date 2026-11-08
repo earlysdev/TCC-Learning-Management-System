@@ -9,6 +9,8 @@ export interface User {
   role: UserRole;
   grade?: string;
   section?: string;
+  department?: string;
+  school_year?: string;
   status?: string;
   initials?: string;
   lrn?: string;
@@ -20,6 +22,7 @@ export interface Quiz {
   subject: string;
   topic: string;
   instructions: string | null;
+  department?: string;
   reference_pdf_name?: string | null;
   reference_pdf_text?: string | null;
   reference_pdf_data?: string | null;
@@ -160,6 +163,8 @@ export interface SecurityLog {
   details?: Record<string, unknown> | null;
   is_resolved: boolean;
   resolved_at?: string | null;
+  resolved_by?: number | null;
+  resolver?: { id: number; name: string } | null;
   created_at: string;
   user?: User | null;
 }
@@ -178,6 +183,7 @@ export interface Section {
   grade: string;
   name: string;
   display_name: string;
+  department?: string;
   student_count?: number;
   students_count?: number;
   created_at?: string;

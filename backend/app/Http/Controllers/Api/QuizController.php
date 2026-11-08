@@ -110,6 +110,7 @@ class QuizController extends Controller
 
         $createAttributes = [
             'teacher_id' => $request->user()->id,
+            'department' => $request->user()->departmentCode(),
             'title' => $title,
             'subject' => trim($input['subject']),
             'topic' => $cleanTopic,
@@ -1266,6 +1267,13 @@ class QuizController extends Controller
 
     private function isStudentEligible(User $student, Quiz $quiz): bool
     {
+        // Enforce Academic Department Data Isolation (e.g. CIT quizzes only visible to CIT students)
+        $quizDept = $quiz->department ?: config('lms.default_department', 'CIT');
+        $studentDept = $student->departmentCode();
+        if (strtoupper($quizDept) !== strtoupper($studentDept)) {
+            return false;
+        }
+
         $targetType = $quiz->target_type ?? 'all';
         if ($targetType === 'all') {
             return true;

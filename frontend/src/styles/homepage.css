@@ -410,20 +410,11 @@ html {
   background-attachment: scroll, scroll, fixed;
 }
 
-.section-download {
-  background:
-    radial-gradient(ellipse 50% 50% at 80% 50%, rgba(245, 158, 11, 0.14) 0%, transparent 70%),
-    linear-gradient(180deg, rgba(26, 4, 7, 0.9) 0%, rgba(54, 8, 14, 0.82) 50%, rgba(22, 4, 7, 0.95) 100%),
-    url('/assets/images/tcc-banner.jpg') center / cover no-repeat;
-  background-attachment: scroll, scroll, fixed;
-}
-
 /* Fixed backgrounds are unreliable on touch devices; fall back to scroll */
 @media (max-width: 992px), (hover: none) {
   .section-about,
   .section-programs,
-  .section-features,
-  .section-download {
+  .section-features {
     background-attachment: scroll;
   }
 }

@@ -17,6 +17,13 @@ class UserController extends Controller
     {
         $query = User::query();
 
+        $currentUser = $request->user();
+        if ($request->has('department') && !empty($request->department) && $request->department !== 'all') {
+            $query->where('department', $request->department);
+        } elseif ($currentUser && ! $currentUser->isInstitutionWide()) {
+            $query->where('department', $currentUser->departmentCode());
+        }
+
         if ($request->has('role') && $request->filled('role')) {
             $roleParam = trim((string) $request->role);
             if ($roleParam === 'staff') {
@@ -166,8 +173,17 @@ class UserController extends Controller
             'lrn' => 'nullable|string|unique:users',
             'grade' => 'nullable|string|max:40',
             'section' => 'nullable|string|max:80',
+            'department' => 'nullable|string|max:16',
             'school_year' => 'nullable|string|max:9',
         ]);
+
+        $validated['department'] = !empty($validated['department'])
+            ? strtoupper(trim($validated['department']))
+            : ($request->user()?->departmentCode() ?? config('lms.default_department', 'CIT'));
+
+        $validated['school_year'] = !empty($validated['school_year'])
+            ? trim($validated['school_year'])
+            : config('lms.school_year', '2026-2027');
 
         if (empty($validated['grade']) && !empty($validated['section']) && preg_match('/([1-4])[A-Z]/i', $validated['section'], $matches)) {
             $yearMap = ['1' => '1st Year', '2' => '2nd Year', '3' => '3rd Year', '4' => '4th Year'];

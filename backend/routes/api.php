@@ -16,12 +16,15 @@ use Illuminate\Support\Facades\Route;
 Route::get('/health', fn () => response()->json(['status' => 'ok', 'app' => 'LNHS LMS API']));
 
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
+Route::post('/verify-login-otp', [AuthController::class, 'verifyLoginOtp'])->middleware('throttle:10,1');
+Route::post('/resend-login-otp', [AuthController::class, 'resendLoginOtp'])->middleware('throttle:5,1');
 Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:6,1');
 Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:6,1');
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::put('/profile', [AuthController::class, 'updateProfile']);
+    Route::post('/profile/request-password-code', [AuthController::class, 'requestPasswordChangeCode'])->middleware('throttle:5,1');
     Route::post('/logout', [AuthController::class, 'logout']);
 
     // Academic Sections & Structuring
@@ -104,6 +107,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/security-logs', [SecurityLogController::class, 'index']);
         Route::get('/principal/security-logs', [SecurityLogController::class, 'index']);
         Route::get('/dean/security-logs', [SecurityLogController::class, 'index']);
+        Route::patch('/security-logs/resolve-all', [SecurityLogController::class, 'resolveAll']);
+        Route::post('/security-logs/resolve-all', [SecurityLogController::class, 'resolveAll']);
         Route::patch('/security-logs/{log}/resolve', [SecurityLogController::class, 'resolve']);
     });
 

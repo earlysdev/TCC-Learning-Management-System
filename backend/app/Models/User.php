@@ -26,6 +26,7 @@ class User extends Authenticatable
         'status',
         'last_active_at',
         'school_year',
+        'department',
         'password',
     ];
 
@@ -71,6 +72,26 @@ class User extends Authenticatable
     public function securityLogs()
     {
         return $this->hasMany(SecurityLog::class);
+    }
+
+    public function trustedDevices()
+    {
+        return $this->hasMany(TrustedDevice::class);
+    }
+
+    public function verificationCodes()
+    {
+        return $this->hasMany(VerificationCode::class);
+    }
+
+    public function departmentCode(): string
+    {
+        return $this->department ?: (config('lms.default_department') ?? 'CIT');
+    }
+
+    public function isInstitutionWide(): bool
+    {
+        return in_array($this->role, ['dean', 'principal', 'developer'], true);
     }
 
     public function scopeStudents($query)
