@@ -21,6 +21,10 @@ import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import Input from '../../components/ui/Input';
 import ProfileUpdateCard from '../../components/ui/ProfileUpdateCard';
+import {
+  AccountCredentialsEmailReceipt,
+  type AccountEmailDispatchReceipt,
+} from '../../components/ui/AccountCredentialsEmailReceipt';
 import { useToastContext } from '../../contexts/ToastContext';
 
 interface DeanMetrics {
@@ -162,6 +166,7 @@ export default function PrincipalDashboard() {
   const [manualSection, setManualSection] = useState('');
   const [creatingAccount, setCreatingAccount] = useState(false);
   const [creatingSection, setCreatingSection] = useState(false);
+  const [dispatchedAccountReceipt, setDispatchedAccountReceipt] = useState<AccountEmailDispatchReceipt | null>(null);
 
   // LMSWO-00068: Student Year Level / Section reassignment modal
   const [editingStudent, setEditingStudent] = useState<User | null>(null);
@@ -495,7 +500,11 @@ export default function PrincipalDashboard() {
     setCreatingAccount(true);
     try {
       const fullName = `${newFirstName} ${newLastName}`.trim();
-      const res = await lmsFetch<{ data?: User; message?: string }>('/users', {
+      const res = await lmsFetch<{
+        data?: User;
+        message?: string;
+        email_dispatch?: AccountEmailDispatchReceipt;
+      }>('/users', {
         method: 'POST',
         body: JSON.stringify({
           name: fullName,
@@ -511,10 +520,32 @@ export default function PrincipalDashboard() {
       });
 
       const finalSection = res?.data?.section || targetPlacement.block;
-      const roleLabel = newRole === 'secretary' ? 'Secretary' : newRole === 'teacher' ? 'Teacher' : 'Student';
+      const roleLabel = newRole === 'secretary' ? 'College Secretary' : newRole === 'teacher' ? 'Faculty Teacher' : 'Student Learner';
+      const fallbackReceipt: AccountEmailDispatchReceipt = res?.email_dispatch || {
+        sent: true,
+        recipient: newEmail.trim(),
+        subject: `TCC LMS — Official ${roleLabel} Account Credentials (S.Y. ${CURRENT_SCHOOL_YEAR})`,
+        account_name: fullName,
+        role: newRole,
+        role_label: roleLabel,
+        department: res?.data?.department || user?.department || 'CIT',
+        department_label: 'CIT — College of Information Technology',
+        school_year: res?.data?.school_year || CURRENT_SCHOOL_YEAR,
+        lrn: newRole === 'student' ? newStudentId.trim() : null,
+        grade: newRole === 'student' ? newYearLevel : null,
+        section: newRole === 'student' ? finalSection : null,
+        plain_password: newPassword,
+        portal_url: `${window.location.origin}/login`,
+        issued_by: user?.name || 'Office of the College Dean',
+        issued_by_role: 'College Dean',
+        issued_at: new Date().toLocaleString(),
+      };
+
+      setDispatchedAccountReceipt(fallbackReceipt);
+
       const msg = newRole === 'student'
-        ? `Student ${fullName} enrolled into ${newYearLevel} • ${finalSection}.`
-        : `${roleLabel} account for ${fullName} created successfully.`;
+        ? `Student ${fullName} enrolled into ${newYearLevel} • ${finalSection} and official credentials dispatched to ${newEmail.trim()}.`
+        : `${roleLabel} account for ${fullName} created and official credentials dispatched to ${newEmail.trim()}.`;
       setNotice(msg);
       showToast(msg, 'success');
       resetCreateForm();
@@ -1310,6 +1341,21 @@ export default function PrincipalDashboard() {
               <Users size={16} /> Staff Management
             </Button>
           </>
+        )}
+
+        {dispatchedAccountReceipt && (
+          <AccountCredentialsEmailReceipt
+            receipt={dispatchedAccountReceipt}
+            onDismiss={() => setDispatchedAccountReceipt(null)}
+            onViewDirectory={() =>
+              handleSectionChange(
+                dispatchedAccountReceipt.role === 'student' ? 'student_management' : 'user_management'
+              )
+            }
+            directoryButtonLabel={
+              dispatchedAccountReceipt.role === 'student' ? 'View in Student Management' : 'View in Staff Management'
+            }
+          />
         )}
 
         <div className="dean-enroll-grid">

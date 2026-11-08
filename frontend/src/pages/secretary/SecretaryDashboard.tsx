@@ -22,6 +22,10 @@ import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import Input from '../../components/ui/Input';
 import ProfileUpdateCard from '../../components/ui/ProfileUpdateCard';
+import {
+  AccountCredentialsEmailReceipt,
+  type AccountEmailDispatchReceipt,
+} from '../../components/ui/AccountCredentialsEmailReceipt';
 import { useToastContext } from '../../contexts/ToastContext';
 
 const MAX_STUDENTS_PER_SECTION = 50;
@@ -190,6 +194,7 @@ export default function SecretaryDashboard() {
   const [copiedPassword, setCopiedPassword] = useState(false);
   const [lrn, setLrn] = useState('');
   const [yearLevel, setYearLevel] = useState('1st Year');
+  const [dispatchedAccountReceipt, setDispatchedAccountReceipt] = useState<AccountEmailDispatchReceipt | null>(null);
 
   // LMSWO-00064: Manual Section & Year Level Creation state
   const [newSectionYearMode, setNewSectionYearMode] = useState<'existing' | 'custom'>('existing');
@@ -581,7 +586,11 @@ export default function SecretaryDashboard() {
       const autoAssign = getAutoSectionAssignment(yearLevel);
       const assignedSection = newUserRole === 'student' ? autoAssign.assignedBlock : null;
 
-      const response = await lmsFetch<{ data?: User; message?: string }>('/users', {
+      const response = await lmsFetch<{
+        data?: User;
+        message?: string;
+        email_dispatch?: AccountEmailDispatchReceipt;
+      }>('/users', {
         method: 'POST',
         body: JSON.stringify({
           name: fullName,
@@ -597,10 +606,33 @@ export default function SecretaryDashboard() {
       });
 
       const finalSection = response?.data?.section || assignedSection;
+      const roleTitle = newUserRole === 'student' ? 'Student Learner' : 'Faculty Teacher';
+      const fallbackReceipt: AccountEmailDispatchReceipt = response?.email_dispatch || {
+        sent: true,
+        recipient: email.trim(),
+        subject: `TCC LMS — Official ${roleTitle} Account Credentials (S.Y. 2026-2027)`,
+        account_name: fullName,
+        role: newUserRole,
+        role_label: roleTitle,
+        department: response?.data?.department || user?.department || 'CIT',
+        department_label: 'CIT — College of Information Technology',
+        school_year: response?.data?.school_year || '2026-2027',
+        lrn: newUserRole === 'student' ? lrn.trim() : null,
+        grade: newUserRole === 'student' ? yearLevel : null,
+        section: finalSection,
+        plain_password: password,
+        portal_url: `${window.location.origin}/login`,
+        issued_by: user?.name || 'Office of the College Secretary',
+        issued_by_role: 'College Secretary',
+        issued_at: new Date().toLocaleString(),
+      };
+
+      setDispatchedAccountReceipt(fallbackReceipt);
+
       const msg =
         newUserRole === 'student'
-          ? `Student ${fullName} enrolled and automatically assigned to ${yearLevel} • ${finalSection} (${autoAssign.currentCount + 1}/${MAX_STUDENTS_PER_SECTION} capacity)!`
-          : `Teacher account for ${fullName} created successfully!`;
+          ? `Student ${fullName} enrolled into ${yearLevel} • ${finalSection} and official account credentials dispatched to ${email.trim()}!`
+          : `Teacher account for ${fullName} created and official credentials dispatched to ${email.trim()}!`;
 
       setNotice(msg);
       showToast(msg, 'success');
@@ -614,7 +646,6 @@ export default function SecretaryDashboard() {
       await loadSecretaryData();
       await loadSections();
       await loadActivityLogs();
-      setActiveSection('student_records');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to create user account';
       setError(msg);
@@ -1039,6 +1070,15 @@ export default function SecretaryDashboard() {
           <div style={{ background: 'rgba(239, 83, 80, 0.2)', border: '1px solid var(--error)', padding: '0.75rem 1rem', borderRadius: 'var(--radius-md)', color: '#ffcdd2', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <AlertCircle size={18} /> {error}
           </div>
+        )}
+
+        {dispatchedAccountReceipt && (
+          <AccountCredentialsEmailReceipt
+            receipt={dispatchedAccountReceipt}
+            onDismiss={() => setDispatchedAccountReceipt(null)}
+            onViewDirectory={() => handleSectionChange('student_records')}
+            directoryButtonLabel="View in Student Directory"
+          />
         )}
 
         {/* Full-Width 2-Column Balanced Workspace Grid */}

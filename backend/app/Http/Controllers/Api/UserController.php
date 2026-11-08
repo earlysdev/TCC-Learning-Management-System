@@ -3,10 +3,13 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Mail\LmsAccountCreatedMail;
 use App\Models\Section;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 
 class UserController extends Controller
@@ -248,23 +251,38 @@ class UserController extends Controller
             $validated['lrn'] = null;
         }
 
+        $plainPassword = (string) $validated['password'];
         $validated['password'] = Hash::make($validated['password']);
         $validated['status'] = $validated['status'] ?? 'active';
 
         $user = User::create($validated);
 
+        $portalOrigin = $request->headers->get('origin') ?: config('app.url', 'https://learning-lms.online');
+        $accountMail = new LmsAccountCreatedMail($user, $plainPassword, $request->user(), $portalOrigin);
+        $emailSent = true;
+        $mailWarning = null;
+
+        try {
+            Mail::to($user->email)->send($accountMail);
+        } catch (\Throwable $e) {
+            $emailSent = false;
+            $mailWarning = 'Account created, but live SMTP delivery encountered an issue.';
+            Log::warning("Failed to dispatch account credentials email to {$user->email}: " . $e->getMessage());
+        }
+
         \App\Models\ActivityLog::create([
             'user_id' => $request->user()?->id,
             'action' => 'create_user',
-            'description' => "Created {$user->role} account for {$user->name}" . ($user->section ? " ({$user->grade} • {$user->section})" : ''),
+            'description' => "Created {$user->role} account for {$user->name}" . ($user->section ? " ({$user->grade} • {$user->section})" : '') . " and dispatched credentials to {$user->email}",
             'ip_address' => $request->ip(),
             'user_agent' => $request->userAgent(),
         ]);
 
         return response()->json([
             'status' => 'success',
-            'message' => 'User created successfully',
-            'data' => $user
+            'message' => "Account created and official credentials dispatched to {$user->email}.",
+            'data' => $user,
+            'email_dispatch' => $accountMail->toReceiptPayload($emailSent, $mailWarning),
         ], 201);
     }
 
