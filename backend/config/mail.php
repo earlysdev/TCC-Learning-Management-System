@@ -14,7 +14,7 @@ return [
     |
     */
 
-    'default' => env('MAIL_MAILER') ?: (env('MAIL_HOST') && env('MAIL_USERNAME') ? 'smtp' : 'log'),
+    'default' => env('MAIL_MAILER', 'smtp'),
 
     /*
     |--------------------------------------------------------------------------
@@ -39,15 +39,15 @@ return [
 
         'smtp' => [
             'transport' => 'smtp',
-            'scheme' => env('MAIL_SCHEME') ?: match (strtolower((string) env('MAIL_ENCRYPTION', ''))) {
+            'scheme' => env('MAIL_SCHEME') ?: match (strtolower((string) env('MAIL_ENCRYPTION', 'tls'))) {
                 'ssl', 'smtps' => 'smtps',
                 default => ((int) env('MAIL_PORT', 587) === 465 ? 'smtps' : 'smtp'),
             },
             'url' => env('MAIL_URL'),
-            'host' => env('MAIL_HOST', '127.0.0.1'),
+            'host' => env('MAIL_HOST', 'smtp.gmail.com'),
             'port' => (int) env('MAIL_PORT', 587),
-            'username' => env('MAIL_USERNAME'),
-            'password' => env('MAIL_PASSWORD'),
+            'username' => env('MAIL_USERNAME', 'tcclms4@gmail.com'),
+            'password' => env('MAIL_PASSWORD', 'qhxsarnndiyayuku'),
             'timeout' => (int) env('MAIL_TIMEOUT', 15),
             'local_domain' => env('MAIL_EHLO_DOMAIN', parse_url((string) env('APP_URL', 'http://localhost'), PHP_URL_HOST)),
         ],
@@ -114,8 +114,8 @@ return [
     */
 
     'from' => [
-        'address' => env('MAIL_FROM_ADDRESS', 'hello@example.com'),
-        'name' => env('MAIL_FROM_NAME', env('APP_NAME', 'Laravel')),
+        'address' => env('MAIL_FROM_ADDRESS', 'tcclms4@gmail.com'),
+        'name' => env('MAIL_FROM_NAME', env('APP_NAME', 'Tagoloan Community College LMS')),
     ],
 
 ];
