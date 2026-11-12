@@ -12,7 +12,8 @@ import {
   Mail, 
   RefreshCw,
   Eye,
-  EyeOff
+  EyeOff,
+  User
 } from 'lucide-react';
 import { getLmsUser, lmsFetch } from '../../lmsApi';
 import { useToastContext } from '../../contexts/ToastContext';
@@ -158,39 +159,41 @@ export default function ProfileUpdateCard() {
   };
 
   return (
-    <GlassCard>
-      {/* Refined Header: Integrated icon, title, and persistent policy pill */}
-      <div style={{ marginBottom: '1.35rem', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '1rem' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.85rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+    <GlassCard style={{ overflow: 'hidden' }}>
+      {/* Refined Header: Icon emblem, title, and persistent policy pill */}
+      <div style={{ marginBottom: '1.25rem', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '1rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.85rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', minWidth: 0 }}>
             <div style={{
               width: '42px',
               height: '42px',
               borderRadius: '10px',
-              background: 'rgba(245, 158, 11, 0.14)',
-              border: '1px solid rgba(245, 158, 11, 0.35)',
+              background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(127, 18, 30, 0.3) 100%)',
+              border: '1px solid rgba(245, 158, 11, 0.45)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               color: '#fbbf24',
-              flexShrink: 0
+              flexShrink: 0,
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)'
             }}>
               <ShieldCheck size={22} />
             </div>
-            <div>
+            <div style={{ minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
                 <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#ffffff', margin: 0, letterSpacing: '-0.01em' }}>
                   Account Settings &amp; Security
                 </h3>
-                <span className="settings-policy-pill">
-                  <ShieldCheck size={13} /> TCC Security Policy Active
-                </span>
               </div>
               <p style={{ color: 'var(--neutral-300)', fontSize: '0.84rem', margin: '0.2rem 0 0', lineHeight: 1.45 }}>
-                Manage your verified collegiate identity, institutional credentials, and security password authorization.
+                Manage your verified collegiate identity, institutional credentials, and security password.
               </p>
             </div>
           </div>
+
+          <span className="settings-policy-pill">
+            <ShieldCheck size={13} /> TCC Security Policy Active
+          </span>
         </div>
       </div>
 
@@ -230,11 +233,11 @@ export default function ProfileUpdateCard() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.35rem' }}>
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
         {/* Symmetrical 2-Column Grid: Full Name and Protected Email */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
           gap: '1.25rem',
           alignItems: 'start'
         }}>
@@ -243,16 +246,18 @@ export default function ProfileUpdateCard() {
             <label className="form-label" htmlFor="settings-user-name">
               Full Name / Display Name
             </label>
-            <input
-              id="settings-user-name"
-              type="text"
-              className="form-input"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              placeholder="e.g. Juan Dela Cruz"
-              style={{ width: '100%', boxSizing: 'border-box' }}
-            />
+            <div className="settings-input-wrap">
+              <User size={16} className="input-icon-left" />
+              <input
+                id="settings-user-name"
+                type="text"
+                className="form-input"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                placeholder="e.g. Juan Dela Cruz"
+              />
+            </div>
             <p className="settings-field-helper">
               Official verified identity across your courses, assessments, and academic records.
             </p>
@@ -264,13 +269,14 @@ export default function ProfileUpdateCard() {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
+              gap: '0.5rem',
               marginBottom: '0.42rem'
             }}>
-              <label className="form-label" htmlFor="settings-user-email" style={{ margin: 0, whiteSpace: 'nowrap' }}>
-                Institutional Email Address
+              <label className="form-label" htmlFor="settings-user-email" style={{ margin: 0 }}>
+                Institutional Email
               </label>
               <span className="settings-lock-badge">
-                <Lock size={10} /> Locked &bull; Institutional Policy
+                <Lock size={10} /> Locked
               </span>
             </div>
             <div className="settings-locked-input-wrap">
@@ -284,10 +290,10 @@ export default function ProfileUpdateCard() {
                 className="settings-locked-input"
                 aria-label="Institutional email address (locked)"
               />
-              <Lock size={14} style={{ color: '#94a3b8', flexShrink: 0 }} />
+              <Lock size={14} style={{ color: 'var(--neutral-400)', flexShrink: 0 }} />
             </div>
             <p className="settings-field-helper">
-              Official school email is locked for academic audit integrity. Contact the Registrar or Secretary to update.
+              Locked by institutional policy. Contact the Registrar or Secretary to update.
             </p>
           </div>
         </div>
@@ -322,7 +328,7 @@ export default function ProfileUpdateCard() {
               </span>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
               <button
                 type="button"
                 onClick={handleGeneratePassword}
@@ -486,23 +492,25 @@ export default function ProfileUpdateCard() {
           )}
         </div>
 
-        {/* Footer Action Bar: Audit notice on left, polished Save button on right */}
+        {/* Footer Action Bar: Audit notice on left, clean Save button on right */}
         <div style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
           flexWrap: 'wrap',
           gap: '1rem',
-          paddingTop: '0.75rem',
+          paddingTop: '1rem',
           borderTop: '1px solid rgba(255, 255, 255, 0.08)'
         }}>
-          <span style={{ fontSize: '0.78rem', color: 'var(--neutral-400)', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
-            <ShieldCheck size={15} style={{ color: '#4ade80' }} />
-            All settings updates are cryptographically logged for collegiate audit trails.
+          <span style={{ fontSize: '0.78rem', color: 'var(--neutral-400)', display: 'inline-flex', alignItems: 'center', gap: '0.45rem' }}>
+            <ShieldCheck size={15} style={{ color: '#4ade80', flexShrink: 0 }} />
+            All updates are cryptographically logged for audit integrity.
           </span>
-          <Button type="submit" variant="accent" size="md" isLoading={saving}>
-            <Save size={16} /> Save Settings &amp; Security Changes
-          </Button>
+          <div style={{ marginLeft: 'auto' }}>
+            <Button type="submit" variant="accent" size="lg" isLoading={saving}>
+              <Save size={16} /> Save Changes
+            </Button>
+          </div>
         </div>
       </form>
     </GlassCard>
