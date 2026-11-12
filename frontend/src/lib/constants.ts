@@ -210,6 +210,31 @@ export const BSIT_SUBJECT_OPTIONS = BSIT_SUBJECTS.map((s) => ({
   semester: s.semester,
 }));
 
+export function buildSubjectOptionsForYear(
+  handledYearLevel?: string | null,
+  customSubjects: Array<{ code?: string; name: string; grade?: string }> = []
+) {
+  const base = handledYearLevel
+    ? BSIT_SUBJECT_OPTIONS.filter((o) => o.yearLevel === handledYearLevel)
+    : [...BSIT_SUBJECT_OPTIONS];
+  const seen = new Set(base.map((o) => o.value.toLowerCase()));
+  customSubjects.forEach((s) => {
+    if (/^prac/i.test(s.code || '') || /practicum/i.test(s.name || '')) return;
+    if (handledYearLevel && s.grade && s.grade !== handledYearLevel) return;
+    const val = s.code && !s.name.startsWith(s.code) ? `${s.code} - ${s.name}` : s.name;
+    if (!seen.has(val.toLowerCase())) {
+      seen.add(val.toLowerCase());
+      base.push({
+        value: val,
+        label: `[${s.grade || handledYearLevel || 'BSIT'}] ${s.code ? `${s.code} — ${s.name}` : s.name}`,
+        yearLevel: (s.grade || handledYearLevel || '1st Year') as any,
+        semester: '1st Semester',
+      });
+    }
+  });
+  return base;
+}
+
 export const ROLE_CONFIGS: Record<UserRole, RoleConfig> = {
   student: {
     label: 'Student',

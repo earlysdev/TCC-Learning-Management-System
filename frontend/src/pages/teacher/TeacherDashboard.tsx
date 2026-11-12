@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import { lmsFetch, getLmsUser, extractCollection } from '../../lmsApi';
 import type { Quiz, User, Subject, TeacherRemedialDraft } from '../../lib/types';
-import { BSIT_SUBJECT_OPTIONS, ALL_BLOCKS, getYearLevelFromBlock } from '../../lib/constants';
+import { BSIT_SUBJECT_OPTIONS, ALL_BLOCKS, getYearLevelFromBlock, buildSubjectOptionsForYear } from '../../lib/constants';
 import { readPdfFile, type ParsedPdfPayload } from '../../lib/pdfUtils';
 import { 
   BookOpen, CheckCircle2, Users, Target, Sparkles, 
@@ -644,27 +644,7 @@ export default function TeacherDashboard() {
               }
               value={subject}
               onChange={setSubject}
-              options={(() => {
-                const base = handledYearLevel
-                  ? BSIT_SUBJECT_OPTIONS.filter((o) => o.yearLevel === handledYearLevel)
-                  : [...BSIT_SUBJECT_OPTIONS];
-                const seen = new Set(base.map((o) => o.value.toLowerCase()));
-                subjects.forEach((s) => {
-                  if (/^prac/i.test(s.code || '') || /practicum/i.test(s.name || '')) return;
-                  if (handledYearLevel && s.grade && s.grade !== handledYearLevel) return;
-                  const val = s.code && !s.name.startsWith(s.code) ? `${s.code} - ${s.name}` : s.name;
-                  if (!seen.has(val.toLowerCase())) {
-                    seen.add(val.toLowerCase());
-                    base.push({
-                      value: val,
-                      label: `[${s.grade || handledYearLevel || 'BSIT'}] ${s.code ? `${s.code} — ${s.name}` : s.name}`,
-                      yearLevel: (s.grade as any) || handledYearLevel || '1st Year',
-                      semester: '1st Semester',
-                    });
-                  }
-                });
-                return base;
-              })()}
+              options={buildSubjectOptionsForYear(handledYearLevel, subjects)}
             />
 
             <Input

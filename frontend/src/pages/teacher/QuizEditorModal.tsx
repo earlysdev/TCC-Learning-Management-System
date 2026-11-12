@@ -4,7 +4,7 @@ import {
   Award, CheckCircle2, Clock3, Shuffle, FileText, Sparkles, Upload, X 
 } from 'lucide-react';
 import type { Question, QuestionType, Quiz, Subject } from '../../lib/types';
-import { BSIT_SUBJECT_OPTIONS } from '../../lib/constants';
+import { buildSubjectOptionsForYear } from '../../lib/constants';
 import { readPdfFile } from '../../lib/pdfUtils';
 import { lmsFetch } from '../../lmsApi';
 import Modal from '../../components/ui/Modal';
@@ -795,27 +795,7 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
                 value={draft.subject}
                 onChange={(val) => setDraft({ ...draft, subject: val })}
                 style={{ margin: 0 }}
-                options={(() => {
-                  const base = handledYearLevel
-                    ? BSIT_SUBJECT_OPTIONS.filter((o) => o.yearLevel === handledYearLevel)
-                    : [...BSIT_SUBJECT_OPTIONS];
-                  const seen = new Set(base.map((o) => o.value.toLowerCase()));
-                  (subjects || []).forEach((s) => {
-                    if (/^prac/i.test(s.code || '') || /practicum/i.test(s.name || '')) return;
-                    if (handledYearLevel && s.grade && s.grade !== handledYearLevel) return;
-                    const val = s.code && !s.name.startsWith(s.code) ? `${s.code} - ${s.name}` : s.name;
-                    if (!seen.has(val.toLowerCase())) {
-                      seen.add(val.toLowerCase());
-                      base.push({
-                        value: val,
-                        label: `[${s.grade || handledYearLevel || 'BSIT'}] ${s.code ? `${s.code} — ${s.name}` : s.name}`,
-                        yearLevel: (s.grade as any) || handledYearLevel || '1st Year',
-                        semester: '1st Semester',
-                      });
-                    }
-                  });
-                  return base;
-                })()}
+                options={buildSubjectOptionsForYear(handledYearLevel, subjects || [])}
               />
             </div>
           </div>
