@@ -100,12 +100,71 @@ class LmsMailService
     }
 
     /**
+     * Ensure institutional SMTP transport is active, falling back to database credentials
+     * if the server environment has not configured or populated live MAIL_* credentials.
+     */
+    public static function bootstrapInstitutionalTransport(): void
+    {
+        if (app()->runningUnitTests() || Mail::getFacadeRoot() instanceof MailFake) {
+            return;
+        }
+
+        $currentDefault = strtolower(trim((string) config('mail.default', 'log')));
+        $smtpHost = trim((string) config('mail.mailers.smtp.host', ''));
+        $smtpUser = trim((string) config('mail.mailers.smtp.username', ''));
+        $smtpPass = (string) config('mail.mailers.smtp.password', '');
+
+        // If .env or runtime config already provided a live working SMTP configuration, respect it.
+        if ($currentDefault === 'smtp' && $smtpHost !== '' && $smtpUser !== '' && $smtpPass !== '') {
+            return;
+        }
+
+        // Fall back to institutional credentials stored in system_settings
+        try {
+            if (! \Illuminate\Support\Facades\Schema::hasTable('system_settings')) {
+                return;
+            }
+
+            $dbSmtp = \App\Models\SystemSetting::get('institutional_smtp');
+            if (is_array($dbSmtp) && ! empty($dbSmtp['host']) && ! empty($dbSmtp['username']) && ! empty($dbSmtp['password'])) {
+                $host = trim((string) $dbSmtp['host']);
+                $port = (int) ($dbSmtp['port'] ?? 587);
+                $encryption = strtolower(trim((string) ($dbSmtp['encryption'] ?? 'tls')));
+                $scheme = match ($encryption) {
+                    'ssl', 'smtps' => 'smtps',
+                    default => ($port === 465 ? 'smtps' : 'smtp'),
+                };
+
+                config([
+                    'mail.default' => 'smtp',
+                    'mail.mailers.smtp.transport' => 'smtp',
+                    'mail.mailers.smtp.scheme' => $scheme,
+                    'mail.mailers.smtp.host' => $host,
+                    'mail.mailers.smtp.port' => $port,
+                    'mail.mailers.smtp.username' => trim((string) $dbSmtp['username']),
+                    'mail.mailers.smtp.password' => (string) $dbSmtp['password'],
+                    'mail.mailers.smtp.encryption' => $encryption,
+                    'mail.mailers.smtp.timeout' => (int) ($dbSmtp['timeout'] ?? 15),
+                    'mail.from.address' => trim((string) ($dbSmtp['from_address'] ?? $dbSmtp['username'])),
+                    'mail.from.name' => trim((string) ($dbSmtp['from_name'] ?? 'Tagoloan Community College LMS')),
+                ]);
+
+                Mail::purge('smtp');
+            }
+        } catch (\Throwable) {
+            // Ignore if DB not ready or during early bootstrap
+        }
+    }
+
+    /**
      * Inspect active mail transport readiness before attempting delivery.
      *
      * @return array{ready: bool, simulated: bool, mailer: string, reason: ?string}
      */
     public static function inspectTransport(): array
     {
+        self::bootstrapInstitutionalTransport();
+
         if (Mail::getFacadeRoot() instanceof MailFake) {
             return [
                 'ready' => true,
