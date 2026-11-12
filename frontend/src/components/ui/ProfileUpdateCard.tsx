@@ -247,9 +247,11 @@ export default function ProfileUpdateCard() {
         }}>
           {/* Left Column: Full Name */}
           <div className="form-group" style={{ margin: 0 }}>
-            <label className="form-label" htmlFor="settings-user-name">
-              Full Name / Display Name
-            </label>
+            <div className="settings-label-row">
+              <label className="form-label" htmlFor="settings-user-name">
+                Full Name / Display Name
+              </label>
+            </div>
             <div className="settings-input-wrap">
               <User size={16} className="input-icon-left" />
               <input
@@ -269,32 +271,26 @@ export default function ProfileUpdateCard() {
 
           {/* Right Column: Institutional Email (Locked) */}
           <div className="form-group" style={{ margin: 0 }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '0.5rem',
-              marginBottom: '0.42rem'
-            }}>
-              <label className="form-label" htmlFor="settings-user-email" style={{ margin: 0 }}>
+            <div className="settings-label-row">
+              <label className="form-label" htmlFor="settings-user-email">
                 Institutional Email
               </label>
               <span className="settings-lock-badge">
                 <Lock size={10} /> Locked
               </span>
             </div>
-            <div className="settings-locked-input-wrap">
-              <Mail size={16} style={{ color: '#fbbf24', flexShrink: 0 }} />
+            <div className="settings-input-wrap">
+              <Mail size={16} className="input-icon-left" />
               <input
                 id="settings-user-email"
                 type="email"
                 value={email}
                 disabled
                 readOnly
-                className="settings-locked-input"
+                className="form-input settings-input-locked"
                 aria-label="Institutional email address (locked)"
               />
-              <Lock size={14} style={{ color: 'var(--neutral-400)', flexShrink: 0 }} />
+              <Lock size={14} className="input-icon-right" />
             </div>
             <p className="settings-field-helper">
               Locked by institutional policy. Contact the Registrar or Secretary to update.

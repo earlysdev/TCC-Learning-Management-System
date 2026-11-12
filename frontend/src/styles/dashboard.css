@@ -302,6 +302,20 @@
   white-space: nowrap;
 }
 
+.settings-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 24px;
+  margin-bottom: 0.45rem;
+}
+
+.settings-label-row .form-label {
+  margin-bottom: 0;
+  line-height: 1.25;
+}
+
 .settings-lock-badge {
   display: inline-flex;
   align-items: center;
@@ -317,6 +331,7 @@
   border: 1px solid rgba(245, 158, 11, 0.35);
   white-space: nowrap;
   flex-shrink: 0;
+  line-height: 1.2;
 }
 
 .settings-input-wrap {
@@ -333,43 +348,28 @@
   color: var(--neutral-400);
 }
 
+.settings-input-wrap .input-icon-right {
+  position: absolute;
+  right: 0.9rem;
+  pointer-events: none;
+  color: var(--neutral-400);
+}
+
 .settings-input-wrap .form-input {
   padding-left: 2.6rem;
   width: 100%;
   box-sizing: border-box;
 }
 
-.settings-locked-input-wrap {
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  height: 44px;
-  padding: 0 0.85rem;
-  background: rgba(18, 2, 4, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: var(--radius-md);
-  box-sizing: border-box;
-  transition: border-color 0.2s ease;
-  width: 100%;
-}
-
-.settings-locked-input-wrap:hover {
-  border-color: rgba(245, 158, 11, 0.3);
-}
-
-.settings-locked-input {
-  flex: 1;
-  background: transparent;
-  border: none;
-  outline: none;
-  color: #e2e8f0;
-  font-family: var(--font-sans);
-  font-size: 0.95rem;
-  font-weight: 500;
+.settings-input-wrap .form-input.settings-input-locked {
+  padding-right: 2.6rem;
   cursor: not-allowed;
-  padding: 0;
-  margin: 0;
-  min-width: 0;
+  color: #e2e8f0;
+}
+
+.settings-input-wrap .form-input.settings-input-locked:hover {
+  background: rgba(35, 7, 12, 0.85);
+  border-color: var(--glass-border);
 }
 
 .settings-field-helper {
@@ -443,7 +443,7 @@
 
 .settings-password-input-wrap .input-icon-left {
   position: absolute;
-  left: 0.85rem;
+  left: 0.9rem;
   pointer-events: none;
   color: var(--neutral-400);
 }
