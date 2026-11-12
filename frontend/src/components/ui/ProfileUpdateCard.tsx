@@ -10,53 +10,16 @@ import {
   Copy, 
   Check, 
   Mail, 
-  RefreshCw 
+  RefreshCw,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { getLmsUser, lmsFetch } from '../../lmsApi';
 import { useToastContext } from '../../contexts/ToastContext';
+import { generateStrongPassword, evaluatePasswordStrength } from '../../lib/passwordUtils';
 import GlassCard from './GlassCard';
 import Input from './Input';
 import Button from './Button';
-
-function generateInstitutionalPassword(): string {
-  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-  const lower = 'abcdefghijkmnopqrstuvwxyz';
-  const digits = '23456789';
-  const specials = '!@#$%&*';
-
-  const pick = (set: string) => set[Math.floor(Math.random() * set.length)];
-
-  const parts = [
-    pick(upper),
-    pick(lower),
-    pick(digits),
-    pick(specials),
-    pick(upper),
-    pick(lower),
-    pick(digits),
-    pick(specials),
-    pick(upper),
-    pick(lower),
-    pick(digits),
-    pick(lower),
-  ];
-
-  return parts.sort(() => 0.5 - Math.random()).join('');
-}
-
-function evaluateStrength(pwd: string): { label: string; color: string; percent: number } {
-  if (!pwd) return { label: 'None', color: 'transparent', percent: 0 };
-  let score = 0;
-  if (pwd.length >= 8) score += 25;
-  if (pwd.length >= 12) score += 25;
-  if (/[A-Z]/.test(pwd) && /[a-z]/.test(pwd)) score += 25;
-  if (/\d/.test(pwd) && /[^A-Za-z0-9]/.test(pwd)) score += 25;
-
-  if (score >= 100) return { label: 'Very Strong • Institutional Grade', color: '#4ade80', percent: 100 };
-  if (score >= 75) return { label: 'Strong', color: '#22c55e', percent: 75 };
-  if (score >= 50) return { label: 'Moderate', color: '#eab308', percent: 50 };
-  return { label: 'Weak (minimum 8 characters required)', color: '#ef4444', percent: 25 };
-}
 
 export default function ProfileUpdateCard() {
   const currentUser = getLmsUser();
@@ -65,8 +28,9 @@ export default function ProfileUpdateCard() {
   const [name, setName] = useState(currentUser?.name || '');
   const email = currentUser?.email || '';
 
-  // Password change state
+  // Password & Verification Code State
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [code, setCode] = useState('');
   const [debugCode, setDebugCode] = useState<string | null>(null);
   const [challenge, setChallenge] = useState<string | null>(null);
@@ -78,12 +42,13 @@ export default function ProfileUpdateCard() {
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const strength = evaluateStrength(password);
+  const strength = evaluatePasswordStrength(password);
 
   const handleGeneratePassword = () => {
-    const generated = generateInstitutionalPassword();
+    const generated = generateStrongPassword(12);
     setPassword(generated);
-    showToast('High-entropy institutional password generated!', 'info');
+    setShowPassword(true);
+    showToast('Suggested strong institutional password generated!', 'info');
   };
 
   const handleCopyPassword = async () => {
@@ -149,14 +114,15 @@ export default function ProfileUpdateCard() {
         if (password.trim().length < 8) {
           throw new Error('New password must be at least 8 characters long.');
         }
+        if (!challenge) {
+          throw new Error('Please click "Request 6-Digit Code" to dispatch the verification code to your email.');
+        }
         if (!code.trim()) {
           throw new Error('Please enter the 6-digit authorization code dispatched to your institutional email.');
         }
         payload.password = password.trim();
         payload.code = code.trim();
-        if (challenge) {
-          payload.challenge = challenge;
-        }
+        payload.challenge = challenge;
       }
 
       const res = await lmsFetch<{ message: string; user: Record<string, unknown> }>('/profile', {
@@ -177,6 +143,8 @@ export default function ProfileUpdateCard() {
       setCode('');
       setChallenge(null);
       setEmailHint(null);
+      setDebugCode(null);
+      setShowPassword(false);
 
       const msg = res.message || 'Profile information updated successfully.';
       setNotice(msg);
@@ -192,6 +160,7 @@ export default function ProfileUpdateCard() {
 
   return (
     <GlassCard>
+      {/* Header with Title and Protected Policy Badge */}
       <div style={{ marginBottom: '1.25rem', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.85rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
           <div>
@@ -374,14 +343,36 @@ export default function ProfileUpdateCard() {
             <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--neutral-300)', marginBottom: '0.35rem' }}>
               New Password (Leave blank to keep existing password)
             </label>
-            <input
-              type="text"
-              placeholder="Enter new password (minimum 8 characters)"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="form-input"
-              style={{ width: '100%', boxSizing: 'border-box' }}
-            />
+            <div style={{ position: 'relative' }}>
+              <input
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Enter new password (minimum 8 characters)"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="form-input"
+                style={{ width: '100%', paddingRight: '2.5rem', boxSizing: 'border-box' }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                style={{
+                  position: 'absolute',
+                  right: '0.75rem',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--neutral-400)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: 0
+                }}
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
           </div>
 
           {password && (

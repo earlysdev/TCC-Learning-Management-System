@@ -18,21 +18,7 @@ import { API_BASE, getDeviceId } from '../lmsApi';
 import CaptchaVerification from '../components/auth/CaptchaVerification';
 import Button from '../components/ui/Button';
 import { useToastContext } from '../contexts/ToastContext';
-
-function generateRandomStrongPassword(): string {
-  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-  const lower = 'abcdefghijkmnopqrstuvwxyz';
-  const digits = '23456789';
-  const specials = '!@#$%&*';
-  const pick = (set: string) => set[Math.floor(Math.random() * set.length)];
-
-  const chars = [
-    pick(upper), pick(lower), pick(digits), pick(specials),
-    pick(upper), pick(lower), pick(digits), pick(specials),
-    pick(upper), pick(lower), pick(digits), pick(lower)
-  ];
-  return chars.sort(() => 0.5 - Math.random()).join('');
-}
+import { generateStrongPassword } from '../lib/passwordUtils';
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -322,7 +308,7 @@ export default function LoginPage() {
   };
 
   const handleGenerateResetPassword = () => {
-    const pwd = generateRandomStrongPassword();
+    const pwd = generateStrongPassword(12);
     setNewPassword(pwd);
     setConfirmPassword(pwd);
     showToast('Suggested strong password generated!', 'info');

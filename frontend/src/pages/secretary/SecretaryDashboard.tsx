@@ -27,6 +27,7 @@ import {
   type AccountEmailDispatchReceipt,
 } from '../../components/ui/AccountCredentialsEmailReceipt';
 import { useToastContext } from '../../contexts/ToastContext';
+import { generateStrongPassword, evaluatePasswordStrength } from '../../lib/passwordUtils';
 
 const MAX_STUDENTS_PER_SECTION = 50;
 
@@ -99,53 +100,6 @@ function computeNextBlockSuggestion(yearLevel: string, existingBlocks: string[])
     }
   }
   return `Block - ${yrNum}${existingBlocks.length + 1}`;
-}
-
-function generateStrongPasswordValue(length = 12): string {
-  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-  const lower = 'abcdefghijkmnopqrstuvwxyz';
-  const digits = '23456789';
-  const symbols = '!@#$%&*+?';
-  const all = upper + lower + digits + symbols;
-
-  const mandatory = [
-    upper[Math.floor(Math.random() * upper.length)],
-    upper[Math.floor(Math.random() * upper.length)],
-    lower[Math.floor(Math.random() * lower.length)],
-    lower[Math.floor(Math.random() * lower.length)],
-    digits[Math.floor(Math.random() * digits.length)],
-    digits[Math.floor(Math.random() * digits.length)],
-    symbols[Math.floor(Math.random() * symbols.length)],
-    symbols[Math.floor(Math.random() * symbols.length)],
-  ];
-
-  while (mandatory.length < length) {
-    mandatory.push(all[Math.floor(Math.random() * all.length)]);
-  }
-
-  for (let i = mandatory.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    const temp = mandatory[i];
-    mandatory[i] = mandatory[j];
-    mandatory[j] = temp;
-  }
-
-  return mandatory.join('');
-}
-
-function evaluatePasswordStrength(pw: string): { label: string; color: string; score: number } {
-  if (!pw) return { label: 'Not Set', color: 'var(--neutral-400)', score: 0 };
-  let score = 0;
-  if (pw.length >= 8) score += 1;
-  if (pw.length >= 12) score += 1;
-  if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) score += 1;
-  if (/\d/.test(pw)) score += 1;
-  if (/[^A-Za-z0-9]/.test(pw)) score += 1;
-
-  if (score <= 2) return { label: 'Weak Password', color: '#f87171', score: 35 };
-  if (score === 3) return { label: 'Moderate Password', color: '#fbbf24', score: 65 };
-  if (score === 4) return { label: 'Strong Password', color: '#4ade80', score: 85 };
-  return { label: 'Very Strong • Institutional Grade', color: '#34d399', score: 100 };
 }
 
 export default function SecretaryDashboard() {
@@ -406,7 +360,7 @@ export default function SecretaryDashboard() {
   }, [subpage]);
 
   const handleGenerateStrongPassword = () => {
-    const generated = generateStrongPasswordValue(12);
+    const generated = generateStrongPassword(12);
     setPassword(generated);
     setShowPassword(true);
     setCopiedPassword(false);
