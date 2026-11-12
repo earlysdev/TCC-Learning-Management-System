@@ -1,77 +1,114 @@
-import { useState, type FormEvent } from 'react';
-import { 
-  CheckCircle2, 
-  AlertCircle, 
-  Save, 
-  Lock, 
-  ShieldCheck, 
-  KeyRound, 
-  Sparkles, 
-  Copy, 
-  Check, 
-  Mail, 
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import {
+  CheckCircle2,
+  AlertCircle,
+  Save,
+  Lock,
+  ShieldCheck,
+  KeyRound,
+  Sparkles,
+  Copy,
+  Check,
+  Mail,
   RefreshCw,
   Eye,
   EyeOff,
-  User
+  User as UserIcon,
 } from 'lucide-react';
-import { getLmsUser, lmsFetch } from '../../lmsApi';
+import { lmsFetch } from '../../lmsApi';
+import type { User } from '../../lib/types';
+import { useAuthContext } from '../../contexts/AuthContext';
 import { useToastContext } from '../../contexts/ToastContext';
 import { generateStrongPassword, evaluatePasswordStrength } from '../../lib/passwordUtils';
 import GlassCard from './GlassCard';
 import Button from './Button';
 
 export default function ProfileUpdateCard() {
-  const currentUser = getLmsUser();
+  const { user: authUser, syncUser } = useAuthContext();
   const { showToast } = useToastContext();
 
-  const [name, setName] = useState(currentUser?.name || '');
-  const email = currentUser?.email || '';
+  const [name, setName] = useState(authUser?.name || '');
+  const email = authUser?.email || '';
 
-  // Password & Verification Code State (Required to save settings)
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  // Current password is always required to authorize settings changes; new password is optional
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  // Mandatory exact 6-digit email OTP verification state
   const [code, setCode] = useState('');
   const [debugCode, setDebugCode] = useState<string | null>(null);
   const [challenge, setChallenge] = useState<string | null>(null);
   const [emailHint, setEmailHint] = useState<string | null>(null);
   const [requestingCode, setRequestingCode] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
 
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const strength = evaluatePasswordStrength(password);
+  const copyTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current !== null) {
+        window.clearTimeout(copyTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = window.setInterval(() => {
+      setCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [cooldown]);
+
+  const strength = evaluatePasswordStrength(newPassword);
 
   const handleGeneratePassword = () => {
     const generated = generateStrongPassword(12);
-    setPassword(generated);
-    setShowPassword(true);
+    setNewPassword(generated);
+    setConfirmPassword(generated);
+    setShowNewPassword(true);
     showToast('Suggested strong institutional password generated!', 'info');
   };
 
   const handleCopyPassword = async () => {
-    if (!password) return;
+    if (!newPassword) return;
     try {
-      await navigator.clipboard.writeText(password);
+      await navigator.clipboard.writeText(newPassword);
       setCopied(true);
-      showToast('Password copied to clipboard.', 'success');
-      setTimeout(() => setCopied(false), 2500);
+      showToast('New password copied to clipboard.', 'success');
+      if (copyTimerRef.current !== null) {
+        window.clearTimeout(copyTimerRef.current);
+      }
+      copyTimerRef.current = window.setTimeout(() => setCopied(false), 2500);
     } catch {
       showToast('Could not access clipboard.', 'warning');
     }
   };
 
   const handleRequestCode = async () => {
+    if (cooldown > 0 || requestingCode) return;
+
     setRequestingCode(true);
     setError(null);
     setNotice(null);
+    setCode('');
+    setDebugCode(null);
+
     try {
       const res = await lmsFetch<{
         status: string;
         challenge: string;
         email_hint: string;
+        cooldown_seconds?: number;
         message: string;
         debug_code?: string;
       }>('/profile/request-password-code', {
@@ -80,6 +117,8 @@ export default function ProfileUpdateCard() {
 
       setChallenge(res.challenge);
       setEmailHint(res.email_hint);
+      setCooldown(res.cooldown_seconds ?? 60);
+
       const msg = res.message || `Verification code sent to ${res.email_hint}`;
       setNotice(msg);
       showToast(msg, 'success');
@@ -108,49 +147,59 @@ export default function ProfileUpdateCard() {
       if (!name.trim()) {
         throw new Error('Please enter your full name.');
       }
-      if (!password.trim()) {
-        throw new Error('You are required to insert your password before saving settings.');
+      if (!currentPassword) {
+        throw new Error('You are required to insert your current security password before saving settings.');
       }
-      if (password.trim().length < 8) {
-        throw new Error('Password must be at least 8 characters long.');
+      if (newPassword) {
+        if (newPassword.length < 8) {
+          throw new Error('New password must be at least 8 characters long.');
+        }
+        if (newPassword !== confirmPassword) {
+          throw new Error('New password and confirmation do not match.');
+        }
       }
       if (!challenge) {
-        throw new Error('Please click "Request 6-Digit Code" to receive the required authorization code before saving settings.');
+        throw new Error('Please click "Request 6-Digit Code" to receive the required authorization code first.');
       }
-      if (!code.trim() || code.trim().length !== 6) {
-        throw new Error('Please enter the exact 6-digit email authorization code dispatched to your institutional email.');
+      if (code.trim().length !== 6) {
+        throw new Error('Please enter the exact 6-digit email authorization code sent to your institutional email.');
       }
 
       const payload: Record<string, string> = {
         name: name.trim(),
         email: email.trim(),
-        password: password.trim(),
+        current_password: currentPassword,
         code: code.trim(),
-        challenge: challenge,
+        challenge,
       };
 
-      const res = await lmsFetch<{ message: string; user: Record<string, unknown> }>('/profile', {
+      if (newPassword) {
+        payload.password = newPassword;
+        payload.password_confirmation = confirmPassword;
+      }
+
+      const res = await lmsFetch<{ message: string; user?: User }>('/profile', {
         method: 'PUT',
         body: JSON.stringify(payload),
       });
 
       if (res.user) {
-        const serialized = JSON.stringify(res.user);
-        if (localStorage.getItem('lms-user')) {
-          localStorage.setItem('lms-user', serialized);
-        } else {
-          sessionStorage.setItem('lms-user', serialized);
-        }
+        syncUser(res.user);
+        setName(res.user.name);
       }
 
-      setPassword('');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
       setCode('');
       setChallenge(null);
       setEmailHint(null);
       setDebugCode(null);
-      setShowPassword(false);
+      setShowCurrentPassword(false);
+      setShowNewPassword(false);
+      setCooldown(0);
 
-      const msg = res.message || 'Settings and security password updated successfully.';
+      const msg = res.message || 'Account settings updated successfully.';
       setNotice(msg);
       showToast(msg, 'success');
     } catch (err: unknown) {
@@ -162,90 +211,52 @@ export default function ProfileUpdateCard() {
     }
   };
 
+  const canSubmit =
+    Boolean(name.trim()) &&
+    Boolean(currentPassword) &&
+    Boolean(challenge) &&
+    code.trim().length === 6 &&
+    (!newPassword || (newPassword.length >= 8 && newPassword === confirmPassword));
+
   return (
     <GlassCard style={{ overflow: 'hidden' }}>
-      {/* Header: Emblem, Title, Subtitle, and TCC Security Policy Badge */}
-      <div style={{ marginBottom: '1.25rem', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '1rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.85rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', minWidth: 0 }}>
-            <div style={{
-              width: '44px',
-              height: '44px',
-              borderRadius: '12px',
-              background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(127, 18, 30, 0.3) 100%)',
-              border: '1px solid rgba(245, 158, 11, 0.45)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#fbbf24',
-              flexShrink: 0,
-              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)'
-            }}>
-              <ShieldCheck size={22} />
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
-                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#ffffff', margin: 0, letterSpacing: '-0.01em' }}>
-                  Account Settings &amp; Security
-                </h3>
-              </div>
-              <p style={{ color: 'var(--neutral-300)', fontSize: '0.84rem', margin: '0.2rem 0 0', lineHeight: 1.45 }}>
-                Manage your verified collegiate identity, institutional credentials, and security password authorization.
-              </p>
-            </div>
+      <div className="settings-card-header">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', minWidth: 0 }}>
+          <div className="settings-header-emblem">
+            <ShieldCheck size={22} />
           </div>
-
-          <span className="settings-policy-pill">
-            <ShieldCheck size={13} /> TCC Security Policy Active
-          </span>
+          <div style={{ minWidth: 0 }}>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#ffffff', margin: 0, letterSpacing: '-0.01em' }}>
+              Account Settings &amp; Security
+            </h3>
+            <p style={{ color: 'var(--neutral-300)', fontSize: '0.84rem', margin: '0.2rem 0 0', lineHeight: 1.45 }}>
+              Manage your verified collegiate identity, institutional credentials, and email-authorized security updates.
+            </p>
+          </div>
         </div>
+
+        <span className="settings-policy-pill">
+          <ShieldCheck size={13} /> TCC Security Policy Active
+        </span>
       </div>
 
       {notice && (
-        <div style={{
-          background: 'rgba(46, 125, 50, 0.22)',
-          border: '1px solid rgba(74, 222, 128, 0.4)',
-          padding: '0.75rem 1rem',
-          borderRadius: 'var(--radius-md)',
-          color: '#dcfce7',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.6rem',
-          marginBottom: '1.25rem',
-          fontSize: '0.88rem'
-        }}>
+        <div className="settings-alert settings-alert--success" role="status">
           <CheckCircle2 size={18} style={{ color: '#4ade80', flexShrink: 0 }} />
           <span>{notice}</span>
         </div>
       )}
 
       {error && (
-        <div style={{
-          background: 'rgba(211, 47, 47, 0.22)',
-          border: '1px solid rgba(248, 113, 113, 0.4)',
-          padding: '0.75rem 1rem',
-          borderRadius: 'var(--radius-md)',
-          color: '#fee2e2',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.6rem',
-          marginBottom: '1.25rem',
-          fontSize: '0.88rem'
-        }}>
+        <div className="settings-alert settings-alert--error" role="alert">
           <AlertCircle size={18} style={{ color: '#f87171', flexShrink: 0 }} />
           <span>{error}</span>
         </div>
       )}
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-        {/* Symmetrical 2-Column Grid: Full Name and Protected Email */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-          gap: '1.25rem',
-          alignItems: 'start'
-        }}>
-          {/* Left Column: Full Name */}
+        {/* Symmetrical 2-Column Grid: Full Name and Locked Institutional Email */}
+        <div className="settings-grid-2">
           <div className="form-group" style={{ margin: 0 }}>
             <div className="settings-label-row">
               <label className="form-label" htmlFor="settings-user-name">
@@ -253,7 +264,7 @@ export default function ProfileUpdateCard() {
               </label>
             </div>
             <div className="settings-input-wrap">
-              <User size={16} className="input-icon-left" />
+              <UserIcon size={16} className="input-icon-left" />
               <input
                 id="settings-user-name"
                 type="text"
@@ -269,7 +280,6 @@ export default function ProfileUpdateCard() {
             </p>
           </div>
 
-          {/* Right Column: Institutional Email (Locked) */}
           <div className="form-group" style={{ margin: 0 }}>
             <div className="settings-label-row">
               <label className="form-label" htmlFor="settings-user-email">
@@ -300,53 +310,27 @@ export default function ProfileUpdateCard() {
 
         {/* Security Password & Mandatory Email Authorization Box */}
         <div className="settings-password-box">
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '0.75rem',
-            paddingBottom: '0.75rem',
-            borderBottom: '1px solid rgba(255, 255, 255, 0.08)'
-          }}>
+          <div className="settings-password-box-header">
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
-              <div style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '8px',
-                background: 'rgba(245, 158, 11, 0.15)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#fbbf24',
-                flexShrink: 0
-              }}>
+              <div className="settings-password-icon-badge">
                 <KeyRound size={16} />
               </div>
               <div>
                 <span style={{ fontWeight: 800, fontSize: '0.98rem', color: '#ffffff' }}>
-                  Security Password &amp; Verification
+                  Password Verification &amp; Email Authorization
                 </span>
                 <span style={{ marginLeft: '0.5rem', fontSize: '0.72rem', fontWeight: 800, color: '#fbbf24', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Required to Save Settings
+                  Required to Save
                 </span>
               </div>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                onClick={handleGeneratePassword}
-                className="settings-btn-suggest"
-              >
+              <button type="button" onClick={handleGeneratePassword} className="settings-btn-suggest">
                 <Sparkles size={13} /> Suggest Strong Password
               </button>
-              {password && (
-                <button
-                  type="button"
-                  onClick={handleCopyPassword}
-                  className="settings-btn-copy"
-                >
+              {newPassword && (
+                <button type="button" onClick={handleCopyPassword} className="settings-btn-copy">
                   {copied ? <Check size={13} style={{ color: '#4ade80' }} /> : <Copy size={13} />}
                   {copied ? 'Copied' : 'Copy'}
                 </button>
@@ -354,107 +338,138 @@ export default function ProfileUpdateCard() {
             </div>
           </div>
 
-          {/* Password Input */}
-          <div>
-            <label
-              htmlFor="settings-new-password"
-              style={{
-                display: 'block',
-                fontSize: '0.84rem',
-                fontWeight: 600,
-                color: 'var(--neutral-200)',
-                marginBottom: '0.4rem'
-              }}
-            >
-              Security Password <span style={{ color: '#fbbf24', fontWeight: 700 }}>* (Required)</span>
-            </label>
-            <div className="settings-password-input-wrap">
+          {/* Current Security Password (Always Required) */}
+          <div className="form-group" style={{ margin: 0 }}>
+            <div className="settings-label-row">
+              <label className="form-label" htmlFor="settings-current-password">
+                Current Security Password <span style={{ color: '#fbbf24', fontWeight: 700 }}>* (Required)</span>
+              </label>
+            </div>
+            <div className="settings-input-wrap has-right-control">
               <Lock size={16} className="input-icon-left" />
               <input
-                id="settings-new-password"
-                type={showPassword ? 'text' : 'password'}
-                placeholder="Insert security password (minimum 8 characters)"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                id="settings-current-password"
+                type={showCurrentPassword ? 'text' : 'password'}
+                placeholder="Enter your current password to authorize saving settings"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
                 className="form-input"
-                autoComplete="new-password"
+                autoComplete="current-password"
                 required
               />
               <button
                 type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                onClick={() => setShowCurrentPassword((prev) => !prev)}
+                aria-label={showCurrentPassword ? 'Hide current password' : 'Show current password'}
                 className="settings-password-toggle"
               >
-                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                {showCurrentPassword ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
             <p className="settings-field-helper">
-              Insert your security password to authorize this profile update.
+              Verified against your existing password on every settings update.
             </p>
           </div>
 
-          {password && (
+          {/* Optional Password Change (New + Confirmation) */}
+          <div className="settings-grid-2">
+            <div className="form-group" style={{ margin: 0 }}>
+              <div className="settings-label-row">
+                <label className="form-label" htmlFor="settings-new-password">
+                  New Password <span style={{ color: 'var(--neutral-400)', fontWeight: 500 }}>(Optional)</span>
+                </label>
+              </div>
+              <div className="settings-input-wrap has-right-control">
+                <KeyRound size={16} className="input-icon-left" />
+                <input
+                  id="settings-new-password"
+                  type={showNewPassword ? 'text' : 'password'}
+                  placeholder="Leave blank to keep current password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="form-input"
+                  autoComplete="new-password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword((prev) => !prev)}
+                  aria-label={showNewPassword ? 'Hide new password' : 'Show new password'}
+                  className="settings-password-toggle"
+                >
+                  {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </div>
+
+            <div className="form-group" style={{ margin: 0 }}>
+              <div className="settings-label-row">
+                <label className="form-label" htmlFor="settings-confirm-password">
+                  Confirm New Password
+                </label>
+              </div>
+              <div className="settings-input-wrap">
+                <KeyRound size={16} className="input-icon-left" />
+                <input
+                  id="settings-confirm-password"
+                  type={showNewPassword ? 'text' : 'password'}
+                  placeholder="Re-enter new password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="form-input"
+                  autoComplete="new-password"
+                  disabled={!newPassword}
+                />
+              </div>
+            </div>
+          </div>
+
+          {newPassword && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.78rem' }}>
-                <span style={{ color: 'var(--neutral-400)' }}>Password Complexity:</span>
+                <span style={{ color: 'var(--neutral-400)' }}>New Password Complexity:</span>
                 <span style={{ color: strength.color, fontWeight: 700 }}>{strength.label}</span>
               </div>
               <div style={{ width: '100%', height: '5px', background: 'rgba(255,255,255,0.08)', borderRadius: '999px', overflow: 'hidden' }}>
-                <div style={{ width: `${strength.percent}%`, height: '100%', background: strength.color, transition: 'width 0.3s ease' }} />
+                <div style={{ width: `${strength.score}%`, height: '100%', background: strength.color, transition: 'width 0.3s ease' }} />
               </div>
             </div>
           )}
 
-          {/* Exact 6-Digit Email Authorization Code Box (Always required to save settings) */}
+          {/* Mandatory Exact 6-Digit Email Authorization Code Box */}
           <div className="settings-otp-box">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.65rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: '#fde68a', fontSize: '0.86rem', fontWeight: 700 }}>
+              <label
+                htmlFor="settings-otp-code"
+                style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: '#fde68a', fontSize: '0.86rem', fontWeight: 700, cursor: 'pointer' }}
+              >
                 <Mail size={16} /> Exact 6-Digit Email Authorization Code <span style={{ color: '#fbbf24' }}>* (Required)</span>
-              </div>
+              </label>
               <button
                 type="button"
                 onClick={handleRequestCode}
-                disabled={requestingCode}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.35rem',
-                  fontSize: '0.78rem',
-                  fontWeight: 700,
-                  background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                  color: '#120204',
-                  border: 'none',
-                  padding: '0.4rem 0.85rem',
-                  borderRadius: 'var(--radius-sm)',
-                  cursor: requestingCode ? 'not-allowed' : 'pointer',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
-                  transition: 'all 0.2s ease'
-                }}
+                disabled={requestingCode || cooldown > 0}
+                className="settings-btn-otp"
               >
                 <RefreshCw size={12} className={requestingCode ? 'spin' : ''} />
-                {challenge ? 'Resend Code' : 'Request 6-Digit Code'}
+                {cooldown > 0
+                  ? `Resend in ${cooldown}s`
+                  : challenge
+                    ? 'Resend Code'
+                    : 'Request 6-Digit Code'}
               </button>
             </div>
 
             <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--neutral-200)', lineHeight: 1.5 }}>
-              Click <strong>&quot;Request 6-Digit Code&quot;</strong> to receive your authorization code at <strong>{emailHint || email}</strong>. The exact code is required to authorize and save your settings.
+              Click <strong>&quot;Request 6-Digit Code&quot;</strong> to receive your one-time code at <strong>{emailHint || email}</strong>. Both your current password and exact 6-digit code are required to save changes.
             </p>
 
             {debugCode && (
-              <div style={{
-                background: 'rgba(245, 158, 11, 0.16)',
-                border: '1px solid rgba(245, 158, 11, 0.4)',
-                borderRadius: '8px',
-                padding: '0.6rem 0.85rem',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '0.6rem',
-                flexWrap: 'wrap'
-              }}>
+              <div className="settings-demo-banner">
                 <div style={{ fontSize: '0.76rem', color: '#fef08a' }}>
-                  <strong>Demo Code:</strong> <span style={{ fontFamily: 'monospace', fontSize: '1.08rem', fontWeight: 800, letterSpacing: '4px', color: '#fbbf24', marginLeft: '0.4rem' }}>{debugCode}</span>
+                  <strong>Demo Code:</strong>{' '}
+                  <span style={{ fontFamily: 'monospace', fontSize: '1.08rem', fontWeight: 800, letterSpacing: '4px', color: '#fbbf24', marginLeft: '0.4rem' }}>
+                    {debugCode}
+                  </span>
                 </div>
                 <button
                   type="button"
@@ -470,7 +485,7 @@ export default function ProfileUpdateCard() {
                     borderRadius: '4px',
                     fontSize: '0.72rem',
                     fontWeight: 700,
-                    cursor: 'pointer'
+                    cursor: 'pointer',
                   }}
                 >
                   Auto-Fill
@@ -480,48 +495,29 @@ export default function ProfileUpdateCard() {
 
             <div>
               <input
+                id="settings-otp-code"
                 type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
                 maxLength={6}
                 placeholder="Enter 6-digit code (e.g. 581942)"
                 value={code}
                 onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-                className="form-input"
-                style={{
-                  width: '240px',
-                  letterSpacing: '4px',
-                  fontWeight: 800,
-                  fontSize: '1.05rem',
-                  textAlign: 'center',
-                  boxSizing: 'border-box'
-                }}
+                className="form-input settings-otp-input"
                 required
               />
             </div>
           </div>
         </div>
 
-        {/* Footer Action Bar: Audit notice on left, clean Save button on right */}
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '1rem',
-          paddingTop: '1rem',
-          borderTop: '1px solid rgba(255, 255, 255, 0.08)'
-        }}>
+        {/* Footer Action Bar */}
+        <div className="settings-card-footer">
           <span style={{ fontSize: '0.78rem', color: 'var(--neutral-400)', display: 'inline-flex', alignItems: 'center', gap: '0.45rem' }}>
             <ShieldCheck size={15} style={{ color: '#4ade80', flexShrink: 0 }} />
-            Security password and exact 6-digit code are required to save settings.
+            Current password and exact 6-digit email code are required to save settings.
           </span>
           <div style={{ marginLeft: 'auto' }}>
-            <Button
-              type="submit"
-              variant="accent"
-              size="lg"
-              isLoading={saving}
-              disabled={!password || !code || code.length !== 6 || !challenge}
-            >
+            <Button type="submit" variant="accent" size="lg" isLoading={saving} disabled={!canSubmit}>
               <Save size={16} /> Save Settings &amp; Security Changes
             </Button>
           </div>

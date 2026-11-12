@@ -15,13 +15,16 @@ import {
   RefreshCw 
 } from 'lucide-react';
 import { API_BASE, getDeviceId } from '../lmsApi';
+import type { User } from '../lib/types';
 import CaptchaVerification from '../components/auth/CaptchaVerification';
 import Button from '../components/ui/Button';
+import { useAuthContext } from '../contexts/AuthContext';
 import { useToastContext } from '../contexts/ToastContext';
 import { generateStrongPassword } from '../lib/passwordUtils';
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const { login: setSessionLogin } = useAuthContext();
   const { showToast } = useToastContext();
 
   // Login form state
@@ -122,15 +125,8 @@ export default function LoginPage() {
   };
 
   const handleLoginSuccess = (data: { token?: string; user?: Record<string, unknown>; message?: string }) => {
-    if (data.token) {
-      localStorage.removeItem('lms-token');
-      localStorage.removeItem('lms-user');
-      sessionStorage.removeItem('lms-token');
-      sessionStorage.removeItem('lms-user');
-
-      const storage = remember ? localStorage : sessionStorage;
-      storage.setItem('lms-token', data.token);
-      storage.setItem('lms-user', JSON.stringify(data.user));
+    if (data.token && data.user) {
+      setSessionLogin(data.user as unknown as User, data.token, remember);
     }
 
     const userName = (data.user as { name?: string })?.name || 'User';
@@ -161,6 +157,7 @@ export default function LoginPage() {
           challenge: otpChallenge,
           code: otpCode.trim(),
           device_name: otpDeviceName,
+          remember,
         }),
       });
 
@@ -236,10 +233,16 @@ export default function LoginPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Could not request password reset.');
 
-      setResetChallenge(data.challenge);
-      setResetEmailHint(data.email_hint);
-      setResetStage('verify');
-      const msg = data.message || `Reset code dispatched to ${data.email_hint}`;
+      setResetCode('');
+      setResetDebugCode(null);
+
+      if (data.challenge) {
+        setResetChallenge(data.challenge);
+        setResetEmailHint(data.email_hint || 'your registered institutional email');
+        setResetStage('verify');
+      }
+
+      const msg = data.message || `Reset code dispatched to ${data.email_hint || 'your registered email'}`;
       setNotice(msg);
       showToast(msg, 'success');
 

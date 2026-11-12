@@ -49,7 +49,7 @@ Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middle
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
-    Route::put('/profile', [AuthController::class, 'updateProfile']);
+    Route::put('/profile', [AuthController::class, 'updateProfile'])->middleware('throttle:10,1');
     Route::post('/profile/request-password-code', [AuthController::class, 'requestPasswordChangeCode'])->middleware('throttle:5,1');
     Route::post('/logout', [AuthController::class, 'logout']);
 

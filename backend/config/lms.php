@@ -18,6 +18,9 @@ return [
 
     'device_otp' => env('LMS_DEVICE_OTP', 'auto'),
 
+    // Never expose OTP codes in API responses in production unless explicitly enabled for a demo deployment.
+    'demo_otp_visible' => (bool) env('LMS_DEMO_OTP_VISIBLE', false),
+
     'otp_ttl_minutes' => (int) env('LMS_OTP_TTL_MINUTES', 10),
 
     'otp_max_attempts' => (int) env('LMS_OTP_MAX_ATTEMPTS', 5),
