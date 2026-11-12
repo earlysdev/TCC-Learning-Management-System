@@ -18,7 +18,6 @@ import { getLmsUser, lmsFetch } from '../../lmsApi';
 import { useToastContext } from '../../contexts/ToastContext';
 import { generateStrongPassword, evaluatePasswordStrength } from '../../lib/passwordUtils';
 import GlassCard from './GlassCard';
-import Input from './Input';
 import Button from './Button';
 
 export default function ProfileUpdateCard() {
@@ -160,157 +159,174 @@ export default function ProfileUpdateCard() {
 
   return (
     <GlassCard>
-      {/* Header with Title and Protected Policy Badge */}
-      <div style={{ marginBottom: '1.25rem', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.85rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
-          <div>
-            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: 'white', margin: 0 }}>
-              Account Settings &amp; Security
-            </h3>
-            <p style={{ color: 'var(--neutral-400)', fontSize: '0.85rem', marginTop: '0.25rem', margin: 0 }}>
-              Manage your verified display name, institutional credentials, and security password authorization.
-            </p>
+      {/* Refined Header: Integrated icon, title, and persistent policy pill */}
+      <div style={{ marginBottom: '1.35rem', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '1rem' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.85rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+            <div style={{
+              width: '42px',
+              height: '42px',
+              borderRadius: '10px',
+              background: 'rgba(245, 158, 11, 0.14)',
+              border: '1px solid rgba(245, 158, 11, 0.35)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#fbbf24',
+              flexShrink: 0
+            }}>
+              <ShieldCheck size={22} />
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#ffffff', margin: 0, letterSpacing: '-0.01em' }}>
+                  Account Settings &amp; Security
+                </h3>
+                <span className="settings-policy-pill">
+                  <ShieldCheck size={13} /> TCC Security Policy Active
+                </span>
+              </div>
+              <p style={{ color: 'var(--neutral-300)', fontSize: '0.84rem', margin: '0.2rem 0 0', lineHeight: 1.45 }}>
+                Manage your verified collegiate identity, institutional credentials, and security password authorization.
+              </p>
+            </div>
           </div>
-          <span style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '0.35rem',
-            padding: '0.3rem 0.65rem',
-            borderRadius: '9999px',
-            fontSize: '0.75rem',
-            fontWeight: 600,
-            background: 'rgba(234, 179, 8, 0.12)',
-            color: '#fef08a',
-            border: '1px solid rgba(234, 179, 8, 0.3)'
-          }}>
-            <ShieldCheck size={14} /> TCC Security Policy Active
-          </span>
         </div>
       </div>
 
       {notice && (
         <div style={{
-          background: 'rgba(67, 160, 71, 0.2)',
-          border: '1px solid var(--success)',
+          background: 'rgba(46, 125, 50, 0.22)',
+          border: '1px solid rgba(74, 222, 128, 0.4)',
           padding: '0.75rem 1rem',
           borderRadius: 'var(--radius-md)',
-          color: '#c8e6c9',
+          color: '#dcfce7',
           display: 'flex',
           alignItems: 'center',
-          gap: '0.5rem',
-          marginBottom: '1rem',
+          gap: '0.6rem',
+          marginBottom: '1.25rem',
           fontSize: '0.88rem'
         }}>
-          <CheckCircle2 size={18} style={{ flexShrink: 0 }} />
+          <CheckCircle2 size={18} style={{ color: '#4ade80', flexShrink: 0 }} />
           <span>{notice}</span>
         </div>
       )}
 
       {error && (
         <div style={{
-          background: 'rgba(239, 83, 80, 0.2)',
-          border: '1px solid var(--error)',
+          background: 'rgba(211, 47, 47, 0.22)',
+          border: '1px solid rgba(248, 113, 113, 0.4)',
           padding: '0.75rem 1rem',
           borderRadius: 'var(--radius-md)',
-          color: '#ffcdd2',
+          color: '#fee2e2',
           display: 'flex',
           alignItems: 'center',
-          gap: '0.5rem',
-          marginBottom: '1rem',
+          gap: '0.6rem',
+          marginBottom: '1.25rem',
           fontSize: '0.88rem'
         }}>
-          <AlertCircle size={18} style={{ flexShrink: 0 }} />
+          <AlertCircle size={18} style={{ color: '#f87171', flexShrink: 0 }} />
           <span>{error}</span>
         </div>
       )}
 
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-        {/* Name and Protected Email Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
-          <Input
-            label="Full Name / Display Name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-            placeholder="e.g. Juan Dela Cruz"
-          />
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.35rem' }}>
+        {/* Symmetrical 2-Column Grid: Full Name and Protected Email */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+          gap: '1.25rem',
+          alignItems: 'start'
+        }}>
+          {/* Left Column: Full Name */}
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label" htmlFor="settings-user-name">
+              Full Name / Display Name
+            </label>
+            <input
+              id="settings-user-name"
+              type="text"
+              className="form-input"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              placeholder="e.g. Juan Dela Cruz"
+              style={{ width: '100%', boxSizing: 'border-box' }}
+            />
+            <p className="settings-field-helper">
+              Official verified identity across your courses, assessments, and academic records.
+            </p>
+          </div>
 
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
-              <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--neutral-300)' }}>
+          {/* Right Column: Institutional Email (Locked) */}
+          <div className="form-group" style={{ margin: 0 }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '0.42rem'
+            }}>
+              <label className="form-label" htmlFor="settings-user-email" style={{ margin: 0, whiteSpace: 'nowrap' }}>
                 Institutional Email Address
               </label>
-              <span style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.25rem',
-                fontSize: '0.72rem',
-                color: '#94a3b8',
-                background: 'rgba(255,255,255,0.06)',
-                padding: '0.15rem 0.45rem',
-                borderRadius: '4px',
-                border: '1px solid rgba(255,255,255,0.08)'
-              }}>
-                <Lock size={11} /> Locked &bull; Institutional Policy
+              <span className="settings-lock-badge">
+                <Lock size={10} /> Locked &bull; Institutional Policy
               </span>
             </div>
-            <input
-              type="email"
-              value={email}
-              disabled
-              readOnly
-              style={{
-                width: '100%',
-                padding: '0.65rem 0.85rem',
-                borderRadius: 'var(--radius-md)',
-                background: 'rgba(0, 0, 0, 0.25)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
-                color: '#94a3b8',
-                fontSize: '0.9rem',
-                cursor: 'not-allowed',
-                boxSizing: 'border-box'
-              }}
-            />
-            <p style={{ margin: '0.3rem 0 0 0', fontSize: '0.75rem', color: 'var(--neutral-400)' }}>
+            <div className="settings-locked-input-wrap">
+              <Mail size={16} style={{ color: '#fbbf24', flexShrink: 0 }} />
+              <input
+                id="settings-user-email"
+                type="email"
+                value={email}
+                disabled
+                readOnly
+                className="settings-locked-input"
+                aria-label="Institutional email address (locked)"
+              />
+              <Lock size={14} style={{ color: '#94a3b8', flexShrink: 0 }} />
+            </div>
+            <p className="settings-field-helper">
               Official school email is locked for academic audit integrity. Contact the Registrar or Secretary to update.
             </p>
           </div>
         </div>
 
-        {/* Password Management Box */}
-        <div style={{
-          background: 'rgba(255, 255, 255, 0.03)',
-          border: '1px solid var(--glass-border)',
-          borderRadius: 'var(--radius-md)',
-          padding: '1.1rem',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '0.9rem'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <KeyRound size={17} style={{ color: 'var(--primary-300)' }} />
-              <span style={{ fontWeight: 700, fontSize: '0.95rem', color: 'white' }}>
+        {/* Change Security Password Box */}
+        <div className="settings-password-box">
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '0.75rem',
+            paddingBottom: '0.75rem',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.08)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+              <div style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '8px',
+                background: 'rgba(245, 158, 11, 0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#fbbf24',
+                flexShrink: 0
+              }}>
+                <KeyRound size={16} />
+              </div>
+              <span style={{ fontWeight: 800, fontSize: '0.98rem', color: '#ffffff' }}>
                 Change Security Password
               </span>
             </div>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <button
                 type="button"
                 onClick={handleGeneratePassword}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.35rem',
-                  fontSize: '0.78rem',
-                  fontWeight: 600,
-                  background: 'rgba(234, 179, 8, 0.15)',
-                  color: '#fde047',
-                  border: '1px solid rgba(234, 179, 8, 0.35)',
-                  padding: '0.35rem 0.65rem',
-                  borderRadius: 'var(--radius-sm)',
-                  cursor: 'pointer'
-                }}
+                className="settings-btn-suggest"
               >
                 <Sparkles size={13} /> Suggest Strong Password
               </button>
@@ -318,19 +334,7 @@ export default function ProfileUpdateCard() {
                 <button
                   type="button"
                   onClick={handleCopyPassword}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.35rem',
-                    fontSize: '0.78rem',
-                    fontWeight: 600,
-                    background: 'rgba(255, 255, 255, 0.08)',
-                    color: '#e2e8f0',
-                    border: '1px solid var(--glass-border)',
-                    padding: '0.35rem 0.65rem',
-                    borderRadius: 'var(--radius-sm)',
-                    cursor: 'pointer'
-                  }}
+                  className="settings-btn-copy"
                 >
                   {copied ? <Check size={13} style={{ color: '#4ade80' }} /> : <Copy size={13} />}
                   {copied ? 'Copied' : 'Copy'}
@@ -340,35 +344,34 @@ export default function ProfileUpdateCard() {
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--neutral-300)', marginBottom: '0.35rem' }}>
-              New Password (Leave blank to keep existing password)
+            <label
+              htmlFor="settings-new-password"
+              style={{
+                display: 'block',
+                fontSize: '0.84rem',
+                fontWeight: 600,
+                color: 'var(--neutral-200)',
+                marginBottom: '0.4rem'
+              }}
+            >
+              New Password <span style={{ color: 'var(--neutral-400)', fontWeight: 400 }}>(Leave blank to keep existing password)</span>
             </label>
-            <div style={{ position: 'relative' }}>
+            <div className="settings-password-input-wrap">
+              <Lock size={16} className="input-icon-left" />
               <input
+                id="settings-new-password"
                 type={showPassword ? 'text' : 'password'}
                 placeholder="Enter new password (minimum 8 characters)"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="form-input"
-                style={{ width: '100%', paddingRight: '2.5rem', boxSizing: 'border-box' }}
+                autoComplete="new-password"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 aria-label={showPassword ? 'Hide password' : 'Show password'}
-                style={{
-                  position: 'absolute',
-                  right: '0.75rem',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'transparent',
-                  border: 'none',
-                  color: 'var(--neutral-400)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  padding: 0
-                }}
+                className="settings-password-toggle"
               >
                 {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
@@ -376,32 +379,23 @@ export default function ProfileUpdateCard() {
           </div>
 
           {password && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem' }}>
-                <span style={{ color: 'var(--neutral-400)' }}>Password Strength:</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.78rem' }}>
+                <span style={{ color: 'var(--neutral-400)' }}>Password Complexity:</span>
                 <span style={{ color: strength.color, fontWeight: 700 }}>{strength.label}</span>
               </div>
-              <div style={{ width: '100%', height: '4px', background: 'rgba(255,255,255,0.08)', borderRadius: '2px', overflow: 'hidden' }}>
-                <div style={{ width: `${strength.percent}%`, height: '100%', background: strength.color, transition: 'width 0.3s' }} />
+              <div style={{ width: '100%', height: '5px', background: 'rgba(255,255,255,0.08)', borderRadius: '999px', overflow: 'hidden' }}>
+                <div style={{ width: `${strength.percent}%`, height: '100%', background: strength.color, transition: 'width 0.3s ease' }} />
               </div>
             </div>
           )}
 
-          {/* If user types a new password, authorization code is required */}
+          {/* When password is entered, email authorization code is required */}
           {password.trim().length > 0 && (
-            <div style={{
-              background: 'rgba(0, 0, 0, 0.25)',
-              border: '1px dashed rgba(234, 179, 8, 0.4)',
-              borderRadius: 'var(--radius-sm)',
-              padding: '0.9rem',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '0.65rem',
-              marginTop: '0.35rem'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#fef08a', fontSize: '0.85rem', fontWeight: 600 }}>
-                  <Mail size={15} /> 6-Digit Email Authorization Code Required
+            <div className="settings-otp-box">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.65rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: '#fde68a', fontSize: '0.86rem', fontWeight: 700 }}>
+                  <Mail size={16} /> 6-Digit Email Authorization Code Required
                 </div>
                 <button
                   type="button"
@@ -412,13 +406,15 @@ export default function ProfileUpdateCard() {
                     alignItems: 'center',
                     gap: '0.35rem',
                     fontSize: '0.78rem',
-                    fontWeight: 600,
-                    background: 'var(--primary-500)',
-                    color: 'white',
+                    fontWeight: 700,
+                    background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                    color: '#120204',
                     border: 'none',
-                    padding: '0.35rem 0.75rem',
+                    padding: '0.4rem 0.85rem',
                     borderRadius: 'var(--radius-sm)',
-                    cursor: requestingCode ? 'not-allowed' : 'pointer'
+                    cursor: requestingCode ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+                    transition: 'all 0.2s ease'
                   }}
                 >
                   <RefreshCw size={12} className={requestingCode ? 'spin' : ''} />
@@ -426,36 +422,36 @@ export default function ProfileUpdateCard() {
                 </button>
               </div>
 
-              <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--neutral-300)' }}>
-                For security compliance, changing your account password requires a 6-digit one-time code dispatched to {emailHint || email}.
+              <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--neutral-200)', lineHeight: 1.5 }}>
+                For security compliance, changing your account password requires a 6-digit one-time code dispatched to <strong>{emailHint || email}</strong>.
               </p>
 
               {debugCode && (
                 <div style={{
-                  background: 'rgba(245, 158, 11, 0.15)',
-                  border: '1px solid rgba(245, 158, 11, 0.35)',
-                  borderRadius: '6px',
-                  padding: '0.55rem 0.8rem',
+                  background: 'rgba(245, 158, 11, 0.16)',
+                  border: '1px solid rgba(245, 158, 11, 0.4)',
+                  borderRadius: '8px',
+                  padding: '0.6rem 0.85rem',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  gap: '0.5rem',
+                  gap: '0.6rem',
                   flexWrap: 'wrap'
                 }}>
-                  <div style={{ fontSize: '0.75rem', color: '#fef08a' }}>
-                    <strong>Demo Code:</strong> <span style={{ fontFamily: 'monospace', fontSize: '1rem', fontWeight: 800, letterSpacing: '3px', color: '#fde047', marginLeft: '0.35rem' }}>{debugCode}</span>
+                  <div style={{ fontSize: '0.76rem', color: '#fef08a' }}>
+                    <strong>Demo Code:</strong> <span style={{ fontFamily: 'monospace', fontSize: '1.08rem', fontWeight: 800, letterSpacing: '4px', color: '#fbbf24', marginLeft: '0.4rem' }}>{debugCode}</span>
                   </div>
                   <button
                     type="button"
                     onClick={() => {
                       setCode(debugCode);
-                      showToast('Code auto-filled!', 'success');
+                      showToast('Demo code auto-filled!', 'success');
                     }}
                     style={{
-                      background: 'var(--primary-600)',
-                      color: 'white',
-                      border: 'none',
-                      padding: '0.2rem 0.55rem',
+                      background: 'rgba(245, 158, 11, 0.25)',
+                      color: '#ffffff',
+                      border: '1px solid #fbbf24',
+                      padding: '0.25rem 0.65rem',
                       borderRadius: '4px',
                       fontSize: '0.72rem',
                       fontWeight: 700,
@@ -476,10 +472,10 @@ export default function ProfileUpdateCard() {
                   onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
                   className="form-input"
                   style={{
-                    width: '200px',
-                    letterSpacing: '3px',
-                    fontWeight: 700,
-                    fontSize: '1rem',
+                    width: '240px',
+                    letterSpacing: '4px',
+                    fontWeight: 800,
+                    fontSize: '1.05rem',
                     textAlign: 'center',
                     boxSizing: 'border-box'
                   }}
@@ -490,8 +486,21 @@ export default function ProfileUpdateCard() {
           )}
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
-          <Button type="submit" variant="accent" isLoading={saving}>
+        {/* Footer Action Bar: Audit notice on left, polished Save button on right */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '1rem',
+          paddingTop: '0.75rem',
+          borderTop: '1px solid rgba(255, 255, 255, 0.08)'
+        }}>
+          <span style={{ fontSize: '0.78rem', color: 'var(--neutral-400)', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+            <ShieldCheck size={15} style={{ color: '#4ade80' }} />
+            All settings updates are cryptographically logged for collegiate audit trails.
+          </span>
+          <Button type="submit" variant="accent" size="md" isLoading={saving}>
             <Save size={16} /> Save Settings &amp; Security Changes
           </Button>
         </div>
