@@ -26,7 +26,7 @@ class SecurityLogController extends Controller
             }
         }
 
-        $this->applyDepartmentFilter($query, $request->input('department'));
+        $this->applyDepartmentFilter($query, $this->scopedDepartment($request));
 
         $logs = $query->latest()->paginate(50);
 
@@ -38,6 +38,12 @@ class SecurityLogController extends Controller
 
     public function resolve(Request $request, SecurityLog $log): JsonResponse
     {
+        $logDepartment = $log->user?->departmentCode()
+            ?? (is_string($log->details['department'] ?? null) ? $log->details['department'] : null);
+        if ($logDepartment !== null) {
+            $this->ensureSameDepartment($request, $logDepartment);
+        }
+
         if ($log->is_resolved) {
             return response()->json([
                 'status' => 'success',
@@ -60,17 +66,17 @@ class SecurityLogController extends Controller
     }
 
     /**
-     * Batch resolution for all outstanding security alerts with auditor attribution.
+     * Batch resolution for all outstanding security alerts in the Dean's department with auditor attribution.
      */
     public function resolveAll(Request $request): JsonResponse
     {
         $auditor = $request->user();
         $resolvedAt = now();
-        $department = $request->input('department');
+        $department = $this->scopedDepartment($request);
 
         $count = DB::transaction(function () use ($auditor, $resolvedAt, $department): int {
             $query = SecurityLog::where('is_resolved', false);
-            $this->applyDepartmentFilter($query, is_string($department) ? $department : null);
+            $this->applyDepartmentFilter($query, $department);
 
             return $query->update([
                 'is_resolved' => true,

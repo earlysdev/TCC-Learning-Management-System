@@ -86,12 +86,17 @@ class User extends Authenticatable
 
     public function departmentCode(): string
     {
-        return $this->department ?: (config('lms.default_department') ?? 'CIT');
+        return strtoupper(trim((string) ($this->department ?: config('lms.default_department', 'CIT'))));
     }
 
     public function isInstitutionWide(): bool
     {
-        return in_array($this->role, ['dean', 'principal', 'developer'], true);
+        return $this->role === 'developer';
+    }
+
+    public function isDeanRole(): bool
+    {
+        return in_array($this->role, ['dean', 'principal'], true);
     }
 
     public function scopeStudents($query)

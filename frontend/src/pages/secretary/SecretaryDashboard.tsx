@@ -8,6 +8,7 @@ import {
   YEAR_LEVEL_OPTIONS,
   BSIT_SUBJECTS,
   getYearLevelFromBlock,
+  getDepartmentName,
   type CurriculumSubjectItem,
 } from '../../lib/constants';
 import { 
@@ -104,6 +105,8 @@ function computeNextBlockSuggestion(yearLevel: string, existingBlocks: string[])
 
 export default function SecretaryDashboard() {
   const user = getLmsUser();
+  const departmentCode = (user?.department || 'CIT').toUpperCase();
+  const departmentName = getDepartmentName(departmentCode);
   const { showToast } = useToastContext();
   const { subpage } = useParams<{ subpage?: string }>();
   const navigate = useNavigate();
@@ -500,7 +503,7 @@ export default function SecretaryDashboard() {
           code,
           name,
           grade: newSubjYear,
-          department: 'BSIT',
+          department: departmentCode,
           description,
         }),
       });
@@ -560,6 +563,7 @@ export default function SecretaryDashboard() {
       });
 
       const finalSection = response?.data?.section || assignedSection;
+      const receiptDepartment = (response?.data?.department || departmentCode).toUpperCase();
       const roleTitle = newUserRole === 'student' ? 'Student Learner' : 'Faculty Teacher';
       const fallbackReceipt: AccountEmailDispatchReceipt = response?.email_dispatch || {
         sent: true,
@@ -568,8 +572,8 @@ export default function SecretaryDashboard() {
         account_name: fullName,
         role: newUserRole,
         role_label: roleTitle,
-        department: response?.data?.department || user?.department || 'CIT',
-        department_label: 'CIT — College of Information Technology',
+        department: receiptDepartment,
+        department_label: `${receiptDepartment} — ${getDepartmentName(receiptDepartment)}`,
         school_year: response?.data?.school_year || '2026-2027',
         lrn: newUserRole === 'student' ? lrn.trim() : null,
         grade: newUserRole === 'student' ? yearLevel : null,
@@ -3384,14 +3388,14 @@ export default function SecretaryDashboard() {
                       <div style={{ fontWeight: 800, color: '#0f172a', borderTop: '1px solid #334155', paddingTop: '0.3rem' }}>
                         {(user?.name || 'MIRACLE').toUpperCase()}
                       </div>
-                      <div style={{ color: '#475569', fontSize: '0.72rem' }}>College Secretary, BSIT Department</div>
+                      <div style={{ color: '#475569', fontSize: '0.72rem' }}>College Secretary, {departmentCode} Department</div>
                     </div>
                     <div>
                       <div style={{ color: '#64748b', marginBottom: '1.6rem' }}>Reviewed &amp; Verified By:</div>
                       <div style={{ fontWeight: 800, color: '#0f172a', borderTop: '1px solid #334155', paddingTop: '0.3rem' }}>
-                        BSIT PROGRAM HEAD / DEAN
+                        {departmentCode} DEAN
                       </div>
-                      <div style={{ color: '#475569', fontSize: '0.72rem' }}>College of Information Technology</div>
+                      <div style={{ color: '#475569', fontSize: '0.72rem' }}>{departmentName}</div>
                     </div>
                     <div>
                       <div style={{ color: '#64748b', marginBottom: '1.6rem' }}>Attested By:</div>
@@ -3501,13 +3505,13 @@ export default function SecretaryDashboard() {
           <div>
             <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', textTransform: 'uppercase', fontWeight: 600 }}>Office</div>
             <div style={{ color: 'white', fontWeight: 600, marginTop: '0.2rem' }}>
-              Secretary &amp; Student Records Office
+              Office of the Secretary ({departmentCode})
             </div>
           </div>
           <div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', textTransform: 'uppercase', fontWeight: 600 }}>Current School Year</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', textTransform: 'uppercase', fontWeight: 600 }}>Department</div>
             <div style={{ color: 'white', fontWeight: 600, marginTop: '0.2rem' }}>
-              2026–2027
+              {departmentCode} — {departmentName}
             </div>
           </div>
         </div>

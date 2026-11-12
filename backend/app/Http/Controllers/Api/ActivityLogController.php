@@ -10,7 +10,12 @@ class ActivityLogController extends Controller
 {
     public function index(Request $request)
     {
-        $query = ActivityLog::with('user:id,name,role');
+        $query = ActivityLog::with('user:id,name,role,department');
+
+        $department = $this->scopedDepartment($request);
+        if ($department !== null) {
+            $query->whereHas('user', fn ($q) => $q->where('department', $department));
+        }
 
         if ($request->has('user_id')) {
             $query->where('user_id', $request->user_id);

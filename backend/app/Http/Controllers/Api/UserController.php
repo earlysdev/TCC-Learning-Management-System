@@ -6,7 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Mail\LmsAccountCreatedMail;
 use App\Models\Section;
 use App\Models\User;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -20,11 +22,9 @@ class UserController extends Controller
     {
         $query = User::query();
 
-        $currentUser = $request->user();
-        if ($request->has('department') && !empty($request->department) && $request->department !== 'all') {
-            $query->where('department', $request->department);
-        } elseif ($currentUser && ! $currentUser->isInstitutionWide()) {
-            $query->where('department', $currentUser->departmentCode());
+        $department = $this->scopedDepartment($request);
+        if ($department !== null) {
+            $query->where('department', $department);
         }
 
         if ($request->has('role') && $request->filled('role')) {
@@ -185,18 +185,40 @@ class UserController extends Controller
     }
 
     /**
-     * Roles each account manager may create.
+     * Roles each account manager may create within their scope.
      * Secretary: Students & Teachers. Dean: Students, Teachers & Secretaries.
+     * Developer: Institution-wide provisioning including 1 Dean per department.
      */
     private function creatableRolesFor(?User $actor): array
     {
         $role = strtolower((string) $actor?->role);
 
         return match ($role) {
-            'dean', 'principal', 'developer' => ['student', 'teacher', 'secretary'],
+            'developer' => ['student', 'teacher', 'secretary', 'dean'],
+            'dean', 'principal' => ['student', 'teacher', 'secretary'],
             'secretary' => ['student', 'teacher'],
             default => [],
         };
+    }
+
+    /**
+     * Enforce both department boundaries and role hierarchy before modifying/toggling an account.
+     */
+    private function authorizeUserMutation(Request $request, User $target): ?JsonResponse
+    {
+        $this->ensureSameDepartment($request, $target->departmentCode());
+
+        $actor = $request->user();
+        $isDeanOrDev = $actor !== null && ($actor->isDeanRole() || $actor->isInstitutionWide());
+
+        if ($target->isDeanRole() || ($target->role === 'secretary' && ! $isDeanOrDev)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'You are not authorized to modify this account.',
+            ], 403);
+        }
+
+        return null;
     }
 
     public function store(Request $request)
@@ -223,9 +245,7 @@ class UserController extends Controller
             ], 403);
         }
 
-        $validated['department'] = !empty($validated['department'])
-            ? strtoupper(trim($validated['department']))
-            : ($request->user()?->departmentCode() ?? config('lms.default_department', 'CIT'));
+        $validated['department'] = $this->resolveTargetDepartment($request, $validated['department'] ?? null);
 
         $validated['school_year'] = !empty($validated['school_year'])
             ? trim($validated['school_year'])
@@ -255,7 +275,26 @@ class UserController extends Controller
         $validated['password'] = Hash::make($validated['password']);
         $validated['status'] = $validated['status'] ?? 'active';
 
-        $user = User::create($validated);
+        // Enforce single-Dean-per-department atomically
+        $user = DB::transaction(function () use ($validated): ?User {
+            if (in_array($validated['role'], ['dean', 'principal'], true)) {
+                $deanExists = User::where('department', $validated['department'])
+                    ->whereIn('role', ['dean', 'principal'])
+                    ->exists();
+                if ($deanExists) {
+                    return null;
+                }
+            }
+
+            return User::create($validated);
+        });
+
+        if ($user === null) {
+            return response()->json([
+                'status' => 'error',
+                'message' => "The {$validated['department']} department already has an assigned Dean. Only 1 Dean exists per department.",
+            ], 422);
+        }
 
         $portalOrigin = $request->headers->get('origin') ?: config('app.url', 'https://learning-lms.online');
         $accountMail = new LmsAccountCreatedMail($user, $plainPassword, $request->user(), $portalOrigin);
@@ -286,8 +325,10 @@ class UserController extends Controller
         ], 201);
     }
 
-    public function show(User $user)
+    public function show(Request $request, User $user)
     {
+        $this->ensureSameDepartment($request, $user->departmentCode());
+
         $user->loadCount(['quizzes', 'quizAttempts']);
 
         return response()->json([
@@ -298,6 +339,10 @@ class UserController extends Controller
 
     public function update(Request $request, User $user)
     {
+        if ($denied = $this->authorizeUserMutation($request, $user)) {
+            return $denied;
+        }
+
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'first_name' => 'nullable|string|max:255',
@@ -311,17 +356,6 @@ class UserController extends Controller
         if (empty($validated['grade']) && !empty($validated['section']) && preg_match('/([1-4])[A-Z]/i', $validated['section'], $matches)) {
             $yearMap = ['1' => '1st Year', '2' => '2nd Year', '3' => '3rd Year', '4' => '4th Year'];
             $validated['grade'] = $yearMap[$matches[1]] ?? null;
-        }
-
-        // Only the Dean may modify Dean/Secretary accounts; nobody edits a Dean account through this endpoint.
-        $actorRole = strtolower((string) $request->user()?->role);
-        $isDeanActor = in_array($actorRole, ['dean', 'principal', 'developer'], true);
-        if (in_array($user->role, ['dean', 'principal'], true)
-            || ($user->role === 'secretary' && ! $isDeanActor)) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'You are not authorized to modify this account.',
-            ], 403);
         }
 
         $previousPlacement = trim(($user->grade ?? '') . ' • ' . ($user->section ?? ''), ' •');
@@ -379,6 +413,10 @@ class UserController extends Controller
 
     public function toggleStatus(User $user, Request $request)
     {
+        if ($denied = $this->authorizeUserMutation($request, $user)) {
+            return $denied;
+        }
+
         $validated = $request->validate([
             'status' => 'required|in:active,inactive,graduated'
         ]);
@@ -402,7 +440,14 @@ class UserController extends Controller
 
     public function teacherStudents(Request $request)
     {
-        $students = User::where('role', 'student')
+        $query = User::where('role', 'student');
+
+        $department = $this->scopedDepartment($request, false);
+        if ($department !== null) {
+            $query->where('department', $department);
+        }
+
+        $students = $query
             ->orderBy('grade')
             ->orderBy('section')
             ->orderBy('name')

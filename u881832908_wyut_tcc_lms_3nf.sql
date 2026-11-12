@@ -3,7 +3,7 @@
 -- Course: IT 116 - Advanced Database System
 -- Database: u881832908_wyut_tcc_lms
 -- Standard: Strict 3NF + Role Lookup (roles) & Role Identity Specialization
---           (users -> students, teachers, secretaries, deans)
+--           (users -> students, teachers, secretaries, dean)
 -- Connectivity: 100% Physical Foreign Key Constraints Across All 23 Tables
 -- ============================================================================
 
@@ -39,7 +39,7 @@ INSERT INTO `roles` (`role_id`, `role_code`, `role_title`, `default_portal_route
 -- 2. TABLE: users (Shared Supertype Authentication & Account Identity)
 -- 3NF Note: Contains ONLY attributes common to all institutional accounts.
 --           Role-specific attributes are separated into `students`, `teachers`,
---           `secretaries`, and `deans` (zero sparse NULL columns).
+--           `secretaries`, and `dean` (zero sparse NULL columns).
 -- ----------------------------------------------------------------------------
 DROP TABLE IF EXISTS `users`;
 CREATE TABLE `users` (
@@ -67,34 +67,37 @@ INSERT INTO `users` (`user_id`, `role_id`, `first_name`, `last_name`, `email`, `
 (4, 4, 'Gabriel', 'Casiño', 'dean@tcc.edu.ph', 'active', '$2y$12$AKEIVHbA0W2WQmpmYEe0AuX09Ihx4nKYZzEd/86DvE7gP.VEJnC6C', NULL, '2026-10-24 12:49:34', '2026-10-24 14:55:51', '2026-10-24 12:49:34', '2026-10-24 14:55:51');
 
 -- ----------------------------------------------------------------------------
--- 3. TABLE: deans (Role Identity Subtype: College Dean)
+-- 3. TABLE: dean (Role Identity Subtype: Department Dean — 1 Dean per department)
 -- Purpose: Governs `system_settings` and resolves `security_logs` incidents.
 -- ----------------------------------------------------------------------------
-DROP TABLE IF EXISTS `deans`;
-CREATE TABLE `deans` (
+DROP TABLE IF EXISTS `dean`;
+CREATE TABLE `dean` (
   `dean_id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
   `user_id` bigint(20) UNSIGNED NOT NULL,
+  `department_code` varchar(16) NOT NULL DEFAULT 'CIT',
   `employee_code` varchar(32) NOT NULL,
-  `college_office` varchar(100) NOT NULL DEFAULT 'Office of the BSIT College Dean',
+  `college_office` varchar(100) NOT NULL DEFAULT 'Office of the College Dean',
   `term_start_date` date DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`dean_id`),
-  UNIQUE KEY `uk_deans_user_id` (`user_id`),
-  UNIQUE KEY `uk_deans_employee_code` (`employee_code`)
+  UNIQUE KEY `uk_dean_user_id` (`user_id`),
+  UNIQUE KEY `uk_dean_department` (`department_code`),
+  UNIQUE KEY `uk_dean_employee_code` (`employee_code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO `deans` (`dean_id`, `user_id`, `employee_code`, `college_office`, `term_start_date`) VALUES
-(1, 4, 'TCC-DEAN-001', 'Office of the BSIT College Dean', '2025-08-01');
+INSERT INTO `dean` (`dean_id`, `user_id`, `department_code`, `employee_code`, `college_office`, `term_start_date`) VALUES
+(1, 4, 'CIT', 'TCC-DEAN-001', 'Office of the CIT College Dean', '2025-08-01');
 
 -- ----------------------------------------------------------------------------
--- 4. TABLE: secretaries (Role Identity Subtype: College Secretary / Registrar)
+-- 4. TABLE: secretaries (Role Identity Subtype: Department Secretary / Registrar)
 -- Purpose: Manages `sections` (College Blocks) and enrolls `students`.
 -- ----------------------------------------------------------------------------
 DROP TABLE IF EXISTS `secretaries`;
 CREATE TABLE `secretaries` (
   `secretary_id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
   `user_id` bigint(20) UNSIGNED NOT NULL,
+  `department_code` varchar(16) NOT NULL DEFAULT 'CIT',
   `employee_code` varchar(32) NOT NULL,
   `office_department` varchar(100) NOT NULL DEFAULT 'Secretary & Registrar Office',
   `assigned_at` timestamp NULL DEFAULT current_timestamp(),
@@ -102,11 +105,12 @@ CREATE TABLE `secretaries` (
   `updated_at` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`secretary_id`),
   UNIQUE KEY `uk_secretaries_user_id` (`user_id`),
-  UNIQUE KEY `uk_secretaries_employee_code` (`employee_code`)
+  UNIQUE KEY `uk_secretaries_employee_code` (`employee_code`),
+  KEY `idx_secretaries_department` (`department_code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO `secretaries` (`secretary_id`, `user_id`, `employee_code`, `office_department`) VALUES
-(1, 3, 'TCC-REG-001', 'Secretary & Registrar Office');
+INSERT INTO `secretaries` (`secretary_id`, `user_id`, `department_code`, `employee_code`, `office_department`) VALUES
+(1, 3, 'CIT', 'TCC-REG-001', 'Secretary & Registrar Office');
 
 -- ----------------------------------------------------------------------------
 -- 5. TABLE: teachers (Role Identity Subtype: BSIT Faculty / Instructor)
@@ -132,7 +136,7 @@ INSERT INTO `teachers` (`teacher_id`, `user_id`, `employee_code`, `department_co
 
 -- ----------------------------------------------------------------------------
 -- 6. TABLE: system_settings (Global Academic Configuration)
--- Purpose: Configured by `deans` and referenced by `students` for active school year.
+-- Purpose: Configured by `dean` and referenced by `students` for active school year.
 -- ----------------------------------------------------------------------------
 DROP TABLE IF EXISTS `system_settings`;
 CREATE TABLE `system_settings` (
@@ -531,7 +535,7 @@ INSERT INTO `activity_logs` (`activity_log_id`, `user_id`, `action_name`, `actio
 
 -- ----------------------------------------------------------------------------
 -- 21. TABLE: security_logs (Proctoring Violations & Dean Incident Resolution)
--- Purpose: Audited and resolved by `deans` (`resolved_by_dean_id`).
+-- Purpose: Audited and resolved by `dean` (`resolved_by_dean_id`).
 -- ----------------------------------------------------------------------------
 DROP TABLE IF EXISTS `security_logs`;
 CREATE TABLE `security_logs` (
@@ -612,8 +616,8 @@ CREATE TABLE `password_reset_tokens` (
 ALTER TABLE `users`
   ADD CONSTRAINT `fk_users_role_id` FOREIGN KEY (`role_id`) REFERENCES `roles` (`role_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
-ALTER TABLE `deans`
-  ADD CONSTRAINT `fk_deans_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `dean`
+  ADD CONSTRAINT `fk_dean_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 ALTER TABLE `secretaries`
   ADD CONSTRAINT `fk_secretaries_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE;
@@ -629,7 +633,7 @@ ALTER TABLE `students`
 
 -- 2. Role-Owned Academic Structure & Governance Constraints
 ALTER TABLE `system_settings`
-  ADD CONSTRAINT `fk_system_settings_dean_id` FOREIGN KEY (`configured_by_dean_id`) REFERENCES `deans` (`dean_id`) ON DELETE SET NULL ON UPDATE CASCADE;
+  ADD CONSTRAINT `fk_system_settings_dean_id` FOREIGN KEY (`configured_by_dean_id`) REFERENCES `dean` (`dean_id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 ALTER TABLE `sections`
   ADD CONSTRAINT `fk_sections_secretary_id` FOREIGN KEY (`managed_by_secretary_id`) REFERENCES `secretaries` (`secretary_id`) ON DELETE SET NULL ON UPDATE CASCADE;
@@ -688,7 +692,7 @@ ALTER TABLE `security_logs`
   ADD CONSTRAINT `fk_security_logs_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`) ON DELETE SET NULL ON UPDATE CASCADE,
   ADD CONSTRAINT `fk_security_logs_quiz_id` FOREIGN KEY (`quiz_id`) REFERENCES `quizzes` (`quiz_id`) ON DELETE SET NULL ON UPDATE CASCADE,
   ADD CONSTRAINT `fk_security_logs_attempt_id` FOREIGN KEY (`attempt_id`) REFERENCES `quiz_attempts` (`attempt_id`) ON DELETE SET NULL ON UPDATE CASCADE,
-  ADD CONSTRAINT `fk_security_logs_resolved_by_dean_id` FOREIGN KEY (`resolved_by_dean_id`) REFERENCES `deans` (`dean_id`) ON DELETE SET NULL ON UPDATE CASCADE;
+  ADD CONSTRAINT `fk_security_logs_resolved_by_dean_id` FOREIGN KEY (`resolved_by_dean_id`) REFERENCES `dean` (`dean_id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- 6. Authentication & Session Infrastructure Constraints
 ALTER TABLE `personal_access_tokens`

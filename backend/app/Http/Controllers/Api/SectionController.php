@@ -11,9 +11,9 @@ use Illuminate\Http\Request;
 
 class SectionController extends Controller
 {
-    private function ensureDefaultBlocksSeeded(): void
+    private function ensureDefaultBlocksSeeded(string $department): void
     {
-        if (Section::count() > 0) {
+        if (Section::where('department', $department)->exists()) {
             return;
         }
 
@@ -27,8 +27,9 @@ class SectionController extends Controller
         foreach ($yearBlocks as $yearLevel => $blocks) {
             foreach ($blocks as $blockName) {
                 Section::updateOrCreate(
-                    ['grade' => $yearLevel, 'name' => $blockName],
+                    ['department' => $department, 'grade' => $yearLevel, 'name' => $blockName],
                     [
+                        'department' => $department,
                         'grade' => $yearLevel,
                         'name' => $blockName,
                         'display_name' => $blockName,
@@ -40,15 +41,16 @@ class SectionController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $this->ensureDefaultBlocksSeeded();
+        $department = $this->scopedDepartment($request);
+        $seedDept = $department ?? ($request->user()?->departmentCode() ?? config('lms.default_department', 'CIT'));
+        $this->ensureDefaultBlocksSeeded($seedDept);
 
         $query = Section::query();
+        $studentsQuery = User::where('role', 'student')->whereNotNull('section');
 
-        $user = $request->user();
-        if ($request->has('department') && !empty($request->department) && $request->department !== 'all') {
-            $query->where('department', $request->department);
-        } elseif ($user && ! $user->isInstitutionWide()) {
-            $query->where('department', $user->departmentCode());
+        if ($department !== null) {
+            $query->where('department', $department);
+            $studentsQuery->where('department', $department);
         }
 
         if ($request->has('grade') && !empty($request->grade)) {
@@ -57,10 +59,8 @@ class SectionController extends Controller
 
         $sections = $query->orderBy('grade')->orderBy('name')->get();
 
-        // Count students by section name across all students
-        $studentsBySection = User::where('role', 'student')
+        $studentsBySection = $studentsQuery
             ->selectRaw('section, count(*) as count')
-            ->whereNotNull('section')
             ->groupBy('section')
             ->pluck('count', 'section');
 
@@ -89,8 +89,6 @@ class SectionController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $this->ensureDefaultBlocksSeeded();
-
         $validated = $request->validate([
             'grade' => ['required', 'string', 'max:40'],
             'name' => ['required', 'string', 'max:80'],
@@ -98,9 +96,8 @@ class SectionController extends Controller
             'department' => ['nullable', 'string', 'max:16'],
         ]);
 
-        $department = !empty($validated['department'])
-            ? strtoupper(trim($validated['department']))
-            : ($request->user()?->departmentCode() ?? 'CIT');
+        $department = $this->resolveTargetDepartment($request, $validated['department'] ?? null);
+        $this->ensureDefaultBlocksSeeded($department);
 
         $grade = trim($validated['grade']);
         $rawName = trim($validated['name']);
@@ -114,8 +111,9 @@ class SectionController extends Controller
             $name = $rawName;
         }
 
-        // Check if section already exists for this grade or globally with same block name
-        $exists = Section::where('grade', $grade)
+        // Check if section already exists within this department and grade
+        $exists = Section::where('department', $department)
+            ->where('grade', $grade)
             ->whereRaw('LOWER(name) = ?', [strtolower($name)])
             ->exists();
 
@@ -162,6 +160,8 @@ class SectionController extends Controller
 
     public function update(Request $request, Section $section): JsonResponse
     {
+        $this->ensureSameDepartment($request, $section->department);
+
         $validated = $request->validate([
             'grade' => ['required', 'string', 'max:40'],
             'name' => ['required', 'string', 'max:80'],
@@ -169,9 +169,7 @@ class SectionController extends Controller
             'department' => ['nullable', 'string', 'max:16'],
         ]);
 
-        $department = !empty($validated['department'])
-            ? strtoupper(trim($validated['department']))
-            : ($request->user()?->departmentCode() ?? 'CIT');
+        $department = $section->department ?: $this->resolveTargetDepartment($request, $validated['department'] ?? null);
 
         $grade = trim($validated['grade']);
         $rawName = trim($validated['name']);
@@ -185,6 +183,7 @@ class SectionController extends Controller
         }
 
         $duplicate = Section::where('id', '!=', $section->id)
+            ->where('department', $department)
             ->where('grade', $grade)
             ->whereRaw('LOWER(name) = ?', [strtolower($name)])
             ->exists();
@@ -209,6 +208,7 @@ class SectionController extends Controller
 
         if ($oldName !== $name) {
             User::where('role', 'student')
+                ->where('department', $department)
                 ->where('section', $oldName)
                 ->update([
                     'section' => $name,
@@ -234,11 +234,15 @@ class SectionController extends Controller
 
     public function destroy(Request $request, Section $section): JsonResponse
     {
+        $this->ensureSameDepartment($request, $section->department);
+
         $grade = $section->grade;
         $name = $section->name;
+        $department = $section->department ?: config('lms.default_department', 'CIT');
 
-        // Check if students are currently enrolled in this section
+        // Check if students are currently enrolled in this section within the same department
         $enrolledCount = User::where('role', 'student')
+            ->where('department', $department)
             ->where(function ($q) use ($name, $section) {
                 $q->where('section', $name);
                 if (!empty($section->display_name)) {

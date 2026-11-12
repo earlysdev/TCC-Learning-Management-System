@@ -30,6 +30,8 @@ class QuizController extends Controller
         $query = Quiz::query();
         if ($user->role === 'teacher') {
             $query->where('teacher_id', $user->id);
+        } else {
+            $query->visibleTo($user);
         }
         $quizzes = $query->withCount('attempts')->withAvg('attempts', 'percentage')->latest()->get();
         $quizzes->each(fn (Quiz $quiz) => $this->repairQuizQuestionsIfNeeded($quiz));
@@ -349,6 +351,9 @@ class QuizController extends Controller
         $isTeacher = $user->role === 'teacher' && $quiz->teacher_id === $user->id;
         $isAdmin = in_array($user->role, ['principal', 'dean', 'secretary', 'developer'], true);
         abort_unless($isTeacher || $isAdmin, 403, 'Unauthorized to view submissions.');
+        if (! $isTeacher) {
+            $this->ensureSameDepartment($request, $quiz->department);
+        }
 
         $this->ensurePdfColumns();
 

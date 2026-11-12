@@ -118,7 +118,7 @@ class SubjectController extends Controller
                     'name' => $subj['name'],
                     'code' => $subj['code'],
                     'grade' => $subj['grade'],
-                    'department' => 'BSIT',
+                    'department' => 'CIT',
                     'description' => $desc,
                 ]
             );
@@ -131,11 +131,9 @@ class SubjectController extends Controller
 
         $query = Subject::query();
 
-        $user = $request->user();
-        if ($request->has('department') && !empty($request->department) && $request->department !== 'all') {
-            $query->where('department', $request->department);
-        } elseif ($user && ! $user->isInstitutionWide()) {
-            $query->where('department', $user->departmentCode());
+        $department = $this->scopedDepartment($request);
+        if ($department !== null) {
+            $query->where('department', $department);
         }
 
         if ($request->filled('grade') && $request->grade !== 'all' && $request->grade !== 'All Grades') {
@@ -161,7 +159,7 @@ class SubjectController extends Controller
                 'name' => $subject->name,
                 'code' => $subject->code ?: strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $subject->name), 0, 4)),
                 'grade' => $subject->grade ?: '1st Year',
-                'department' => $subject->department ?: 'BSIT',
+                'department' => $subject->department ?: 'CIT',
                 'description' => $subject->description,
                 'quizzes_count' => $count,
                 'created_at' => $subject->created_at,
@@ -198,18 +196,22 @@ class SubjectController extends Controller
         }
 
         $grade = !empty($validated['grade']) ? trim($validated['grade']) : '1st Year';
+        $department = $this->resolveTargetDepartment($request, $validated['department'] ?? null);
 
-        $exists = Subject::whereRaw('LOWER(code) = ?', [strtolower($code)])
-            ->orWhere(function ($q) use ($name, $grade) {
-                $q->whereRaw('LOWER(name) = ?', [strtolower($name)])
-                  ->where('grade', $grade);
+        $exists = Subject::where('department', $department)
+            ->where(function ($q) use ($code, $name, $grade) {
+                $q->whereRaw('LOWER(code) = ?', [strtolower($code)])
+                    ->orWhere(function ($subQ) use ($name, $grade) {
+                        $subQ->whereRaw('LOWER(name) = ?', [strtolower($name)])
+                            ->where('grade', $grade);
+                    });
             })
             ->exists();
 
         if ($exists) {
             return response()->json([
                 'status' => 'error',
-                'message' => "Subject '{$code} - {$name}' is already registered in the curriculum.",
+                'message' => "Subject '{$code} - {$name}' is already registered in the {$department} curriculum.",
             ], 422);
         }
 
@@ -217,7 +219,7 @@ class SubjectController extends Controller
             'name' => $name,
             'code' => $code,
             'grade' => $grade,
-            'department' => $validated['department'] ?? 'BSIT',
+            'department' => $department,
             'description' => $validated['description'] ?? "{$grade} Curriculum Subject",
         ]);
 
@@ -239,6 +241,8 @@ class SubjectController extends Controller
 
     public function destroy(Request $request, Subject $subject): JsonResponse
     {
+        $this->ensureSameDepartment($request, $subject->department);
+
         $fullLabel = $subject->code ? "{$subject->code} - {$subject->name}" : $subject->name;
         $quizCount = Quiz::where('subject', $subject->name)
             ->orWhere('subject', $fullLabel)

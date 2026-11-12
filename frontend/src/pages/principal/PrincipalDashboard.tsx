@@ -7,6 +7,7 @@ import {
   YEAR_LEVEL_BLOCKS,
   YEAR_LEVEL_OPTIONS,
   getYearLevelFromBlock,
+  getDepartmentName,
   CURRENT_SCHOOL_YEAR,
 } from '../../lib/constants';
 import { 
@@ -90,6 +91,8 @@ const sectionToPath: Record<string, string> = {
 
 export default function PrincipalDashboard() {
   const user = getLmsUser();
+  const departmentCode = (user?.department || 'CIT').toUpperCase();
+  const departmentName = getDepartmentName(departmentCode);
   const { showToast } = useToastContext();
   const { subpage } = useParams<{ subpage?: string }>();
   const navigate = useNavigate();
@@ -521,6 +524,7 @@ export default function PrincipalDashboard() {
       });
 
       const finalSection = res?.data?.section || targetPlacement.block;
+      const receiptDepartment = (res?.data?.department || departmentCode).toUpperCase();
       const roleLabel = newRole === 'secretary' ? 'College Secretary' : newRole === 'teacher' ? 'Faculty Teacher' : 'Student Learner';
       const fallbackReceipt: AccountEmailDispatchReceipt = res?.email_dispatch || {
         sent: true,
@@ -529,8 +533,8 @@ export default function PrincipalDashboard() {
         account_name: fullName,
         role: newRole,
         role_label: roleLabel,
-        department: res?.data?.department || user?.department || 'CIT',
-        department_label: 'CIT — College of Information Technology',
+        department: receiptDepartment,
+        department_label: `${receiptDepartment} — ${getDepartmentName(receiptDepartment)}`,
         school_year: res?.data?.school_year || CURRENT_SCHOOL_YEAR,
         lrn: newRole === 'student' ? newStudentId.trim() : null,
         grade: newRole === 'student' ? newYearLevel : null,
@@ -662,9 +666,9 @@ export default function PrincipalDashboard() {
   const renderOverview = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       {renderPageHeader(
-        'DEAN EXECUTIVE OVERSIGHT',
+        `${departmentCode} DEAN EXECUTIVE OVERSIGHT`,
         `Welcome, Dean ${user?.name || ''}!`,
-        `Tagoloan Community College administrative command, enrollment, proctoring surveillance, and institutional analytics • SY ${CURRENT_SCHOOL_YEAR}.`,
+        `${departmentName} (${departmentCode}) administrative command, enrollment, proctoring surveillance, and departmental analytics • SY ${CURRENT_SCHOOL_YEAR}.`,
         <>
           <Button variant="outline" onClick={() => handleSectionChange('security')}>
             <ShieldCheck size={16} /> Security Audit
@@ -795,8 +799,8 @@ export default function PrincipalDashboard() {
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.15rem' }}>
           <StatCard label="Total Staff Users" value={staffUsers.length} icon={<Users size={22} />} detail="Teachers & Secretaries (Excl. Dean)" />
-          <StatCard label="Faculty Teachers" value={teachersCount} icon={<Users size={22} />} detail="BSIT Course Instructors" />
-          <StatCard label="School Secretaries" value={secretariesCount} icon={<ShieldCheck size={22} />} detail="Enrollment & Records Staff" />
+          <StatCard label="Faculty Teachers" value={teachersCount} icon={<Users size={22} />} detail={`${departmentCode} Course Instructors`} />
+          <StatCard label="Department Secretaries" value={secretariesCount} icon={<ShieldCheck size={22} />} detail={`${departmentCode} Enrollment & Records`} />
         </div>
 
         {/* Aligned Filter Row */}
@@ -867,8 +871,8 @@ export default function PrincipalDashboard() {
                       </td>
                       <td style={{ padding: '0.85rem 1.25rem', color: 'var(--neutral-300)' }}>
                         {u.role === 'teacher'
-                          ? 'College of Information Technology (BSIT Faculty)'
-                          : 'Office of the College Secretary & Registrar'}
+                          ? `${getDepartmentName(u.department || departmentCode)} (${u.department || departmentCode} Faculty)`
+                          : `Office of the ${u.department || departmentCode} Secretary`}
                       </td>
                       <td style={{ padding: '0.85rem 1.25rem' }}>
                         <Badge variant={u.status === 'inactive' ? 'warning' : 'success'}>
@@ -926,7 +930,7 @@ export default function PrincipalDashboard() {
         )}
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.15rem' }}>
-          <StatCard label="Total Enrolled Students" value={studentUsers.length} icon={<GraduationCap size={22} />} detail="All BSIT Learners" />
+          <StatCard label="Total Enrolled Students" value={studentUsers.length} icon={<GraduationCap size={22} />} detail={`${departmentCode} Learners`} />
           <StatCard label="Active Student Accounts" value={activeStudentsCount} icon={<CheckCircle2 size={22} />} detail="Verified active learners" />
           <StatCard label="Year Levels Covered" value={Object.keys(yearLevelBlocksMap).length} icon={<Layers size={22} />} detail="1st Year to 4th Year" />
         </div>
@@ -1233,13 +1237,13 @@ export default function PrincipalDashboard() {
           <div>
             <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', textTransform: 'uppercase', fontWeight: 600 }}>Office</div>
             <div style={{ color: 'white', fontWeight: 600, marginTop: '0.2rem' }}>
-              Office of the Dean
+              Office of the Dean ({departmentCode})
             </div>
           </div>
           <div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', textTransform: 'uppercase', fontWeight: 600 }}>Institution</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', textTransform: 'uppercase', fontWeight: 600 }}>Department</div>
             <div style={{ color: 'white', fontWeight: 600, marginTop: '0.2rem' }}>
-              Tagoloan Community College
+              {departmentCode} — {departmentName}
             </div>
           </div>
         </div>
