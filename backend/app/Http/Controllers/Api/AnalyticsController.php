@@ -30,7 +30,17 @@ class AnalyticsController extends Controller
             'data' => [
                 'total_students' => $studentsQuery->count(),
                 'total_teachers' => $teachersQuery->count(),
-                'recent_registrations' => $recentQuery->get(),
+                'recent_registrations' => $recentQuery->get([
+                    'id',
+                    'name',
+                    'email',
+                    'role',
+                    'grade',
+                    'section',
+                    'department',
+                    'status',
+                    'created_at',
+                ]),
             ]
         ]);
     }
@@ -53,7 +63,8 @@ class AnalyticsController extends Controller
             $publishedQuizzesQuery->where('department', $department);
             $attemptsQuery->whereHas('quiz', fn ($q) => $q->where('department', $department));
             $securityAlertsQuery->where(function ($q) use ($department) {
-                $q->whereHas('user', fn ($uq) => $uq->where('department', $department))
+                $q->where('department', $department)
+                    ->orWhereHas('user', fn ($uq) => $uq->where('department', $department))
                     ->orWhere('details->department', $department);
             });
         }

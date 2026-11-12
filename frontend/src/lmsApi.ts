@@ -47,6 +47,18 @@ export function getLmsUser(): {
   } catch { return null }
 }
 
+export class LmsApiError extends Error {
+  status: number
+  retryAfter?: number
+
+  constructor(message: string, status: number, retryAfter?: number) {
+    super(message)
+    this.name = 'LmsApiError'
+    this.status = status
+    this.retryAfter = retryAfter
+  }
+}
+
 export async function lmsFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers)
   headers.set('Accept', 'application/json')
@@ -55,10 +67,18 @@ export async function lmsFetch<T>(path: string, init: RequestInit = {}): Promise
   const token = getLmsToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
   const response = await fetch(`${API_BASE}${path}`, { ...init, headers })
-  const payload = await response.json().catch(() => ({})) as { message?: string; errors?: Record<string, string[]> }
+  const payload = await response.json().catch(() => ({})) as {
+    message?: string
+    errors?: Record<string, string[]>
+    retry_after?: number
+  }
   if (!response.ok) {
     const validation = payload.errors ? Object.values(payload.errors).flat()[0] : undefined
-    throw new Error(validation ?? payload.message ?? `Request failed (${response.status}).`)
+    throw new LmsApiError(
+      validation ?? payload.message ?? `Request failed (${response.status}).`,
+      response.status,
+      typeof payload.retry_after === 'number' ? payload.retry_after : undefined,
+    )
   }
   return payload as T
 }
@@ -83,10 +103,25 @@ export function extractCollection<T>(payload: unknown): T[] {
   return []
 }
 
-export async function signOut(): Promise<void> {
-  try { await lmsFetch('/logout', { method: 'POST' }) } catch { /* The local session is cleared even if the API is unavailable. */ }
+export function clearStoredSession(): void {
   localStorage.removeItem('lms-token')
   localStorage.removeItem('lms-user')
   sessionStorage.removeItem('lms-token')
   sessionStorage.removeItem('lms-user')
+}
+
+export async function signOut(): Promise<void> {
+  const token = getLmsToken()
+  clearStoredSession()
+  if (!token) return
+  try {
+    await fetch(`${API_BASE}/logout`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'X-Device-Id': getDeviceId(),
+        Authorization: `Bearer ${token}`,
+      },
+    })
+  } catch { /* Local session already cleared. */ }
 }

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   Mail,
   CheckCircle2,
+  AlertTriangle,
   Copy,
   Check,
   Eye,
@@ -22,6 +23,9 @@ import { useToastContext } from '../../contexts/ToastContext';
 
 export interface AccountEmailDispatchReceipt {
   sent: boolean;
+  simulated?: boolean;
+  mail_status?: 'sent' | 'simulated' | 'failed';
+  mail_warning?: string | null;
   recipient: string;
   subject: string;
   account_name: string;
@@ -38,6 +42,65 @@ export interface AccountEmailDispatchReceipt {
   issued_by: string;
   issued_by_role: string;
   issued_at: string;
+}
+
+const HTML_ESCAPE_MAP: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+};
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? '').replace(/[&<>"']/g, (ch) => HTML_ESCAPE_MAP[ch] ?? ch);
+}
+
+function sanitizeHttpUrl(rawUrl: string): string {
+  try {
+    const parsed = new URL(rawUrl, window.location.origin);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.href : `${window.location.origin}/login`;
+  } catch {
+    return `${window.location.origin}/login`;
+  }
+}
+
+export function createFallbackAccountReceipt(params: {
+  recipient: string;
+  accountName: string;
+  role: string;
+  roleLabel: string;
+  department: string;
+  departmentLabel: string;
+  schoolYear: string;
+  plainPassword: string;
+  issuedBy: string;
+  issuedByRole: string;
+  lrn?: string | null;
+  grade?: string | null;
+  section?: string | null;
+}): AccountEmailDispatchReceipt {
+  return {
+    sent: false,
+    mail_status: 'failed',
+    mail_warning: 'Server response did not confirm email delivery; share or verify SMTP status manually.',
+    recipient: params.recipient,
+    subject: `TCC LMS — Official ${params.roleLabel} Account Credentials (S.Y. ${params.schoolYear})`,
+    account_name: params.accountName,
+    role: params.role,
+    role_label: params.roleLabel,
+    department: params.department,
+    department_label: params.departmentLabel,
+    school_year: params.schoolYear,
+    lrn: params.lrn ?? null,
+    grade: params.grade ?? null,
+    section: params.section ?? null,
+    plain_password: params.plainPassword,
+    portal_url: `${window.location.origin}/login`,
+    issued_by: params.issuedBy,
+    issued_by_role: params.issuedByRole,
+    issued_at: new Date().toLocaleString(),
+  };
 }
 
 interface AccountCredentialsEmailReceiptProps {
@@ -117,11 +180,14 @@ export const AccountCredentialsEmailReceipt: React.FC<AccountCredentialsEmailRec
       return;
     }
 
+    const esc = escapeHtml;
+    const safePortalUrl = sanitizeHttpUrl(receipt.portal_url);
+
     const html = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>${receipt.subject}</title>
+  <title>${esc(receipt.subject)}</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -212,36 +278,36 @@ export const AccountCredentialsEmailReceipt: React.FC<AccountCredentialsEmailRec
     <div class="header">
       <div class="badge">Official LMS Account Dispatch</div>
       <h1>Tagoloan Community College</h1>
-      <p>Learning Management System &bull; S.Y. ${receipt.school_year}</p>
+      <p>Learning Management System &bull; S.Y. ${esc(receipt.school_year)}</p>
     </div>
     <div class="body">
       <div class="sec-title">1. Official Account &amp; Academic Placement</div>
       <div class="box">
         <table>
-          <tr><td class="lbl">Account Holder</td><td class="val">${receipt.account_name}</td></tr>
-          <tr><td class="lbl">Institutional Role</td><td class="val">${receipt.role_label}</td></tr>
-          <tr><td class="lbl">College Department</td><td class="val">${receipt.department_label}</td></tr>
+          <tr><td class="lbl">Account Holder</td><td class="val">${esc(receipt.account_name)}</td></tr>
+          <tr><td class="lbl">Institutional Role</td><td class="val">${esc(receipt.role_label)}</td></tr>
+          <tr><td class="lbl">College Department</td><td class="val">${esc(receipt.department_label)}</td></tr>
           ${
             isStudent
-              ? `<tr><td class="lbl">Student ID Number</td><td class="val">${receipt.lrn || 'N/A'}</td></tr>
-                 <tr><td class="lbl">Year Level &amp; Section</td><td class="val">${receipt.grade || '1st Year'} &bull; ${receipt.section || 'Block - 1A'}</td></tr>`
+              ? `<tr><td class="lbl">Student ID Number</td><td class="val">${esc(receipt.lrn || 'N/A')}</td></tr>
+                 <tr><td class="lbl">Year Level &amp; Section</td><td class="val">${esc(receipt.grade || '1st Year')} &bull; ${esc(receipt.section || 'Block - 1A')}</td></tr>`
               : ''
           }
-          <tr><td class="lbl">Academic Year</td><td class="val">S.Y. ${receipt.school_year}</td></tr>
-          <tr><td class="lbl">Dispatched To Email</td><td class="val">${receipt.recipient}</td></tr>
-          <tr><td class="lbl">Issued By / Date</td><td class="val">${receipt.issued_by} &bull; ${receipt.issued_at}</td></tr>
+          <tr><td class="lbl">Academic Year</td><td class="val">S.Y. ${esc(receipt.school_year)}</td></tr>
+          <tr><td class="lbl">Dispatched To Email</td><td class="val">${esc(receipt.recipient)}</td></tr>
+          <tr><td class="lbl">Issued By / Date</td><td class="val">${esc(receipt.issued_by)} &bull; ${esc(receipt.issued_at)}</td></tr>
         </table>
       </div>
       <div class="sec-title">2. Official Sign-In Credentials</div>
       <div class="cred-box">
         <table>
-          <tr><td class="lbl">Portal Login URL</td><td class="val">${receipt.portal_url}</td></tr>
-          <tr><td class="lbl">Official Email Login</td><td class="val">${receipt.recipient}</td></tr>
-          ${isStudent ? `<tr><td class="lbl">Student ID Login</td><td class="val">${receipt.lrn || 'N/A'}</td></tr>` : ''}
+          <tr><td class="lbl">Portal Login URL</td><td class="val">${esc(safePortalUrl)}</td></tr>
+          <tr><td class="lbl">Official Email Login</td><td class="val">${esc(receipt.recipient)}</td></tr>
+          ${isStudent ? `<tr><td class="lbl">Student ID Login</td><td class="val">${esc(receipt.lrn || 'N/A')}</td></tr>` : ''}
         </table>
         <div class="pw-box">
           <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.8px;color:#fde68a;font-weight:700;">Initial Account Password</div>
-          <div class="pw-val">${receipt.plain_password}</div>
+          <div class="pw-val">${esc(receipt.plain_password)}</div>
         </div>
       </div>
     </div>
@@ -257,6 +323,45 @@ export const AccountCredentialsEmailReceipt: React.FC<AccountCredentialsEmailRec
     printWindow.document.write(html);
     printWindow.document.close();
   };
+
+  const deliveryStatus = receipt.sent
+    ? 'sent'
+    : receipt.simulated || receipt.mail_status === 'simulated'
+      ? 'simulated'
+      : 'failed';
+
+  const deliveryMeta = {
+    sent: {
+      bg: 'rgba(16, 185, 129, 0.2)',
+      border: '1px solid rgba(16, 185, 129, 0.5)',
+      color: '#6ee7b7',
+      label: 'Official Email Dispatched',
+      headline: `Official Account Credentials Sent to ${receipt.recipient}`,
+      bannerBg: '',
+      bannerBorder: '',
+      bannerColor: '',
+    },
+    simulated: {
+      bg: 'rgba(245, 158, 11, 0.22)',
+      border: '1px solid rgba(245, 158, 11, 0.55)',
+      color: '#fde68a',
+      label: 'Local Mail Log Only (SMTP Off)',
+      headline: `Account Created for ${receipt.recipient} (Email Not Sent to Inbox)`,
+      bannerBg: 'rgba(245, 158, 11, 0.14)',
+      bannerBorder: '1px solid rgba(245, 158, 11, 0.45)',
+      bannerColor: '#fde68a',
+    },
+    failed: {
+      bg: 'rgba(239, 68, 68, 0.22)',
+      border: '1px solid rgba(239, 68, 68, 0.55)',
+      color: '#fca5a5',
+      label: 'SMTP Delivery Failed',
+      headline: `Account Created for ${receipt.recipient} (Email Not Sent to Inbox)`,
+      bannerBg: 'rgba(239, 68, 68, 0.14)',
+      bannerBorder: '1px solid rgba(239, 68, 68, 0.45)',
+      bannerColor: '#fecaca',
+    },
+  }[deliveryStatus];
 
   return (
     <div
@@ -308,22 +413,22 @@ export const AccountCredentialsEmailReceipt: React.FC<AccountCredentialsEmailRec
                   letterSpacing: '0.9px',
                   padding: '0.18rem 0.6rem',
                   borderRadius: '999px',
-                  background: 'rgba(16, 185, 129, 0.2)',
-                  border: '1px solid rgba(16, 185, 129, 0.5)',
-                  color: '#6ee7b7',
+                  background: deliveryMeta.bg,
+                  border: deliveryMeta.border,
+                  color: deliveryMeta.color,
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '0.3rem',
                 }}
               >
-                <CheckCircle2 size={12} /> Official Email Dispatched
+                {deliveryStatus === 'sent' ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />} {deliveryMeta.label}
               </span>
               <span style={{ fontSize: '0.74rem', color: '#fde68a', fontWeight: 700 }}>
                 S.Y. {receipt.school_year}
               </span>
             </div>
             <h3 style={{ margin: '0.25rem 0 0', fontSize: '1.18rem', fontWeight: 800, color: '#ffffff' }}>
-              Official Account Credentials Sent to {receipt.recipient}
+              {deliveryMeta.headline}
             </h3>
             <p style={{ margin: '0.15rem 0 0', fontSize: '0.78rem', color: 'rgba(255,255,255,0.8)' }}>
               Subject: <strong style={{ color: '#fde68a' }}>{receipt.subject}</strong> &bull; Issued by {receipt.issued_by} ({receipt.issued_at})
@@ -371,6 +476,30 @@ export const AccountCredentialsEmailReceipt: React.FC<AccountCredentialsEmailRec
           </button>
         </div>
       </div>
+
+      {!receipt.sent && (
+        <div
+          style={{
+            margin: '1rem 1.5rem 0',
+            padding: '0.85rem 1rem',
+            borderRadius: '10px',
+            background: deliveryMeta.bannerBg,
+            border: deliveryMeta.bannerBorder,
+            color: deliveryMeta.bannerColor,
+            fontSize: '0.84rem',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '0.6rem',
+          }}
+        >
+          <AlertTriangle size={18} style={{ flexShrink: 0, marginTop: '0.1rem' }} />
+          <div>
+            <strong>External Inbox Delivery Inactive:</strong>{' '}
+            {receipt.mail_warning ||
+              'SMTP delivery is currently disabled or failed. Copy or print the credentials below to share them manually, or configure live MAIL_MAILER=smtp credentials in backend/.env.'}
+          </div>
+        </div>
+      )}
 
       {/* Main Organized Body: 2-Column System-Themed Email Layout */}
       <div

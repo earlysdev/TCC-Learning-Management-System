@@ -3,11 +3,13 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Mail\LmsPasswordUpdatedMail;
 use App\Models\ActivityLog;
 use App\Models\SecurityLog;
 use App\Models\User;
 use App\Models\VerificationCode;
 use App\Services\LmsDeviceService;
+use App\Services\LmsMailService;
 use App\Services\LmsOtpService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -53,10 +55,14 @@ class AuthController extends Controller
             if ($user) {
                 SecurityLog::create([
                     'user_id' => $user->id,
+                    'department' => $user->departmentCode(),
                     'event_type' => 'login_failed',
                     'ip_address' => $request->ip(),
                     'user_agent' => $request->userAgent(),
-                    'details' => ['identifier' => $normalizedIdentifier],
+                    'details' => [
+                        'identifier' => $normalizedIdentifier,
+                        'department' => $user->departmentCode(),
+                    ],
                 ]);
             }
 
@@ -68,9 +74,11 @@ class AuthController extends Controller
         if ($user->status === 'inactive') {
             SecurityLog::create([
                 'user_id' => $user->id,
+                'department' => $user->departmentCode(),
                 'event_type' => 'inactive_account_login_blocked',
                 'ip_address' => $request->ip(),
                 'user_agent' => $request->userAgent(),
+                'details' => ['department' => $user->departmentCode()],
             ]);
 
             throw ValidationException::withMessages([
@@ -159,11 +167,11 @@ class AuthController extends Controller
     {
         $validated = $request->validate([
             'challenge' => ['required', 'string'],
-            'code' => ['required', 'string', 'size:6'],
+            'code' => ['required', 'digits:6'],
             'device_name' => ['sometimes', 'nullable', 'string', 'max:120'],
             'remember' => ['sometimes', 'boolean'],
         ], [
-            'code.size' => 'The verification code must be exactly 6 digits.',
+            'code.digits' => 'The verification code must be exactly 6 numeric digits.',
         ]);
 
         $result = $this->otpService->verify(
@@ -178,6 +186,23 @@ class AuthController extends Controller
 
         /** @var User $user */
         $user = $result['user'];
+
+        if ($user->status === 'inactive') {
+            SecurityLog::create([
+                'user_id' => $user->id,
+                'department' => $user->departmentCode(),
+                'event_type' => 'inactive_account_login_blocked',
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+                'details' => ['department' => $user->departmentCode(), 'stage' => 'verify_login_otp'],
+            ]);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'This account has been deactivated. Please contact the College Secretary or Dean.',
+            ], 403);
+        }
+
         $payload = $result['payload'] ?? [];
         $deviceHash = $payload['device_hash'] ?? $this->deviceService->computeDeviceHash($request);
         $deviceName = $validated['device_name'] ?? ($payload['device_name'] ?? null);
@@ -275,7 +300,13 @@ class AuthController extends Controller
             'challenge' => $otp['challenge'],
             'email_hint' => $otp['email_hint'],
             'cooldown_seconds' => (int) config('lms.otp_resend_cooldown_seconds', 60),
-            'message' => "A 6-digit authorization code has been dispatched to {$otp['email_hint']}. Enter it below with your current security password.",
+            'mail_status' => $otp['mail_status'] ?? ($otp['mail_sent'] ? 'sent' : 'failed'),
+            'mail_warning' => $otp['mail_warning'] ?? null,
+            'message' => match ($otp['mail_status'] ?? ($otp['mail_sent'] ? 'sent' : 'failed')) {
+                'sent' => "A 6-digit authorization code has been dispatched to {$otp['email_hint']}. Enter it below with your current security password.",
+                'simulated' => "SMTP is in local log mode — your 6-digit authorization code was written to the server log for {$otp['email_hint']}.",
+                default => "Live SMTP delivery failed for {$otp['email_hint']}; check server mail configuration.",
+            },
         ], $otp['debug_code'] ?? null));
     }
 
@@ -289,14 +320,14 @@ class AuthController extends Controller
             'email' => ['sometimes', 'string', 'email', 'max:255'],
             'current_password' => ['required', 'string'],
             'password' => ['nullable', 'string', 'min:8', 'confirmed'],
-            'code' => ['required', 'string', 'size:6'],
+            'code' => ['required', 'digits:6'],
             'challenge' => ['required', 'string'],
         ], [
             'current_password.required' => 'You are required to insert your current password before saving settings.',
             'password.min' => 'Your new password must be at least 8 characters long.',
             'password.confirmed' => 'New password confirmation does not match.',
             'code.required' => 'The exact 6-digit email authorization code is required before saving settings.',
-            'code.size' => 'The authorization code must be exactly 6 digits.',
+            'code.digits' => 'The authorization code must be exactly 6 numeric digits.',
             'challenge.required' => 'Please request a 6-digit authorization code to your institutional email first.',
         ]);
 
@@ -311,9 +342,11 @@ class AuthController extends Controller
         if (! Hash::check($validated['current_password'], $user->password)) {
             SecurityLog::create([
                 'user_id' => $user->id,
+                'department' => $user->departmentCode(),
                 'event_type' => 'profile_update_wrong_password',
                 'ip_address' => $request->ip(),
                 'user_agent' => $request->userAgent(),
+                'details' => ['department' => $user->departmentCode()],
             ]);
 
             return response()->json([
@@ -349,7 +382,10 @@ class AuthController extends Controller
         $user->update($updates);
 
         if ($passwordChanged) {
-            $currentTokenId = $request->user()->currentAccessToken()?->id;
+            $currentToken = $request->user()->currentAccessToken();
+            $currentTokenId = $currentToken instanceof \Laravel\Sanctum\PersonalAccessToken
+                ? $currentToken->id
+                : null;
             $user->tokens()
                 ->when($currentTokenId, fn ($q) => $q->where('id', '!=', $currentTokenId))
                 ->delete();
@@ -357,22 +393,38 @@ class AuthController extends Controller
 
         SecurityLog::create([
             'user_id' => $user->id,
+            'department' => $user->departmentCode(),
             'event_type' => $passwordChanged ? 'password_changed_with_otp' : 'profile_updated_with_otp',
             'ip_address' => $request->ip(),
             'user_agent' => $request->userAgent(),
             'details' => [
                 'method' => 'profile_settings_exact_otp',
                 'password_changed' => $passwordChanged,
+                'department' => $user->departmentCode(),
             ],
             'is_resolved' => true,
             'resolved_at' => now(),
         ]);
+
+        $emailDispatch = null;
+        if ($passwordChanged) {
+            $confirmationMail = new LmsPasswordUpdatedMail(
+                $user->fresh() ?? $user,
+                'profile_password_change',
+                $request->headers->get('origin'),
+                $request->ip(),
+                $this->deviceService->detectDeviceName($request->userAgent())
+            );
+            $dispatch = LmsMailService::dispatch($user->email, $confirmationMail, 'password change confirmation');
+            $emailDispatch = $confirmationMail->toDispatchSummary($dispatch);
+        }
 
         return response()->json([
             'message' => $passwordChanged
                 ? 'Settings and new security password updated successfully. Other active sessions were signed out.'
                 : 'Account settings updated and authorized via 6-digit email verification.',
             'user' => $this->userPayload($user->fresh()),
+            ...($emailDispatch !== null ? ['email_dispatch' => $emailDispatch] : []),
         ]);
     }
 
@@ -393,19 +445,20 @@ class AuthController extends Controller
         $user = $this->resolveUserByIdentifier($identifier);
 
         $genericMessage = 'If an account matches our records, a 6-digit verification code has been dispatched to its institutional email.';
+        $genericHint = str_contains($identifier, '@')
+            ? $this->otpService->maskEmail($identifier)
+            : 'your registered institutional email';
 
-        if (! $user) {
-            $syntheticHint = str_contains($identifier, '@')
-                ? $this->otpService->maskEmail($identifier)
-                : 'your registered institutional email';
+        $uniformResponse = fn (?string $debugCode = null) => response()->json($this->withOptionalDebugCode([
+            'status' => 'success',
+            'requires_code' => true,
+            'challenge' => Str::random(48),
+            'email_hint' => $genericHint,
+            'message' => $genericMessage,
+        ], $debugCode));
 
-            return response()->json([
-                'status' => 'success',
-                'requires_code' => true,
-                'challenge' => Str::random(48),
-                'email_hint' => $syntheticHint,
-                'message' => $genericMessage,
-            ]);
+        if (! $user || $user->status === 'inactive') {
+            return $uniformResponse();
         }
 
         try {
@@ -418,29 +471,39 @@ class AuthController extends Controller
         } catch (\Throwable $e) {
             Log::error('Failed to issue password reset OTP: ' . $e->getMessage());
 
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Unable to process password recovery right now. Please try again shortly.',
-            ], 503);
+            // Keep HTTP status & payload shape uniform so password reset never exposes account existence.
+            return $uniformResponse();
         }
 
         SecurityLog::create([
             'user_id' => $user->id,
+            'department' => $user->departmentCode(),
             'event_type' => 'password_reset_requested',
             'ip_address' => $request->ip(),
             'user_agent' => $request->userAgent(),
-            'details' => ['email_hint' => $otp['email_hint']],
+            'details' => [
+                'email_hint' => $otp['email_hint'],
+                'department' => $user->departmentCode(),
+            ],
             'is_resolved' => true,
             'resolved_at' => now(),
         ]);
 
-        return response()->json($this->withOptionalDebugCode([
+        // Only expose detailed transport status/debug codes in local/testing environments.
+        $payload = [
             'status' => 'success',
             'requires_code' => true,
             'challenge' => $otp['challenge'],
-            'email_hint' => $otp['email_hint'],
-            'message' => "A 6-digit password reset verification code has been sent to {$otp['email_hint']}.",
-        ], $otp['debug_code'] ?? null));
+            'email_hint' => $genericHint,
+            'message' => $genericMessage,
+        ];
+
+        if (app()->environment(['local', 'testing'])) {
+            $payload['mail_status'] = $otp['mail_status'] ?? ($otp['mail_sent'] ? 'sent' : 'failed');
+            $payload['mail_warning'] = $otp['mail_warning'] ?? null;
+        }
+
+        return response()->json($this->withOptionalDebugCode($payload, $otp['debug_code'] ?? null));
     }
 
     /**
@@ -450,10 +513,10 @@ class AuthController extends Controller
     {
         $validated = $request->validate([
             'challenge' => ['required', 'string'],
-            'code' => ['required', 'string', 'size:6'],
+            'code' => ['required', 'digits:6'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
         ], [
-            'code.size' => 'The verification code must be exactly 6 digits.',
+            'code.digits' => 'The verification code must be exactly 6 numeric digits.',
         ]);
 
         $result = $this->otpService->verify(
@@ -468,6 +531,13 @@ class AuthController extends Controller
 
         /** @var User $user */
         $user = $result['user'];
+
+        if ($user->status === 'inactive') {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'This account has been deactivated. Please contact the College Secretary or Dean.',
+            ], 403);
+        }
         $user->forceFill([
             'password' => Hash::make($validated['password']),
             'remember_token' => Str::random(60),
@@ -486,17 +556,31 @@ class AuthController extends Controller
 
         SecurityLog::create([
             'user_id' => $user->id,
+            'department' => $user->departmentCode(),
             'event_type' => 'password_reset_success',
             'ip_address' => $request->ip(),
             'user_agent' => $request->userAgent(),
-            'details' => ['method' => 'email_otp_verified'],
+            'details' => [
+                'method' => 'email_otp_verified',
+                'department' => $user->departmentCode(),
+            ],
             'is_resolved' => true,
             'resolved_at' => now(),
         ]);
 
+        $confirmationMail = new LmsPasswordUpdatedMail(
+            $user->fresh() ?? $user,
+            'password_reset',
+            $request->headers->get('origin'),
+            $request->ip(),
+            $this->deviceService->detectDeviceName($request->userAgent())
+        );
+        $dispatch = LmsMailService::dispatch($user->email, $confirmationMail, 'password reset confirmation');
+
         return response()->json([
             'status' => 'success',
             'message' => 'Your password has been successfully reset. You may now sign in with your new password.',
+            'email_dispatch' => $confirmationMail->toDispatchSummary($dispatch),
         ]);
     }
 
@@ -574,8 +658,8 @@ class AuthController extends Controller
             return true;
         }
 
-        // 'auto': require OTP when an external mail transport is configured
-        return ! in_array(config('mail.default'), ['log', 'array'], true);
+        // 'auto': require OTP only when a real external mail transport is ready
+        return LmsMailService::inspectTransport()['ready'];
     }
 
     private function requestMeta(Request $request): array

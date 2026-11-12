@@ -33,7 +33,16 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
+        'dean_department',
     ];
+
+    protected static function booted(): void
+    {
+        static::saving(function (self $user): void {
+            $user->department = $user->departmentCode();
+            $user->dean_department = $user->isDeanRole() ? $user->department : null;
+        });
+    }
 
     /**
      * Get the attributes that should be cast.

@@ -121,7 +121,7 @@ CREATE TABLE `teachers` (
   `teacher_id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
   `user_id` bigint(20) UNSIGNED NOT NULL,
   `employee_code` varchar(32) NOT NULL,
-  `department_code` varchar(60) NOT NULL DEFAULT 'BSIT',
+  `department_code` varchar(60) NOT NULL DEFAULT 'CIT',
   `academic_specialization` varchar(120) DEFAULT NULL,
   `hired_at` timestamp NULL DEFAULT current_timestamp(),
   `created_at` timestamp NULL DEFAULT current_timestamp(),
@@ -132,7 +132,7 @@ CREATE TABLE `teachers` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `teachers` (`teacher_id`, `user_id`, `employee_code`, `department_code`, `academic_specialization`) VALUES
-(1, 2, 'TCC-FAC-001', 'BSIT', 'Database & Information Systems');
+(1, 2, 'TCC-FAC-001', 'CIT', 'Database & Information Systems');
 
 -- ----------------------------------------------------------------------------
 -- 6. TABLE: system_settings (Global Academic Configuration)
@@ -164,12 +164,13 @@ DROP TABLE IF EXISTS `sections`;
 CREATE TABLE `sections` (
   `section_id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
   `managed_by_secretary_id` bigint(20) UNSIGNED DEFAULT NULL,
+  `department_code` varchar(16) NOT NULL DEFAULT 'CIT',
   `section_name` varchar(60) NOT NULL,
   `year_level` varchar(20) NOT NULL,
   `created_at` timestamp NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`section_id`),
-  UNIQUE KEY `uk_sections_section_name` (`section_name`),
+  UNIQUE KEY `uk_sections_dept_name` (`department_code`, `section_name`),
   KEY `idx_sections_secretary_id` (`managed_by_secretary_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -234,13 +235,13 @@ CREATE TABLE `subjects` (
   `subject_code` varchar(30) NOT NULL,
   `subject_name` varchar(100) NOT NULL,
   `year_level` varchar(30) NOT NULL DEFAULT '1st Year',
-  `department_code` varchar(60) NOT NULL DEFAULT 'BSIT',
+  `department_code` varchar(60) NOT NULL DEFAULT 'CIT',
   `subject_description` text DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`subject_id`),
-  UNIQUE KEY `uk_subjects_code` (`subject_code`),
-  UNIQUE KEY `uk_subjects_name` (`subject_name`),
+  UNIQUE KEY `uk_subjects_dept_code` (`department_code`, `subject_code`),
+  UNIQUE KEY `uk_subjects_dept_name` (`department_code`, `subject_name`),
   KEY `idx_subjects_assigned_teacher_id` (`assigned_teacher_id`),
   KEY `idx_subjects_default_section_id` (`default_section_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

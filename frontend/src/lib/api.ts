@@ -5,58 +5,47 @@
  */
 
 import type { User } from './types'
+import {
+  API_BASE,
+  LmsApiError,
+  clearStoredSession,
+  getLmsToken as getTokenFromStore,
+  getLmsUser as getRawLmsUser,
+  lmsFetch as sharedLmsFetch,
+  signOut as sharedSignOut,
+} from '../lmsApi'
 
-export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? 'http://localhost:8000/api' : '/api')
-
-/* ── Token / User helpers ────────────────────────────────────────── */
+export { API_BASE }
 
 export function getLmsToken(): string | null {
-  return localStorage.getItem('lms-token') ?? sessionStorage.getItem('lms-token')
+  return getTokenFromStore()
 }
 
 export function getLmsUser(): User | null {
-  const raw = localStorage.getItem('lms-user') ?? sessionStorage.getItem('lms-user')
-  if (!raw) return null
-  try { return JSON.parse(raw) as User } catch { return null }
+  return getRawLmsUser() as User | null
 }
 
 export function setSession(token: string, user: User, remember = false): void {
   const storage = remember ? localStorage : sessionStorage
-  // Clear both first
-  localStorage.removeItem('lms-token'); localStorage.removeItem('lms-user')
-  sessionStorage.removeItem('lms-token'); sessionStorage.removeItem('lms-user')
+  clearStoredSession()
   storage.setItem('lms-token', token)
   storage.setItem('lms-user', JSON.stringify(user))
 }
 
-/* ── Fetch wrapper ───────────────────────────────────────────────── */
-
 export async function lmsFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const headers = new Headers(init.headers)
-  headers.set('Accept', 'application/json')
-  if (init.body) headers.set('Content-Type', 'application/json')
-  const token = getLmsToken()
-  if (token) headers.set('Authorization', `Bearer ${token}`)
-
-  const response = await fetch(`${API_BASE}${path}`, { ...init, headers })
-  const payload = await response.json().catch(() => ({})) as { message?: string; errors?: Record<string, string[]> }
-
-  if (!response.ok) {
-    if (response.status === 401) signOut()
-    const validation = payload.errors ? Object.values(payload.errors).flat()[0] : undefined
-    throw new Error(validation ?? payload.message ?? `Request failed (${response.status}).`)
+  try {
+    return await sharedLmsFetch<T>(path, init)
+  } catch (err) {
+    if (err instanceof LmsApiError && err.status === 401) {
+      // Clear local credentials immediately without re-invoking /logout in a 401 loop.
+      clearStoredSession()
+    }
+    throw err
   }
-  return payload as T
 }
 
-/* ── Sign out ────────────────────────────────────────────────────── */
-
 export function signOut(): void {
-  try { void lmsFetch('/logout', { method: 'POST' }) } catch { /* local session cleared anyway */ }
-  localStorage.removeItem('lms-token')
-  localStorage.removeItem('lms-user')
-  sessionStorage.removeItem('lms-token')
-  sessionStorage.removeItem('lms-user')
+  void sharedSignOut()
 }
 
 /* ── Helpers ─────────────────────────────────────────────────────── */

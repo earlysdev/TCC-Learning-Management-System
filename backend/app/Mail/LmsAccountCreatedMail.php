@@ -3,6 +3,7 @@
 namespace App\Mail;
 
 use App\Models\User;
+use App\Services\LmsMailService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Address;
@@ -25,8 +26,7 @@ class LmsAccountCreatedMail extends Mailable
         ?User $issuer = null,
         ?string $portalUrl = null
     ) {
-        $baseUrl = rtrim((string) ($portalUrl ?: config('app.url', 'https://learning-lms.online')), '/');
-        $this->portalUrl = str_ends_with($baseUrl, '/login') ? $baseUrl : $baseUrl . '/login';
+        $this->portalUrl = LmsMailService::resolvePortalUrl($portalUrl);
         $this->issuedAt = now()->format('M d, Y h:i A');
         $this->issuerName = $issuer?->name ?: 'Office of the College Secretary';
         $rawIssuerRole = strtolower((string) ($issuer?->role ?? 'secretary'));
@@ -47,29 +47,12 @@ class LmsAccountCreatedMail extends Mailable
 
     public function roleLabel(): string
     {
-        return match (strtolower((string) $this->user->role)) {
-            'student' => 'Student Learner',
-            'teacher' => 'Faculty Teacher',
-            'secretary' => 'College Secretary',
-            'dean', 'principal' => 'College Dean',
-            default => ucfirst((string) $this->user->role),
-        };
+        return LmsMailService::roleLabel($this->user->role);
     }
 
     public function departmentLabel(): string
     {
-        $code = strtoupper(trim((string) ($this->user->department ?: config('lms.default_department', 'CIT'))));
-        $departments = [
-            'CIT' => 'CIT — College of Information Technology',
-            'CBA' => 'CBA — College of Business Administration',
-            'CTED' => 'CTED — College of Teacher Education',
-            'CCJ' => 'CCJ — College of Criminal Justice',
-            'CHM' => 'CHM — College of Hospitality Management',
-            'CAS' => 'CAS — College of Arts and Sciences',
-            'CEN' => 'CEN — College of Engineering',
-        ];
-
-        return $departments[$code] ?? "{$code} Department";
+        return LmsMailService::departmentLabel($this->user->department);
     }
 
     public function envelope(): Envelope
@@ -90,12 +73,19 @@ class LmsAccountCreatedMail extends Mailable
         );
     }
 
-    public function toReceiptPayload(bool $emailSent, ?string $mailError = null): array
-    {
+    public function toReceiptPayload(
+        bool $emailSent,
+        ?string $mailError = null,
+        ?string $mailStatus = null,
+        bool $simulated = false
+    ): array {
         $schoolYear = (string) ($this->user->school_year ?: config('lms.school_year', '2026-2027'));
+        $resolvedStatus = $mailStatus ?: ($emailSent ? 'sent' : ($simulated ? 'simulated' : 'failed'));
 
         return [
             'sent' => $emailSent,
+            'simulated' => $simulated,
+            'mail_status' => $resolvedStatus,
             'recipient' => $this->user->email,
             'subject' => $this->subjectLine(),
             'account_name' => $this->user->name,
@@ -112,7 +102,7 @@ class LmsAccountCreatedMail extends Mailable
             'issued_by' => $this->issuerName,
             'issued_by_role' => $this->issuerRoleLabel,
             'issued_at' => $this->issuedAt,
-            'mail_Warning' => $mailError,
+            'mail_warning' => $mailError,
         ];
     }
 

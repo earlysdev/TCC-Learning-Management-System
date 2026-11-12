@@ -125,5 +125,110 @@ class DepartmentIsolationTest extends TestCase
         $this->actingAs($cedDean)
             ->patchJson("/api/security-logs/{$citAlert->id}/resolve")
             ->assertForbidden();
+
+        // Unattributed security log must fail closed for department-scoped Deans
+        $unattributedLog = SecurityLog::create([
+            'event_type' => 'login_failed',
+            'ip_address' => '10.0.0.99',
+            'is_resolved' => false,
+        ]);
+
+        $this->actingAs($citDean)
+            ->patchJson("/api/security-logs/{$unattributedLog->id}/resolve")
+            ->assertForbidden();
+    }
+
+    public function test_announcements_settings_and_teacher_dashboard_are_department_isolated(): void
+    {
+        $developer = User::factory()->create([
+            'email' => 'dev.iso@tcc.edu.ph',
+            'role' => 'developer',
+            'department' => 'CIT',
+        ]);
+
+        $citDean = User::factory()->create([
+            'email' => 'cit.dean.iso@tcc.edu.ph',
+            'role' => 'dean',
+            'department' => 'CIT',
+        ]);
+
+        $cedDean = User::factory()->create([
+            'email' => 'ced.dean.iso@tcc.edu.ph',
+            'role' => 'dean',
+            'department' => 'CED',
+        ]);
+
+        $citTeacher = User::factory()->create([
+            'email' => 'cit.teacher.iso@tcc.edu.ph',
+            'role' => 'teacher',
+            'department' => 'CIT',
+        ]);
+
+        \App\Models\Quiz::create([
+            'teacher_id' => $citTeacher->id,
+            'department' => 'CIT',
+            'title' => 'CIT Quiz 1',
+            'subject' => 'IT 101',
+            'topic' => 'Basics',
+            'questions' => [],
+            'is_published' => true,
+        ]);
+
+        // Quiz::visibleTo works for Deans and Developers without crashing
+        $this->actingAs($citDean)->getJson('/api/teacher/dashboard')
+            ->assertOk()
+            ->assertJsonCount(1, 'quizzes');
+
+        $this->actingAs($cedDean)->getJson('/api/teacher/dashboard')
+            ->assertOk()
+            ->assertJsonCount(0, 'quizzes');
+
+        $this->actingAs($developer)->getJson('/api/teacher/dashboard')
+            ->assertOk()
+            ->assertJsonCount(1, 'quizzes');
+
+        // Announcements stay strictly inside the author's department
+        $created = $this->actingAs($citDean)->postJson('/api/announcements', [
+            'title' => 'CIT General Assembly',
+            'content' => 'Room 201 tomorrow',
+        ])->assertCreated();
+
+        $announcementId = $created->json('data.id');
+        $this->assertNotEmpty($this->actingAs($citDean)->getJson('/api/announcements')->assertOk()->json('data.data'));
+        $this->assertEmpty($this->actingAs($cedDean)->getJson('/api/announcements')->assertOk()->json('data.data'));
+
+        $this->actingAs($cedDean)->deleteJson("/api/announcements/{$announcementId}")->assertForbidden();
+    }
+
+    public function test_department_staff_cannot_modify_or_deactivate_developer_accounts(): void
+    {
+        $developer = User::factory()->create([
+            'email' => 'dev.protected@tcc.edu.ph',
+            'role' => 'developer',
+            'department' => 'CIT',
+        ]);
+
+        $citDean = User::factory()->create([
+            'email' => 'dean.cit.guard@tcc.edu.ph',
+            'role' => 'dean',
+            'department' => 'CIT',
+        ]);
+
+        $citSecretary = User::factory()->create([
+            'email' => 'sec.cit.guard@tcc.edu.ph',
+            'role' => 'secretary',
+            'department' => 'CIT',
+        ]);
+
+        foreach ([$citDean, $citSecretary] as $actor) {
+            $this->actingAs($actor)->putJson("/api/users/{$developer->id}", [
+                'name' => 'Hijacked Dev',
+                'password' => 'PwnedPass!2026',
+            ])->assertForbidden();
+
+            $this->actingAs($actor)->patchJson("/api/users/{$developer->id}/status", [
+                'status' => 'inactive',
+            ])->assertForbidden();
+        }
     }
 }

@@ -5,13 +5,11 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Quiz;
 use App\Models\QuizAttempt;
-use App\Models\Section;
 use App\Models\SecurityLog;
 use App\Models\User;
 use App\Services\LmsAiService;
 use Carbon\Carbon;
 use Illuminate\Database\QueryException;
-use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -202,6 +200,7 @@ class QuizController extends Controller
 
         $createAttributes = [
             'teacher_id' => $request->user()->id,
+            'department' => $this->resolveTargetDepartment($request),
             'title' => $cleanTitle,
             'subject' => trim($input['subject']),
             'topic' => $cleanTopic,
@@ -323,7 +322,10 @@ class QuizController extends Controller
                 'user_agent' => $request->userAgent(),
             ]);
 
-            $students = User::where('role', 'student')->get();
+            $quizDept = $quiz->department ?: config('lms.default_department', 'CIT');
+            $students = User::where('role', 'student')
+                ->where('department', $quizDept)
+                ->get();
             foreach ($students as $student) {
                 if ($this->isStudentEligible($student, $quiz)) {
                     $sameTitleAndTopic = strtolower(trim((string) $quiz->title)) === strtolower(trim((string) $quiz->topic));
@@ -406,6 +408,7 @@ class QuizController extends Controller
         
         $quizzes = Quiz::query()
             ->where('is_published', true)
+            ->visibleTo($student)
             ->with(['attempts' => fn ($query) => $query->where('student_id', $student->id)])
             ->latest()
             ->get();
@@ -570,6 +573,7 @@ class QuizController extends Controller
     {
         $this->requireRole($request, 'student');
         $student = $request->user();
+        $this->ensureStudentQuizAccess($student, $quiz);
         $this->ensurePdfColumns();
 
         $input = $request->validate([
@@ -679,8 +683,14 @@ class QuizController extends Controller
         abort_unless($user !== null, 401, 'Unauthenticated.');
 
         if ($user->role === 'student') {
-            abort_unless($quiz->is_published, 404, 'Quiz not found or not published.');
-            abort_unless($this->isStudentEligible($user, $quiz), 403, 'This quiz is not assigned to your section or account.');
+            $this->ensureStudentQuizAccess($user, $quiz);
+        } else {
+            abort_unless(
+                in_array($user->role, ['teacher', 'dean', 'principal', 'secretary', 'developer'], true),
+                403,
+                'Your account does not have access to this quiz reference.'
+            );
+            $this->ensureSameDepartment($request, $quiz->department);
         }
 
         $this->repairQuizQuestionsIfNeeded($quiz);
@@ -708,20 +718,25 @@ class QuizController extends Controller
     {
         $this->requireRole($request, 'student');
         $student = $request->user();
+        $this->ensureStudentQuizAccess($student, $quiz);
 
         $input = $request->validate([
             'violation_type' => ['required', 'string', 'max:50'],
             'details' => ['nullable', 'string', 'max:255'],
         ]);
 
+        $studentDept = $student->departmentCode();
+
         SecurityLog::create([
             'user_id' => $student->id,
+            'department' => $studentDept,
             'event_type' => 'exam_proctor_violation',
             'ip_address' => $request->ip(),
             'user_agent' => $request->userAgent(),
             'details' => [
                 'quiz_id' => $quiz->id,
                 'quiz_title' => $quiz->title,
+                'department' => $studentDept,
                 'violation_type' => $input['violation_type'],
                 'details' => $input['details'] ?? '',
                 'timestamp' => Carbon::now()->toIso8601String(),
@@ -838,18 +853,21 @@ class QuizController extends Controller
 
         // If cheating was detected, also generate a high-priority SecurityLog
         if ($cheatingCount > 0) {
+            $studentDept = $student->departmentCode();
             SecurityLog::create([
                 'user_id' => $student->id,
+                'department' => $studentDept,
                 'event_type' => 'quiz_integrity_violation',
                 'ip_address' => $request->ip(),
                 'user_agent' => $request->userAgent(),
                 'details' => [
                     'quiz_id' => $quiz->id,
                     'quiz_title' => $quiz->title,
+                    'department' => $studentDept,
                     'cheating_attempts_count' => $cheatingCount,
                     'violations_sample' => array_slice($violations, 0, 5),
                     'score' => $score,
-                    'max_score' => count($questions),
+                    'max_score' => $maxScore,
                 ],
             ]);
         }
@@ -1264,10 +1282,10 @@ class QuizController extends Controller
         }
     }
 
-    public function sections(): JsonResponse
+    private function ensureStudentQuizAccess(User $student, Quiz $quiz): void
     {
-        $sections = Section::query()->orderBy('grade')->orderBy('name')->get();
-        return response()->json(['sections' => $sections]);
+        abort_unless($quiz->is_published, 404, 'Quiz not found or not published.');
+        abort_unless($this->isStudentEligible($student, $quiz), 403, 'This quiz is not assigned to your section or account.');
     }
 
     private function isStudentEligible(User $student, Quiz $quiz): bool
@@ -1436,49 +1454,16 @@ class QuizController extends Controller
 
     private function ensurePdfColumns(): bool
     {
+        static $hasRequiredSchema = null;
+        if ($hasRequiredSchema !== null) {
+            return $hasRequiredSchema;
+        }
+
         try {
-            if (! Schema::hasColumn('quizzes', 'reference_pdf_name')) {
-                Schema::table('quizzes', function (Blueprint $table): void {
-                    $table->string('reference_pdf_name')->nullable();
-                    $table->longText('reference_pdf_text')->nullable();
-                    $table->longText('reference_pdf_data')->nullable();
-                });
-            } elseif (! Schema::hasColumn('quizzes', 'reference_pdf_data')) {
-                Schema::table('quizzes', function (Blueprint $table): void {
-                    $table->longText('reference_pdf_data')->nullable();
-                });
-            }
-            if (! Schema::hasColumn('quizzes', 'quiz_type')) {
-                Schema::table('quizzes', function (Blueprint $table): void {
-                    $table->string('quiz_type')->default('formative');
-                });
-            }
-            if (! Schema::hasTable('quiz_live_sessions')) {
-                Schema::create('quiz_live_sessions', function (Blueprint $table): void {
-                    $table->id();
-                    $table->foreignId('quiz_id')->constrained('quizzes')->cascadeOnDelete();
-                    $table->foreignId('student_id')->constrained('users')->cascadeOnDelete();
-                    $table->string('status')->default('in_progress');
-                    $table->unsignedInteger('current_question')->default(1);
-                    $table->unsignedInteger('answered_count')->default(0);
-                    $table->unsignedInteger('total_questions')->default(0);
-                    $table->unsignedInteger('current_score')->default(0);
-                    $table->unsignedInteger('max_score')->default(0);
-                    $table->json('answers')->nullable();
-                    $table->unsignedInteger('cheating_attempts_count')->default(0);
-                    $table->integer('time_remaining_seconds')->nullable();
-                    $table->timestamp('started_at')->nullable();
-                    $table->timestamp('last_active_at')->nullable();
-                    $table->timestamp('completed_at')->nullable();
-                    $table->timestamps();
-                    $table->unique(['quiz_id', 'student_id']);
-                });
-            } elseif (! Schema::hasColumn('quiz_live_sessions', 'answers')) {
-                Schema::table('quiz_live_sessions', function (Blueprint $table): void {
-                    $table->json('answers')->nullable()->after('total_questions');
-                });
-            }
-            return Schema::hasColumn('quizzes', 'reference_pdf_name');
+            $hasRequiredSchema = Schema::hasTable('quiz_live_sessions')
+                && Schema::hasColumn('quizzes', 'reference_pdf_name');
+
+            return $hasRequiredSchema;
         } catch (\Throwable) {
             return false;
         }

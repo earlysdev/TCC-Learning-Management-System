@@ -68,7 +68,7 @@ function ProtectedRole({ expected, children }: { expected?: string; children: Re
       .then(({ user }) => {
         if (!mounted) return;
         const userRole = user.role === 'principal' ? 'dean' : user.role;
-        const matches = !expected || expected === userRole;
+        const matches = !expected || expected === userRole || (expected === 'dean' && userRole === 'developer');
 
         if (!matches) {
           const targetPath = `/${userRole}`;

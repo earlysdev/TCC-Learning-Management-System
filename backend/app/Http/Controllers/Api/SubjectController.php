@@ -98,22 +98,24 @@ class SubjectController extends Controller
 
     private function ensureOfficialCurriculumSynced(): void
     {
-        // Always exclude 4th Year Practicum (Prac 101) and legacy non-prospectus duplicates
-        Subject::where('code', 'LIKE', 'Prac%')
-            ->orWhere('name', 'LIKE', '%Practicum%')
-            ->orWhereIn('code', ['NSTP 1', 'Math 1', 'Math 2', 'Math 3'])
-            ->delete();
-
-        // If 4th Year subjects are not yet present in DB, sync the full 58-course curriculum
-        $hasFourthYear = Subject::where('grade', '4th Year')->exists();
-        if ($hasFourthYear && Subject::count() === 58) {
+        // Only sync official BSIT curriculum once per empty CIT catalog, isolated strictly to CIT.
+        $hasFourthYear = Subject::where('department', 'CIT')->where('grade', '4th Year')->exists();
+        if ($hasFourthYear) {
             return;
         }
+
+        Subject::where('department', 'CIT')
+            ->where(function ($query): void {
+                $query->where('code', 'LIKE', 'Prac%')
+                    ->orWhere('name', 'LIKE', '%Practicum%')
+                    ->orWhereIn('code', ['NSTP 1', 'Math 1', 'Math 2', 'Math 3']);
+            })
+            ->delete();
 
         foreach (self::officialBsitSubjects() as $subj) {
             $desc = "{$subj['semester']} • {$subj['units']} Units ({$subj['lec']} Lec / {$subj['lab']} Lab) • Preq: {$subj['prerequisite']}";
             Subject::updateOrCreate(
-                ['code' => $subj['code']],
+                ['code' => $subj['code'], 'department' => 'CIT'],
                 [
                     'name' => $subj['name'],
                     'code' => $subj['code'],
@@ -127,13 +129,17 @@ class SubjectController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $this->ensureOfficialCurriculumSynced();
+        $department = $this->scopedDepartment($request);
+        if ($department === null || $department === 'CIT') {
+            $this->ensureOfficialCurriculumSynced();
+        }
 
         $query = Subject::query();
+        $quizQuery = Quiz::query();
 
-        $department = $this->scopedDepartment($request);
         if ($department !== null) {
             $query->where('department', $department);
+            $quizQuery->where('department', $department);
         }
 
         if ($request->filled('grade') && $request->grade !== 'all' && $request->grade !== 'All Grades') {
@@ -146,20 +152,24 @@ class SubjectController extends Controller
 
         $subjects = $query->orderBy('id')->get();
 
-        // Enforce quiz usage count
-        $quizCounts = Quiz::selectRaw('subject, count(*) as count')
-            ->groupBy('subject')
-            ->pluck('count', 'subject');
+        // Enforce department-scoped quiz usage count
+        $quizCounts = $quizQuery->selectRaw('department, subject, count(*) as count')
+            ->groupBy('department', 'subject')
+            ->get()
+            ->groupBy('department')
+            ->map(fn ($group) => $group->pluck('count', 'subject'));
 
         $enriched = $subjects->map(function (Subject $subject) use ($quizCounts) {
+            $dept = $subject->department ?: config('lms.default_department', 'CIT');
+            $deptCounts = $quizCounts->get($dept, collect());
             $fullLabel = $subject->code ? "{$subject->code} - {$subject->name}" : $subject->name;
-            $count = (int) ($quizCounts->get($subject->name, 0) + $quizCounts->get($fullLabel, 0));
+            $count = (int) ($deptCounts->get($subject->name, 0) + $deptCounts->get($fullLabel, 0));
             return [
                 'id' => $subject->id,
                 'name' => $subject->name,
                 'code' => $subject->code ?: strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $subject->name), 0, 4)),
                 'grade' => $subject->grade ?: '1st Year',
-                'department' => $subject->department ?: 'CIT',
+                'department' => $dept,
                 'description' => $subject->description,
                 'quizzes_count' => $count,
                 'created_at' => $subject->created_at,
@@ -175,11 +185,13 @@ class SubjectController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        $departmentKeys = array_keys(config('lms.departments', ['CIT' => 'CIT']));
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'code' => ['nullable', 'string', 'max:30'],
             'grade' => ['nullable', 'string', 'max:40'],
-            'department' => ['nullable', 'string', 'max:60'],
+            'department' => ['nullable', 'string', \Illuminate\Validation\Rule::in($departmentKeys)],
             'description' => ['nullable', 'string', 'max:255'],
         ]);
 
@@ -243,9 +255,12 @@ class SubjectController extends Controller
     {
         $this->ensureSameDepartment($request, $subject->department);
 
+        $subjectDept = $subject->department ?: config('lms.default_department', 'CIT');
         $fullLabel = $subject->code ? "{$subject->code} - {$subject->name}" : $subject->name;
-        $quizCount = Quiz::where('subject', $subject->name)
-            ->orWhere('subject', $fullLabel)
+        $quizCount = Quiz::where('department', $subjectDept)
+            ->where(function ($q) use ($subject, $fullLabel): void {
+                $q->where('subject', $subject->name)->orWhere('subject', $fullLabel);
+            })
             ->count();
 
         if ($quizCount > 0) {

@@ -10,15 +10,23 @@ class SystemSetting extends Model
     use HasFactory;
 
     protected $fillable = [
+        'department',
         'key',
         'value',
         'type',
         'description'
     ];
 
-    public static function get(string $key, $default = null)
+    public static function get(string $key, $default = null, ?string $department = null)
     {
-        $setting = self::where('key', $key)->first();
+        $setting = null;
+        if ($department !== null) {
+            $setting = self::where('department', strtoupper(trim($department)))
+                ->where('key', $key)
+                ->first();
+        }
+        $setting ??= self::whereNull('department')->where('key', $key)->first();
+
         if (!$setting) {
             return $default;
         }
@@ -30,7 +38,7 @@ class SystemSetting extends Model
         };
     }
 
-    public static function set(string $key, $value, string $type = 'string', string $description = null)
+    public static function set(string $key, $value, string $type = 'string', ?string $description = null, ?string $department = null)
     {
         $stringValue = match ($type) {
             'boolean' => $value ? '1' : '0',
@@ -38,8 +46,10 @@ class SystemSetting extends Model
             default => (string) $value,
         };
 
+        $normalizedDept = $department !== null ? strtoupper(trim($department)) : null;
+
         return self::updateOrCreate(
-            ['key' => $key],
+            ['department' => $normalizedDept, 'key' => $key],
             [
                 'value' => $stringValue,
                 'type' => $type,

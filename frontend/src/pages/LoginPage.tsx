@@ -103,7 +103,7 @@ export default function LoginPage() {
         setOtpChallenge(data.challenge);
         setOtpEmailHint(data.email_hint);
         setOtpDeviceName(data.device_name || 'Unrecognized Web Client');
-        setResendCooldown(45);
+        setResendCooldown(60);
         if (data.debug_code) {
           setOtpDebugCode(data.debug_code);
           setOtpCode(data.debug_code);
@@ -189,8 +189,9 @@ export default function LoginPage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Could not resend OTP code.');
       setResendCooldown(60);
-      setNotice(data.message || 'A new verification code has been dispatched.');
-      showToast('Verification code resent to your email.', 'success');
+      const resendMsg = data.message || 'A new verification code has been dispatched.';
+      setNotice(resendMsg);
+      showToast(resendMsg, data.mail_status && data.mail_status !== 'sent' ? 'warning' : 'success');
       if (data.debug_code) {
         setOtpDebugCode(data.debug_code);
         setOtpCode(data.debug_code);
@@ -244,7 +245,7 @@ export default function LoginPage() {
 
       const msg = data.message || `Reset code dispatched to ${data.email_hint || 'your registered email'}`;
       setNotice(msg);
-      showToast(msg, 'success');
+      showToast(msg, data.mail_status && data.mail_status !== 'sent' ? 'warning' : 'success');
 
       if (data.debug_code) {
         setResetDebugCode(data.debug_code);
@@ -294,13 +295,23 @@ export default function LoginPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Failed to reset password.');
 
-      // Return to sign in
+      // Return to sign in and clear sensitive reset state
       setIsResetStep(false);
       setResetStage('request');
+      setResetChallenge(null);
+      setResetCode('');
+      setResetDebugCode(null);
+      setNewPassword('');
+      setConfirmPassword('');
+      setShowNewPassword(false);
       setIdentifier(resetIdentifier);
       setPassword('');
-      setNotice('Password updated successfully! You may now sign in using your new credentials.');
-      showToast('Password reset complete. Please sign in.', 'success');
+      const dispatch = data.email_dispatch as { sent?: boolean; mail_warning?: string } | undefined;
+      const doneMsg = dispatch?.sent === false
+        ? `Password updated! Note: ${dispatch.mail_warning || 'Confirmation email could not be delivered externally.'}`
+        : 'Password updated and confirmation emailed! You may now sign in using your new credentials.';
+      setNotice(doneMsg);
+      showToast(doneMsg, dispatch?.sent === false ? 'warning' : 'success');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Could not reset password.';
       setError(msg);

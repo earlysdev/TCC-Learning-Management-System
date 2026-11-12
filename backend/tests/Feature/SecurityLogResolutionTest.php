@@ -21,10 +21,10 @@ class SecurityLogResolutionTest extends TestCase
         ]);
 
         $originalAuditor = User::factory()->create([
-            'name' => 'Original Principal',
-            'email' => 'principal.orig@tcc.edu.ph',
-            'role' => 'principal',
-            'department' => 'CIT',
+            'name' => 'Original Auditor',
+            'email' => 'developer.orig@tcc.edu.ph',
+            'role' => 'developer',
+            'department' => null,
         ]);
 
         $student = User::factory()->create([
@@ -101,12 +101,13 @@ class SecurityLogResolutionTest extends TestCase
 
         $secondDean = User::factory()->create([
             'name' => 'Second Auditor',
-            'email' => 'second.dean@tcc.edu.ph',
-            'role' => 'principal',
-            'department' => 'CIT',
+            'email' => 'second.auditor@tcc.edu.ph',
+            'role' => 'developer',
+            'department' => null,
         ]);
 
         $log = SecurityLog::create([
+            'department' => 'CIT',
             'event_type' => 'login_failed',
             'ip_address' => '10.0.0.5',
             'is_resolved' => false,

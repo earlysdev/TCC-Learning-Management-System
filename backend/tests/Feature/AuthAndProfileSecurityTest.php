@@ -2,8 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Mail\LmsAccountCreatedMail;
+use App\Mail\LmsPasswordUpdatedMail;
+use App\Mail\LmsVerificationMail;
 use App\Models\User;
 use App\Models\VerificationCode;
+use App\Services\LmsMailService;
 use App\Services\LmsOtpService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -65,6 +69,9 @@ class AuthAndProfileSecurityTest extends TestCase
         $otherToken = $user->createToken('other-session')->plainTextToken;
         $this->assertNotEmpty($otherToken);
         $currentToken = $user->createToken('current-session');
+
+        // Clear any prior actingAs() session guard state so Sanctum authenticates the Bearer token.
+        $this->app['auth']->forgetGuards();
 
         $this->withHeader('Authorization', 'Bearer ' . $currentToken->plainTextToken)
             ->putJson('/api/profile', [
@@ -128,5 +135,130 @@ class AuthAndProfileSecurityTest extends TestCase
             'identifier' => $dean->email,
             'password' => 'TccPortal!2026',
         ])->assertStatus(422);
+    }
+
+    public function test_account_creation_and_password_update_dispatch_credentials_mail(): void
+    {
+        Mail::fake();
+
+        $dean = User::factory()->create([
+            'email' => 'dean.mail@tcc.edu.ph',
+            'role' => 'dean',
+            'department' => 'CIT',
+        ]);
+
+        $response = $this->actingAs($dean)->postJson('/api/users', [
+            'name' => 'Maria Clara',
+            'email' => 'maria.clara@tcc.edu.ph',
+            'password' => 'SecretPass!2026',
+            'role' => 'teacher',
+        ]);
+
+        $response->assertStatus(201)
+            ->assertJsonPath('email_dispatch.sent', true)
+            ->assertJsonPath('email_dispatch.mail_status', 'sent');
+
+        Mail::assertSent(LmsAccountCreatedMail::class, function (LmsAccountCreatedMail $mail): bool {
+            return $mail->hasTo('maria.clara@tcc.edu.ph')
+                && ! str_contains($mail->portalUrl, 'learning-lms.online');
+        });
+
+        $createdId = $response->json('data.id');
+        $updateResponse = $this->actingAs($dean)->putJson("/api/users/{$createdId}", [
+            'name' => 'Maria Clara Santos',
+            'password' => 'UpdatedPass!2026',
+        ]);
+
+        $updateResponse->assertOk()
+            ->assertJsonPath('email_dispatch.sent', true)
+            ->assertJsonPath('email_dispatch.mail_status', 'sent');
+
+        Mail::assertSent(LmsAccountCreatedMail::class, 2);
+    }
+
+    public function test_password_reset_and_profile_password_change_dispatch_confirmation_mail(): void
+    {
+        Mail::fake();
+
+        $student = User::factory()->create([
+            'email' => 'reset.student@tcc.edu.ph',
+            'password' => 'OldPassword!123',
+            'role' => 'student',
+            'department' => 'CIT',
+            'lrn' => '2026-000999',
+        ]);
+
+        $otp = app(LmsOtpService::class)->issue($student, VerificationCode::PURPOSE_PASSWORD_RESET);
+        Mail::assertSent(LmsVerificationMail::class);
+
+        $latest = VerificationCode::where('challenge', $otp['challenge'])->firstOrFail();
+        $latest->update(['code_hash' => Hash::make('654321')]);
+
+        $this->postJson('/api/reset-password', [
+            'challenge' => $otp['challenge'],
+            'code' => '654321',
+            'password' => 'NewPassword!456',
+            'password_confirmation' => 'NewPassword!456',
+        ])->assertOk()
+            ->assertJsonPath('email_dispatch.sent', true)
+            ->assertJsonPath('email_dispatch.mail_status', 'sent');
+
+        Mail::assertSent(LmsPasswordUpdatedMail::class, function (LmsPasswordUpdatedMail $mail): bool {
+            return $mail->hasTo('reset.student@tcc.edu.ph') && $mail->changeSource === 'password_reset';
+        });
+    }
+
+    public function test_mail_service_detects_simulated_and_unconfigured_smtp_transports(): void
+    {
+        config()->set('mail.default', 'log');
+        $logStatus = LmsMailService::inspectTransport();
+        $this->assertFalse($logStatus['ready']);
+        $this->assertTrue($logStatus['simulated']);
+
+        config()->set('mail.default', 'smtp');
+        config()->set('mail.mailers.smtp.host', 'smtp.gmail.com');
+        config()->set('mail.mailers.smtp.username', '');
+        config()->set('mail.mailers.smtp.password', '');
+        $smtpStatus = LmsMailService::inspectTransport();
+        $this->assertFalse($smtpStatus['ready']);
+        $this->assertFalse($smtpStatus['simulated']);
+    }
+
+    public function test_untrusted_origin_header_cannot_hijack_email_portal_url(): void
+    {
+        config()->set('app.frontend_url', 'https://learning-ms.online');
+        config()->set('cors.allowed_origins', ['https://learning-ms.online', 'http://localhost:5173']);
+
+        $this->assertSame(
+            'https://learning-ms.online/login',
+            LmsMailService::resolvePortalUrl('https://evil.example')
+        );
+        $this->assertSame(
+            'http://localhost:5173/login',
+            LmsMailService::resolvePortalUrl('http://localhost:5173/dashboard')
+        );
+    }
+
+    public function test_verify_login_otp_rejects_inactive_accounts(): void
+    {
+        Mail::fake();
+
+        $student = User::factory()->create([
+            'email' => 'inactive.otp@tcc.edu.ph',
+            'role' => 'student',
+            'department' => 'CIT',
+            'status' => 'active',
+        ]);
+
+        $otp = app(LmsOtpService::class)->issue($student, VerificationCode::PURPOSE_LOGIN_DEVICE);
+        $latest = VerificationCode::where('challenge', $otp['challenge'])->firstOrFail();
+        $latest->update(['code_hash' => Hash::make('123456')]);
+
+        $student->update(['status' => 'inactive']);
+
+        $this->postJson('/api/verify-login-otp', [
+            'challenge' => $otp['challenge'],
+            'code' => '123456',
+        ])->assertStatus(403);
     }
 }

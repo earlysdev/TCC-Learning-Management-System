@@ -2,18 +2,20 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToDepartment;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class LmsNotification extends Model
 {
-    use HasFactory;
+    use BelongsToDepartment, HasFactory;
 
     protected $table = 'notifications';
 
     protected $fillable = [
         'user_id',
         'recipient_role',
+        'department',
         'type',
         'title',
         'message',

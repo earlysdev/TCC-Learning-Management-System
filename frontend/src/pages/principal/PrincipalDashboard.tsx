@@ -25,6 +25,7 @@ import ProfileUpdateCard from '../../components/ui/ProfileUpdateCard';
 import SecurityLogsPanel from '../../components/security/SecurityLogsPanel';
 import {
   AccountCredentialsEmailReceipt,
+  createFallbackAccountReceipt,
   type AccountEmailDispatchReceipt,
 } from '../../components/ui/AccountCredentialsEmailReceipt';
 import { useToastContext } from '../../contexts/ToastContext';
@@ -227,7 +228,12 @@ export default function PrincipalDashboard() {
   };
 
   const handleResolveSecurityLog = (logId: number) =>
-    runSecurityResolution<{ message?: string; data?: SecurityLog }>(
+    runSecurityResolution<{
+      message?: string;
+      data?: SecurityLog;
+      already_resolved?: boolean;
+      unresolved_remaining?: number;
+    }>(
       `/security-logs/${logId}/resolve`,
       'Security log marked as resolved.',
       'Could not resolve security log',
@@ -247,7 +253,11 @@ export default function PrincipalDashboard() {
         )));
         setMetrics(prev => ({
           ...prev,
-          security_alerts: Math.max(0, (Number(prev.security_alerts) || 1) - 1),
+          security_alerts: typeof res.unresolved_remaining === 'number'
+            ? res.unresolved_remaining
+            : res.already_resolved
+              ? prev.security_alerts
+              : Math.max(0, (Number(prev.security_alerts) || 1) - 1),
         }));
       }
     );
@@ -256,13 +266,14 @@ export default function PrincipalDashboard() {
     runSecurityResolution<{
       message?: string;
       resolved_count?: number;
+      unresolved_remaining?: number;
       resolved_at?: string;
       resolver?: { id: number; name: string } | null;
     }>(
       '/security-logs/resolve-all',
       'All unresolved security alerts have been successfully resolved.',
       'Could not resolve security logs',
-      (res) => {
+      async (res) => {
         const resolvedAt = res.resolved_at || new Date().toISOString();
         setSecurityLogs(prev => prev.map(l => (
           l.is_resolved
@@ -277,8 +288,12 @@ export default function PrincipalDashboard() {
         )));
         setMetrics(prev => ({
           ...prev,
-          security_alerts: 0,
+          security_alerts: typeof res.unresolved_remaining === 'number' ? res.unresolved_remaining : 0,
         }));
+        const refreshed = await lmsFetch<unknown>('/dean/security-logs').catch(() => null);
+        if (refreshed) {
+          setSecurityLogs(extractCollection<SecurityLog>(refreshed));
+        }
       }
     );
 
@@ -526,33 +541,33 @@ export default function PrincipalDashboard() {
       const finalSection = res?.data?.section || targetPlacement.block;
       const receiptDepartment = (res?.data?.department || departmentCode).toUpperCase();
       const roleLabel = newRole === 'secretary' ? 'College Secretary' : newRole === 'teacher' ? 'Faculty Teacher' : 'Student Learner';
-      const fallbackReceipt: AccountEmailDispatchReceipt = res?.email_dispatch || {
-        sent: true,
+      const fallbackReceipt = res?.email_dispatch || createFallbackAccountReceipt({
         recipient: newEmail.trim(),
-        subject: `TCC LMS — Official ${roleLabel} Account Credentials (S.Y. ${CURRENT_SCHOOL_YEAR})`,
-        account_name: fullName,
+        accountName: fullName,
         role: newRole,
-        role_label: roleLabel,
+        roleLabel,
         department: receiptDepartment,
-        department_label: `${receiptDepartment} — ${getDepartmentName(receiptDepartment)}`,
-        school_year: res?.data?.school_year || CURRENT_SCHOOL_YEAR,
+        departmentLabel: `${receiptDepartment} — ${getDepartmentName(receiptDepartment)}`,
+        schoolYear: res?.data?.school_year || CURRENT_SCHOOL_YEAR,
         lrn: newRole === 'student' ? newStudentId.trim() : null,
         grade: newRole === 'student' ? newYearLevel : null,
         section: newRole === 'student' ? finalSection : null,
-        plain_password: newPassword,
-        portal_url: `${window.location.origin}/login`,
-        issued_by: user?.name || 'Office of the College Dean',
-        issued_by_role: 'College Dean',
-        issued_at: new Date().toLocaleString(),
-      };
+        plainPassword: newPassword,
+        issuedBy: user?.name || 'Office of the College Dean',
+        issuedByRole: 'College Dean',
+      });
 
       setDispatchedAccountReceipt(fallbackReceipt);
 
-      const msg = newRole === 'student'
-        ? `Student ${fullName} enrolled into ${newYearLevel} • ${finalSection} and official credentials dispatched to ${newEmail.trim()}.`
-        : `${roleLabel} account for ${fullName} created and official credentials dispatched to ${newEmail.trim()}.`;
+      const emailDelivered = Boolean(fallbackReceipt.sent);
+      const baseMsg = newRole === 'student'
+        ? `Student ${fullName} enrolled into ${newYearLevel} • ${finalSection}`
+        : `${roleLabel} account for ${fullName} created`;
+      const msg = emailDelivered
+        ? `${baseMsg} and official credentials dispatched to ${newEmail.trim()}.`
+        : `${baseMsg}. ${fallbackReceipt.mail_warning || res?.message || 'Email was not sent to external inbox — share the slip below.'}`;
       setNotice(msg);
-      showToast(msg, 'success');
+      showToast(msg, emailDelivered ? 'success' : 'warning');
       resetCreateForm();
       await loadDeanData();
     } catch (err: unknown) {
@@ -612,6 +627,7 @@ export default function PrincipalDashboard() {
       await loadDeanData();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Could not update student placement.';
+      setError(msg);
       showToast(msg, 'error');
     } finally {
       setSavingPlacement(false);

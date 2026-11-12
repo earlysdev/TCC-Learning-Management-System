@@ -6,12 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Mail\LmsAccountCreatedMail;
 use App\Models\Section;
 use App\Models\User;
+use App\Services\LmsMailService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 
 class UserController extends Controller
@@ -56,7 +56,7 @@ class UserController extends Controller
         }
 
         if ($request->has('search')) {
-            $search = $request->search;
+            $search = addcslashes(trim((string) $request->search), '%_\\');
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
                   ->orWhere('first_name', 'like', "%{$search}%")
@@ -83,9 +83,7 @@ class UserController extends Controller
         $query = User::where('role', 'student')->where('section', $section);
 
         if ($department) {
-            $query->where(function ($q) use ($department) {
-                $q->where('department', $department)->orWhereNull('department');
-            });
+            $query->where('department', $department);
         }
 
         if ($excludeUserId) {
@@ -171,14 +169,13 @@ class UserController extends Controller
         }
 
         if (Schema::hasTable('sections')) {
+            $lookup = ['grade' => $grade, 'name' => $nextSection];
             $sectionAttributes = ['display_name' => $nextSection];
             if ($department && Schema::hasColumn('sections', 'department')) {
+                $lookup['department'] = $department;
                 $sectionAttributes['department'] = $department;
             }
-            Section::firstOrCreate(
-                ['grade' => $grade, 'name' => $nextSection],
-                $sectionAttributes
-            );
+            Section::firstOrCreate($lookup, $sectionAttributes);
         }
 
         return $nextSection;
@@ -209,9 +206,17 @@ class UserController extends Controller
         $this->ensureSameDepartment($request, $target->departmentCode());
 
         $actor = $request->user();
-        $isDeanOrDev = $actor !== null && ($actor->isDeanRole() || $actor->isInstitutionWide());
+        $isDev = $actor !== null && $actor->isInstitutionWide();
+        $isDeanOrDev = $actor !== null && ($actor->isDeanRole() || $isDev);
 
-        if ($target->isDeanRole() || ($target->role === 'secretary' && ! $isDeanOrDev)) {
+        if ($target->isInstitutionWide() && ! $isDev) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'You are not authorized to modify this account.',
+            ], 403);
+        }
+
+        if (($target->isDeanRole() && ! $isDev) || ($target->role === 'secretary' && ! $isDeanOrDev)) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'You are not authorized to modify this account.',
@@ -229,7 +234,7 @@ class UserController extends Controller
             'last_name' => 'nullable|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
             'password' => 'required|string|min:8',
-            'role' => 'required|in:student,teacher,secretary,principal,dean',
+            'role' => 'required|in:student,teacher,secretary,dean',
             'lrn' => 'nullable|string|unique:users',
             'grade' => 'nullable|string|max:40',
             'section' => 'nullable|string|max:80',
@@ -257,13 +262,7 @@ class UserController extends Controller
         }
 
         if ($validated['role'] === 'student') {
-            $targetGrade = !empty($validated['grade']) ? trim($validated['grade']) : '1st Year';
-            $validated['grade'] = $targetGrade;
-            $validated['section'] = $this->resolveAutoAssignedSection(
-                $targetGrade,
-                $validated['section'] ?? null,
-                $validated['department']
-            );
+            $validated['grade'] = !empty($validated['grade']) ? trim($validated['grade']) : '1st Year';
         } else {
             // Staff accounts are not enrolled into class sections
             $validated['grade'] = null;
@@ -273,21 +272,38 @@ class UserController extends Controller
 
         $plainPassword = (string) $validated['password'];
         $validated['password'] = Hash::make($validated['password']);
-        $validated['status'] = $validated['status'] ?? 'active';
+        $validated['status'] = 'active';
 
-        // Enforce single-Dean-per-department atomically
-        $user = DB::transaction(function () use ($validated): ?User {
-            if (in_array($validated['role'], ['dean', 'principal'], true)) {
-                $deanExists = User::where('department', $validated['department'])
-                    ->whereIn('role', ['dean', 'principal'])
-                    ->exists();
-                if ($deanExists) {
-                    return null;
+        // Enforce single-Dean-per-department and 50-student section cap atomically
+        try {
+            $user = DB::transaction(function () use ($validated): ?User {
+                if (in_array($validated['role'], ['dean', 'principal'], true)) {
+                    $deanExists = User::where('department', $validated['department'])
+                        ->whereIn('role', ['dean', 'principal'])
+                        ->lockForUpdate()
+                        ->exists();
+                    if ($deanExists) {
+                        return null;
+                    }
+                } elseif ($validated['role'] === 'student') {
+                    if (Schema::hasTable('sections')) {
+                        Section::where('grade', $validated['grade'])
+                            ->where('department', $validated['department'])
+                            ->lockForUpdate()
+                            ->get();
+                    }
+                    $validated['section'] = $this->resolveAutoAssignedSection(
+                        $validated['grade'],
+                        $validated['section'] ?? null,
+                        $validated['department']
+                    );
                 }
-            }
 
-            return User::create($validated);
-        });
+                return User::create($validated);
+            });
+        } catch (\Illuminate\Database\QueryException $e) {
+            $user = null;
+        }
 
         if ($user === null) {
             return response()->json([
@@ -296,32 +312,34 @@ class UserController extends Controller
             ], 422);
         }
 
-        $portalOrigin = $request->headers->get('origin') ?: config('app.url', 'https://learning-lms.online');
+        $portalOrigin = $request->headers->get('origin') ?: config('app.frontend_url', config('app.url'));
         $accountMail = new LmsAccountCreatedMail($user, $plainPassword, $request->user(), $portalOrigin);
-        $emailSent = true;
-        $mailWarning = null;
+        $dispatch = LmsMailService::dispatch($user->email, $accountMail, 'account creation credentials');
 
-        try {
-            Mail::to($user->email)->send($accountMail);
-        } catch (\Throwable $e) {
-            $emailSent = false;
-            $mailWarning = 'Account created, but live SMTP delivery encountered an issue.';
-            Log::warning("Failed to dispatch account credentials email to {$user->email}: " . $e->getMessage());
-        }
+        $message = match ($dispatch['status']) {
+            'sent' => "Account created and official credentials dispatched to {$user->email}.",
+            'simulated' => "Account created, but mail is in '{$dispatch['mailer']}' log mode (written to server log instead of {$user->email}).",
+            default => "Account created, but live SMTP email delivery to {$user->email} failed.",
+        };
 
         \App\Models\ActivityLog::create([
             'user_id' => $request->user()?->id,
             'action' => 'create_user',
-            'description' => "Created {$user->role} account for {$user->name}" . ($user->section ? " ({$user->grade} • {$user->section})" : '') . " and dispatched credentials to {$user->email}",
+            'description' => "Created {$user->role} account for {$user->name}" . ($user->section ? " ({$user->grade} • {$user->section})" : '') . " ({$dispatch['status']} mail to {$user->email})",
             'ip_address' => $request->ip(),
             'user_agent' => $request->userAgent(),
         ]);
 
         return response()->json([
             'status' => 'success',
-            'message' => "Account created and official credentials dispatched to {$user->email}.",
+            'message' => $message,
             'data' => $user,
-            'email_dispatch' => $accountMail->toReceiptPayload($emailSent, $mailWarning),
+            'email_dispatch' => $accountMail->toReceiptPayload(
+                $dispatch['sent'],
+                $dispatch['warning'],
+                $dispatch['status'],
+                $dispatch['simulated']
+            ),
         ], 201);
     }
 
@@ -360,10 +378,11 @@ class UserController extends Controller
 
         $previousPlacement = trim(($user->grade ?? '') . ' • ' . ($user->section ?? ''), ' •');
 
-        // Section / Year Level reassignment for students: enforce 50-student capacity
-        if ($user->role === 'student' && !empty($validated['section'])) {
-            $targetSection = trim($validated['section']);
+        // Section / Year Level reassignment for students: enforce 50-student capacity and keep grade/section aligned
+        $gradeChanged = !empty($validated['grade']) && strcasecmp(trim($validated['grade']), (string) $user->grade) !== 0;
+        if ($user->role === 'student' && (!empty($validated['section']) || $gradeChanged)) {
             $targetGrade = !empty($validated['grade']) ? trim($validated['grade']) : ($user->grade ?: '1st Year');
+            $targetSection = !empty($validated['section']) ? trim($validated['section']) : 'auto';
 
             if (strtolower($targetSection) === 'auto') {
                 $targetSection = $this->resolveAutoAssignedSection($targetGrade, null, $user->department);
@@ -383,13 +402,19 @@ class UserController extends Controller
             unset($validated['grade'], $validated['section']);
         }
 
-        if (isset($validated['password'])) {
-            $validated['password'] = Hash::make($validated['password']);
+        $plainPasswordForMail = null;
+        if (isset($validated['password']) && trim((string) $validated['password']) !== '') {
+            $plainPasswordForMail = (string) $validated['password'];
+            $validated['password'] = Hash::make($plainPasswordForMail);
         } else {
             unset($validated['password']);
         }
 
         $user->update($validated);
+
+        if ($plainPasswordForMail !== null) {
+            $user->tokens()->delete();
+        }
 
         $newPlacement = trim(($user->grade ?? '') . ' • ' . ($user->section ?? ''), ' •');
         $description = $user->role === 'student' && $previousPlacement !== $newPlacement
@@ -404,10 +429,29 @@ class UserController extends Controller
             'user_agent' => $request->userAgent(),
         ]);
 
+        $emailDispatch = null;
+        if ($plainPasswordForMail !== null) {
+            $portalOrigin = $request->headers->get('origin') ?: config('app.frontend_url', config('app.url'));
+            $accountMail = new LmsAccountCreatedMail($user, $plainPasswordForMail, $request->user(), $portalOrigin);
+            $dispatch = LmsMailService::dispatch($user->email, $accountMail, 'updated account credentials');
+            $emailDispatch = $accountMail->toReceiptPayload(
+                $dispatch['sent'],
+                $dispatch['warning'],
+                $dispatch['status'],
+                $dispatch['simulated']
+            );
+            $description .= match ($dispatch['status']) {
+                'sent' => " Credentials emailed to {$user->email}",
+                'simulated' => " (Credentials written to '{$dispatch['mailer']}' server log only)",
+                default => " (SMTP email delivery to {$user->email} failed)",
+            };
+        }
+
         return response()->json([
             'status' => 'success',
             'message' => $description . '.',
-            'data' => $user->fresh()
+            'data' => $user->fresh(),
+            ...($emailDispatch !== null ? ['email_dispatch' => $emailDispatch] : []),
         ]);
     }
 
@@ -451,7 +495,8 @@ class UserController extends Controller
             ->orderBy('grade')
             ->orderBy('section')
             ->orderBy('name')
-            ->get();
+            ->limit(min(500, max(1, (int) $request->input('limit', 500))))
+            ->get(['id', 'name', 'email', 'lrn', 'role', 'grade', 'section', 'department', 'status']);
 
         return response()->json([
             'status' => 'success',

@@ -9,6 +9,7 @@ import {
   BSIT_SUBJECTS,
   getYearLevelFromBlock,
   getDepartmentName,
+  CURRENT_SCHOOL_YEAR,
   type CurriculumSubjectItem,
 } from '../../lib/constants';
 import { 
@@ -25,6 +26,7 @@ import Input from '../../components/ui/Input';
 import ProfileUpdateCard from '../../components/ui/ProfileUpdateCard';
 import {
   AccountCredentialsEmailReceipt,
+  createFallbackAccountReceipt,
   type AccountEmailDispatchReceipt,
 } from '../../components/ui/AccountCredentialsEmailReceipt';
 import { useToastContext } from '../../contexts/ToastContext';
@@ -565,35 +567,35 @@ export default function SecretaryDashboard() {
       const finalSection = response?.data?.section || assignedSection;
       const receiptDepartment = (response?.data?.department || departmentCode).toUpperCase();
       const roleTitle = newUserRole === 'student' ? 'Student Learner' : 'Faculty Teacher';
-      const fallbackReceipt: AccountEmailDispatchReceipt = response?.email_dispatch || {
-        sent: true,
+      const fallbackReceipt = response?.email_dispatch || createFallbackAccountReceipt({
         recipient: email.trim(),
-        subject: `TCC LMS — Official ${roleTitle} Account Credentials (S.Y. 2026-2027)`,
-        account_name: fullName,
+        accountName: fullName,
         role: newUserRole,
-        role_label: roleTitle,
+        roleLabel: roleTitle,
         department: receiptDepartment,
-        department_label: `${receiptDepartment} — ${getDepartmentName(receiptDepartment)}`,
-        school_year: response?.data?.school_year || '2026-2027',
+        departmentLabel: `${receiptDepartment} — ${getDepartmentName(receiptDepartment)}`,
+        schoolYear: response?.data?.school_year || CURRENT_SCHOOL_YEAR,
         lrn: newUserRole === 'student' ? lrn.trim() : null,
         grade: newUserRole === 'student' ? yearLevel : null,
-        section: finalSection,
-        plain_password: password,
-        portal_url: `${window.location.origin}/login`,
-        issued_by: user?.name || 'Office of the College Secretary',
-        issued_by_role: 'College Secretary',
-        issued_at: new Date().toLocaleString(),
-      };
+        section: newUserRole === 'student' ? finalSection : null,
+        plainPassword: password,
+        issuedBy: user?.name || 'Office of the College Secretary',
+        issuedByRole: 'College Secretary',
+      });
 
       setDispatchedAccountReceipt(fallbackReceipt);
 
-      const msg =
+      const emailDelivered = Boolean(fallbackReceipt.sent);
+      const baseMsg =
         newUserRole === 'student'
-          ? `Student ${fullName} enrolled into ${yearLevel} • ${finalSection} and official account credentials dispatched to ${email.trim()}!`
-          : `Teacher account for ${fullName} created and official credentials dispatched to ${email.trim()}!`;
+          ? `Student ${fullName} enrolled into ${yearLevel} • ${finalSection}`
+          : `Teacher account for ${fullName} created`;
+      const msg = emailDelivered
+        ? `${baseMsg} and official account credentials dispatched to ${email.trim()}!`
+        : `${baseMsg}. ${fallbackReceipt.mail_warning || response?.message || 'Email was not delivered externally — share the slip below.'}`;
 
       setNotice(msg);
-      showToast(msg, 'success');
+      showToast(msg, emailDelivered ? 'success' : 'warning');
       // Reset form
       setFirstName('');
       setLastName('');
@@ -1035,7 +1037,7 @@ export default function SecretaryDashboard() {
             receipt={dispatchedAccountReceipt}
             onDismiss={() => setDispatchedAccountReceipt(null)}
             onViewDirectory={() => handleSectionChange('student_records')}
-            directoryButtonLabel="View in Student Directory"
+            directoryButtonLabel={dispatchedAccountReceipt.role === 'teacher' ? 'View Account Directory' : 'View in Student Directory'}
           />
         )}
 

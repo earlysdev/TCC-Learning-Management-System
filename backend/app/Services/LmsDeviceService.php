@@ -6,23 +6,18 @@ use App\Models\SecurityLog;
 use App\Models\TrustedDevice;
 use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 
 class LmsDeviceService
 {
     /**
-     * Ensure database tables for device security exist.
+     * Check whether required device-security tables are present.
      */
     public function ensureTablesExist(): void
     {
         if (! Schema::hasTable('trusted_devices') || ! Schema::hasTable('verification_codes')) {
-            try {
-                Artisan::call('migrate', ['--force' => true]);
-            } catch (\Throwable $e) {
-                Log::warning('LmsDeviceService auto-migrate check failed: ' . $e->getMessage());
-            }
+            Log::warning('LmsDeviceService: trusted_devices or verification_codes table is missing; run php artisan migrate.');
         }
     }
 

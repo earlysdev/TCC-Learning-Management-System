@@ -31,6 +31,10 @@ trait BelongsToDepartment
             return true;
         }
 
-        return ($this->department ?: config('lms.default_department')) === $viewer->departmentCode();
+        if (! is_string($this->department) || trim($this->department) === '') {
+            return false;
+        }
+
+        return strcasecmp(trim($this->department), $viewer->departmentCode()) === 0;
     }
 }

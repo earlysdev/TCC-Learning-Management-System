@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\ActivityLog;
 use App\Models\SecurityLog;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -28,40 +29,54 @@ class SecurityLogController extends Controller
 
         $this->applyDepartmentFilter($query, $this->scopedDepartment($request));
 
-        $logs = $query->latest()->paginate(50);
-
         return response()->json([
             'status' => 'success',
-            'data' => $logs,
+            'data' => $query->latest()->paginate(50),
         ]);
     }
 
     public function resolve(Request $request, SecurityLog $log): JsonResponse
     {
-        $logDepartment = $log->user?->departmentCode()
-            ?? (is_string($log->details['department'] ?? null) ? $log->details['department'] : null);
-        if ($logDepartment !== null) {
-            $this->ensureSameDepartment($request, $logDepartment);
-        }
+        $logDepartment = $this->resolveLogDepartment($log);
+        $this->ensureSameDepartment($request, $logDepartment);
 
-        if ($log->is_resolved) {
+        $auditor = $request->user();
+        $resolvedAt = now();
+
+        $updated = DB::transaction(fn (): int => SecurityLog::whereKey($log->id)
+            ->where('is_resolved', false)
+            ->update([
+                'is_resolved' => true,
+                'resolved_at' => $resolvedAt,
+                'resolved_by' => $auditor?->id,
+            ]));
+
+        $freshLog = $log->fresh(['user:id,name,role', 'resolver:id,name']);
+
+        if ($updated === 0) {
             return response()->json([
                 'status' => 'success',
                 'message' => 'Security log was already resolved.',
-                'data' => $log->load(['user:id,name,role', 'resolver:id,name']),
+                'data' => $freshLog,
+                'already_resolved' => true,
+                'unresolved_remaining' => $this->remainingUnresolvedCount($this->scopedDepartment($request)),
             ]);
         }
 
-        $log->update([
-            'is_resolved' => true,
-            'resolved_at' => now(),
-            'resolved_by' => $request->user()?->id,
+        ActivityLog::create([
+            'user_id' => $auditor?->id,
+            'action' => 'resolve_security_log',
+            'description' => "Resolved security alert #{$log->id} ({$log->event_type})",
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
         ]);
 
         return response()->json([
             'status' => 'success',
             'message' => 'Security log marked as resolved.',
-            'data' => $log->fresh(['user:id,name,role', 'resolver:id,name']),
+            'data' => $freshLog,
+            'already_resolved' => false,
+            'unresolved_remaining' => $this->remainingUnresolvedCount($this->scopedDepartment($request)),
         ]);
     }
 
@@ -74,6 +89,13 @@ class SecurityLogController extends Controller
         $resolvedAt = now();
         $department = $this->scopedDepartment($request);
 
+        if ($department === null && $auditor?->isInstitutionWide() && ! $request->boolean('confirm_all')) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Specify a ?department= filter or confirm_all=true before resolving alerts across all departments.',
+            ], 422);
+        }
+
         $count = DB::transaction(function () use ($auditor, $resolvedAt, $department): int {
             $query = SecurityLog::where('is_resolved', false);
             $this->applyDepartmentFilter($query, $department);
@@ -85,23 +107,61 @@ class SecurityLogController extends Controller
             ]);
         });
 
+        $remaining = $this->remainingUnresolvedCount($department);
+
         if ($count === 0) {
             return response()->json([
                 'status' => 'success',
                 'message' => 'All outstanding security alerts are already resolved.',
                 'resolved_count' => 0,
+                'unresolved_remaining' => $remaining,
             ]);
         }
 
         $auditorName = $auditor?->name ?? 'Dean';
+        $scopeLabel = $department ?? 'all departments';
+
+        ActivityLog::create([
+            'user_id' => $auditor?->id,
+            'action' => 'resolve_all_security_logs',
+            'description' => "Batch-resolved {$count} pending security alert(s) in {$scopeLabel}",
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
 
         return response()->json([
             'status' => 'success',
             'message' => "All {$count} pending security alert(s) resolved by {$auditorName}.",
             'resolved_count' => $count,
+            'unresolved_remaining' => $remaining,
             'resolved_at' => $resolvedAt->toIso8601String(),
             'resolver' => $auditor ? ['id' => $auditor->id, 'name' => $auditor->name] : null,
         ]);
+    }
+
+    private function resolveLogDepartment(SecurityLog $log): ?string
+    {
+        if (is_string($log->department) && trim($log->department) !== '') {
+            return strtoupper(trim($log->department));
+        }
+
+        if ($log->user) {
+            return $log->user->departmentCode();
+        }
+
+        $detailDept = $log->details['department'] ?? null;
+
+        return is_string($detailDept) && trim($detailDept) !== ''
+            ? strtoupper(trim($detailDept))
+            : null;
+    }
+
+    private function remainingUnresolvedCount(?string $department): int
+    {
+        $query = SecurityLog::where('is_resolved', false);
+        $this->applyDepartmentFilter($query, $department);
+
+        return $query->count();
     }
 
     private function applyDepartmentFilter(Builder $query, ?string $department): void
@@ -110,9 +170,10 @@ class SecurityLogController extends Controller
             return;
         }
 
-        $dept = trim($department);
+        $dept = strtoupper(trim($department));
         $query->where(function (Builder $q) use ($dept): void {
-            $q->whereHas('user', fn (Builder $uq) => $uq->where('department', $dept))
+            $q->where('department', $dept)
+                ->orWhereHas('user', fn (Builder $uq) => $uq->where('department', $dept))
                 ->orWhere('details->department', $dept);
         });
     }

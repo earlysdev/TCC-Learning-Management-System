@@ -49,7 +49,7 @@ abstract class Controller
     }
 
     /**
-     * Abort with 403 if a department-bound user attempts to touch another department's record.
+     * Abort with 403 if a department-bound user attempts to touch another department's (or unattributed) record.
      */
     protected function ensureSameDepartment(Request $request, ?string $resourceDepartment): void
     {
@@ -58,9 +58,9 @@ abstract class Controller
             return;
         }
 
-        $targetDept = strtoupper(trim((string) ($resourceDepartment ?: config('lms.default_department', 'CIT'))));
+        $targetDept = is_string($resourceDepartment) ? strtoupper(trim($resourceDepartment)) : '';
         abort_unless(
-            strcasecmp($user->departmentCode(), $targetDept) === 0,
+            $targetDept !== '' && strcasecmp($user->departmentCode(), $targetDept) === 0,
             403,
             'You may only access records within your assigned department.'
         );

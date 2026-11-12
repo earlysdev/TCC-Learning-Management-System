@@ -10,18 +10,29 @@ class EnsureRole
 {
     public function handle(Request $request, Closure $next, string ...$roles): Response
     {
-        $userRole = $request->user()?->role;
+        $user = $request->user();
+        $userRole = $user?->role;
+
         $allowed = [];
-        foreach ($roles as $r) {
-            $allowed[] = $r;
-            if ($r === 'principal') $allowed[] = 'dean';
-            if ($r === 'dean') $allowed[] = 'principal';
+        foreach ($roles as $role) {
+            $allowed[] = $role;
+            if ($role === 'principal') {
+                $allowed[] = 'dean';
+            } elseif ($role === 'dean') {
+                $allowed[] = 'principal';
+            }
         }
 
-        if (!$request->user() || !in_array($userRole, $allowed)) {
+        // Institution-wide developers can access any administrative/faculty oversight route.
+        $hasStaffRole = count(array_intersect($allowed, ['dean', 'principal', 'secretary', 'teacher', 'developer'])) > 0;
+        if ($hasStaffRole) {
+            $allowed[] = 'developer';
+        }
+
+        if (! $user || ! in_array($userRole, $allowed, true)) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Unauthorized. Insufficient permissions.'
+                'message' => 'Unauthorized. Insufficient permissions.',
             ], 403);
         }
 

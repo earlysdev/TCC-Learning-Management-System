@@ -5,11 +5,9 @@ namespace App\Services;
 use App\Mail\LmsVerificationMail;
 use App\Models\User;
 use App\Models\VerificationCode;
-use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
@@ -26,16 +24,12 @@ class LmsOtpService
     ];
 
     /**
-     * Ensure database tables for OTP verification exist.
+     * Check whether required OTP verification table is present.
      */
     public function ensureTablesExist(): void
     {
         if (! Schema::hasTable('verification_codes')) {
-            try {
-                Artisan::call('migrate', ['--force' => true]);
-            } catch (\Throwable $e) {
-                Log::warning('LmsOtpService auto-migrate check failed: ' . $e->getMessage());
-            }
+            Log::warning('LmsOtpService: verification_codes table is missing; run php artisan migrate.');
         }
     }
 
@@ -78,39 +72,45 @@ class LmsOtpService
             throw new \RuntimeException('Verification codes table is pending database migration.');
         }
 
-        // Invalidate any older unused codes for this user & purpose
-        VerificationCode::where('user_id', $user->id)
-            ->where('purpose', $purpose)
-            ->whereNull('consumed_at')
-            ->update(['consumed_at' => now()]);
-
         $rawCode = $this->generateOtpCode();
         $challenge = Str::random(48);
         $ttl = (int) config('lms.otp_ttl_minutes', 10);
-
-        $record = VerificationCode::create([
-            'user_id' => $user->id,
-            'purpose' => $purpose,
-            'challenge' => $challenge,
-            'code_hash' => Hash::make($rawCode),
-            'payload' => $payload,
-            'attempts' => 0,
-            'sent_at' => now(),
-            'expires_at' => now()->addMinutes($ttl),
-        ]);
-
-        $mailSent = $this->dispatchVerificationMail($user, $rawCode, $purpose, $meta);
         $exposeDemo = $this->shouldExposeDemoCode($user);
 
+        // Dispatch email outside any DB lock/transaction so failed SMTP leaves prior active codes intact.
+        $dispatch = $this->dispatchVerificationMail($user, $rawCode, $purpose, $meta);
+        $mailSent = $dispatch['sent'];
+
         if (! $mailSent && ! $exposeDemo) {
-            throw new \RuntimeException('Unable to dispatch verification email at this time. Please try again shortly.');
+            throw new \RuntimeException($dispatch['warning'] ?: 'Unable to dispatch verification email at this time. Please try again shortly.');
         }
+
+        $record = DB::transaction(function () use ($user, $purpose, $challenge, $rawCode, $payload, $ttl): VerificationCode {
+            VerificationCode::where('user_id', $user->id)
+                ->where('purpose', $purpose)
+                ->whereNull('consumed_at')
+                ->update(['consumed_at' => now()]);
+
+            return VerificationCode::create([
+                'user_id' => $user->id,
+                'purpose' => $purpose,
+                'challenge' => $challenge,
+                'code_hash' => Hash::make($rawCode),
+                'payload' => $payload,
+                'attempts' => 0,
+                'sent_at' => now(),
+                'expires_at' => now()->addMinutes($ttl),
+            ]);
+        });
 
         return [
             'challenge' => $challenge,
             'email_hint' => $this->maskEmail($user->email),
             'expires_at' => $record->expires_at->toIso8601String(),
             'mail_sent' => $mailSent,
+            'mail_simulated' => $dispatch['simulated'],
+            'mail_status' => $dispatch['status'],
+            'mail_warning' => $dispatch['warning'],
             'debug_code' => $exposeDemo ? $rawCode : null,
         ];
     }
@@ -220,7 +220,7 @@ class LmsOtpService
         $cooldown = (int) config('lms.otp_resend_cooldown_seconds', 60);
         $ttl = (int) config('lms.otp_ttl_minutes', 10);
 
-        return DB::transaction(function () use ($cleanChallenge, $meta, $expectedPurpose, $expectedUserId, $cooldown, $ttl): array {
+        $buildLookupQuery = static function () use ($cleanChallenge, $expectedPurpose, $expectedUserId) {
             $query = VerificationCode::with('user')
                 ->where('challenge', $cleanChallenge)
                 ->whereNull('consumed_at')
@@ -234,7 +234,46 @@ class LmsOtpService
                 $query->where('user_id', $expectedUserId);
             }
 
-            $record = $query->lockForUpdate()->first();
+            return $query;
+        };
+
+        $preview = $buildLookupQuery()->first();
+        if (! $preview || ! $preview->user) {
+            return [
+                'success' => false,
+                'message' => 'Verification session expired. Please request a new code.',
+            ];
+        }
+
+        if ($preview->sent_at) {
+            $elapsed = (int) floor($preview->sent_at->diffInSeconds(now(), true));
+            if ($elapsed < $cooldown) {
+                $wait = max(1, $cooldown - $elapsed);
+
+                return [
+                    'success' => false,
+                    'message' => "Please wait {$wait}s before requesting a new code.",
+                    'retry_after' => $wait,
+                ];
+            }
+        }
+
+        $rawCode = $this->generateOtpCode();
+        $exposeDemo = $this->shouldExposeDemoCode($preview->user);
+
+        // Send mail before mutating the active challenge so failures preserve the existing OTP and cooldown.
+        $dispatch = $this->dispatchVerificationMail($preview->user, $rawCode, $preview->purpose, $meta);
+        $mailSent = $dispatch['sent'];
+
+        if (! $mailSent && ! $exposeDemo) {
+            return [
+                'success' => false,
+                'message' => $dispatch['warning'] ?: 'Unable to send verification email right now. Please try again shortly.',
+            ];
+        }
+
+        return DB::transaction(function () use ($buildLookupQuery, $rawCode, $dispatch, $mailSent, $exposeDemo, $cooldown, $ttl): array {
+            $record = $buildLookupQuery()->lockForUpdate()->first();
 
             if (! $record || ! $record->user) {
                 return [
@@ -256,8 +295,6 @@ class LmsOtpService
                 }
             }
 
-            $rawCode = $this->generateOtpCode();
-
             $record->update([
                 'code_hash' => Hash::make($rawCode),
                 'attempts' => 0,
@@ -265,21 +302,20 @@ class LmsOtpService
                 'expires_at' => now()->addMinutes($ttl),
             ]);
 
-            $mailSent = $this->dispatchVerificationMail($record->user, $rawCode, $record->purpose, $meta);
-            $exposeDemo = $this->shouldExposeDemoCode($record->user);
-
-            if (! $mailSent && ! $exposeDemo) {
-                return [
-                    'success' => false,
-                    'message' => 'Unable to send verification email right now. Please try again shortly.',
-                ];
-            }
+            $statusMessage = match ($dispatch['status']) {
+                'sent' => 'A new 6-digit verification code has been dispatched to your email.',
+                'simulated' => 'SMTP is in local log mode; a new 6-digit verification code was written to the server log.',
+                default => 'Live SMTP delivery failed; using local demo fallback code.',
+            };
 
             return [
                 'success' => true,
-                'message' => 'A new 6-digit verification code has been dispatched to your email.',
+                'message' => $statusMessage,
                 'expires_at' => $record->expires_at->toIso8601String(),
                 'mail_sent' => $mailSent,
+                'mail_simulated' => $dispatch['simulated'],
+                'mail_status' => $dispatch['status'],
+                'mail_warning' => $dispatch['warning'],
                 'debug_code' => $exposeDemo ? $rawCode : null,
             ];
         });
@@ -290,17 +326,16 @@ class LmsOtpService
         return str_pad((string) random_int(100000, 999999), 6, '0', STR_PAD_LEFT);
     }
 
-    private function dispatchVerificationMail(User $user, string $rawCode, string $purpose, array $meta): bool
+    /**
+     * @return array{sent: bool, simulated: bool, status: string, mailer: string, warning: ?string}
+     */
+    private function dispatchVerificationMail(User $user, string $rawCode, string $purpose, array $meta): array
     {
-        try {
-            Mail::to($user->email)->send(new LmsVerificationMail($user, $rawCode, $purpose, $meta));
-
-            return true;
-        } catch (\Throwable $e) {
-            Log::warning("Failed to send LMS OTP email to {$user->email}: " . $e->getMessage());
-
-            return false;
-        }
+        return LmsMailService::dispatch(
+            $user->email,
+            new LmsVerificationMail($user, $rawCode, $purpose, $meta),
+            "LMS OTP ({$purpose})"
+        );
     }
 
     /**

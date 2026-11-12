@@ -36,20 +36,22 @@ class SubjectManagementTest extends TestCase
 
     public function test_secretary_can_add_new_subject(): void
     {
-        $secretary = User::where('role', 'secretary')->first() ?? User::factory()->create(['role' => 'secretary']);
+        $secretary = User::where('role', 'secretary')->first()
+            ?? User::factory()->create(['role' => 'secretary', 'department' => 'CIT']);
 
         $response = $this->actingAs($secretary)->postJson('/api/subjects', [
             'name' => 'Computer Systems Servicing',
             'code' => 'CSS',
-            'grade' => 'Grade 11',
-            'department' => 'TVL Department',
+            'grade' => '1st Year',
+            'department' => $secretary->departmentCode() ?? 'CIT',
         ]);
 
         $response->assertStatus(201);
         $this->assertDatabaseHas('subjects', [
             'name' => 'Computer Systems Servicing',
             'code' => 'CSS',
-            'grade' => 'Grade 11',
+            'grade' => '1st Year',
+            'department' => $secretary->departmentCode() ?? 'CIT',
         ]);
     }
 
@@ -92,12 +94,15 @@ class SubjectManagementTest extends TestCase
 
     public function test_can_delete_unused_subject(): void
     {
-        $secretary = User::where('role', 'secretary')->first() ?? User::factory()->create(['role' => 'secretary']);
+        $secretary = User::where('role', 'secretary')->first()
+            ?? User::factory()->create(['role' => 'secretary', 'department' => 'CIT']);
+        $department = $secretary->departmentCode() ?? 'CIT';
 
         $newSubj = Subject::create([
             'name' => 'Temporary Elective',
             'code' => 'ELEC',
-            'grade' => 'Grade 12',
+            'grade' => '4th Year',
+            'department' => $department,
         ]);
 
         $response = $this->actingAs($secretary)->deleteJson("/api/subjects/{$newSubj->id}");

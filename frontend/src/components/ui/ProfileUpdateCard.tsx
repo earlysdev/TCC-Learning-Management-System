@@ -15,7 +15,7 @@ import {
   EyeOff,
   User as UserIcon,
 } from 'lucide-react';
-import { lmsFetch } from '../../lmsApi';
+import { LmsApiError, lmsFetch } from '../../lmsApi';
 import type { User } from '../../lib/types';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { useToastContext } from '../../contexts/ToastContext';
@@ -23,12 +23,47 @@ import { generateStrongPassword, evaluatePasswordStrength } from '../../lib/pass
 import GlassCard from './GlassCard';
 import Button from './Button';
 
+const ROLE_FIELD_GUIDANCE: Record<string, { nameHelper: string; emailLockHelper: string }> = {
+  secretary: {
+    nameHelper: 'Official verified identity shown on enrollment records, sections, and audit logs.',
+    emailLockHelper: 'Locked by institutional policy. Contact your College Dean to update.',
+  },
+  dean: {
+    nameHelper: 'Official verified identity shown on college oversight, approvals, and audit trails.',
+    emailLockHelper: 'Locked by institutional policy. Contact the System Administrator to update.',
+  },
+  principal: {
+    nameHelper: 'Official verified identity shown on college oversight, approvals, and audit trails.',
+    emailLockHelper: 'Locked by institutional policy. Contact the System Administrator to update.',
+  },
+  developer: {
+    nameHelper: 'Official verified identity across institution-wide administration and audit logs.',
+    emailLockHelper: 'Locked by institutional policy for system audit integrity.',
+  },
+  teacher: {
+    nameHelper: 'Official verified identity across your classes, quizzes, and academic records.',
+    emailLockHelper: 'Locked by institutional policy. Contact your College Secretary or Dean to update.',
+  },
+  student: {
+    nameHelper: 'Official verified identity across your courses, assessments, and academic records.',
+    emailLockHelper: 'Locked by institutional policy. Contact your College Secretary or Dean to update.',
+  },
+};
+
 export default function ProfileUpdateCard() {
   const { user: authUser, syncUser } = useAuthContext();
   const { showToast } = useToastContext();
+  const roleKey = (authUser?.role || 'student').toLowerCase();
+  const fieldGuidance = ROLE_FIELD_GUIDANCE[roleKey] ?? ROLE_FIELD_GUIDANCE.student;
 
   const [name, setName] = useState(authUser?.name || '');
+  const [syncedUserId, setSyncedUserId] = useState(authUser?.id);
   const email = authUser?.email || '';
+
+  if (authUser?.id && authUser.id !== syncedUserId) {
+    setSyncedUserId(authUser.id);
+    setName(authUser.name || '');
+  }
 
   // Current password is always required to authorize settings changes; new password is optional
   const [currentPassword, setCurrentPassword] = useState('');
@@ -109,6 +144,8 @@ export default function ProfileUpdateCard() {
         challenge: string;
         email_hint: string;
         cooldown_seconds?: number;
+        mail_status?: string;
+        mail_warning?: string | null;
         message: string;
         debug_code?: string;
       }>('/profile/request-password-code', {
@@ -121,7 +158,7 @@ export default function ProfileUpdateCard() {
 
       const msg = res.message || `Verification code sent to ${res.email_hint}`;
       setNotice(msg);
-      showToast(msg, 'success');
+      showToast(msg, res.mail_status && res.mail_status !== 'sent' ? 'warning' : 'success');
 
       if (res.debug_code) {
         setDebugCode(res.debug_code);
@@ -129,6 +166,9 @@ export default function ProfileUpdateCard() {
         showToast(`Demo authorization code: ${res.debug_code}`, 'info');
       }
     } catch (err: unknown) {
+      if (err instanceof LmsApiError && err.status === 429 && err.retryAfter) {
+        setCooldown(err.retryAfter);
+      }
       const msg = err instanceof Error ? err.message : 'Failed to send authorization code.';
       setError(msg);
       showToast(msg, 'error');
@@ -167,18 +207,25 @@ export default function ProfileUpdateCard() {
 
       const payload: Record<string, string> = {
         name: name.trim(),
-        email: email.trim(),
         current_password: currentPassword,
         code: code.trim(),
         challenge,
       };
+
+      if (email.trim()) {
+        payload.email = email.trim();
+      }
 
       if (newPassword) {
         payload.password = newPassword;
         payload.password_confirmation = confirmPassword;
       }
 
-      const res = await lmsFetch<{ message: string; user?: User }>('/profile', {
+      const res = await lmsFetch<{
+        message: string;
+        user?: User;
+        email_dispatch?: { sent?: boolean; mail_status?: string; mail_warning?: string | null };
+      }>('/profile', {
         method: 'PUT',
         body: JSON.stringify(payload),
       });
@@ -199,9 +246,15 @@ export default function ProfileUpdateCard() {
       setShowNewPassword(false);
       setCooldown(0);
 
-      const msg = res.message || 'Account settings updated successfully.';
+      const baseMsg = res.message || 'Account settings updated successfully.';
+      const dispatch = res.email_dispatch;
+      const msg = dispatch
+        ? dispatch.sent
+          ? `${baseMsg} Confirmation emailed to your institutional address.`
+          : `${baseMsg} (${dispatch.mail_warning || 'Email confirmation was logged locally rather than sent externally.'})`
+        : baseMsg;
       setNotice(msg);
-      showToast(msg, 'success');
+      showToast(msg, dispatch && !dispatch.sent ? 'warning' : 'success');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Could not update profile information.';
       setError(msg);
@@ -276,7 +329,7 @@ export default function ProfileUpdateCard() {
               />
             </div>
             <p className="settings-field-helper">
-              Official verified identity across your courses, assessments, and academic records.
+              {fieldGuidance.nameHelper}
             </p>
           </div>
 
@@ -303,7 +356,7 @@ export default function ProfileUpdateCard() {
               <Lock size={14} className="input-icon-right" />
             </div>
             <p className="settings-field-helper">
-              Locked by institutional policy. Contact the Registrar or Secretary to update.
+              {fieldGuidance.emailLockHelper}
             </p>
           </div>
         </div>
@@ -376,7 +429,7 @@ export default function ProfileUpdateCard() {
             <div className="form-group" style={{ margin: 0 }}>
               <div className="settings-label-row">
                 <label className="form-label" htmlFor="settings-new-password">
-                  New Password <span style={{ color: 'var(--neutral-400)', fontWeight: 500 }}>(Optional)</span>
+                  New Password
                 </label>
               </div>
               <div className="settings-input-wrap has-right-control">

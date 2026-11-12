@@ -15,32 +15,6 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/health', fn () => response()->json(['status' => 'ok', 'app' => 'TCC LMS API']));
 
-Route::any('/system/migrate', function () {
-    try {
-        \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
-        $output = \Illuminate\Support\Facades\Artisan::output();
-
-        return response()->json([
-            'status' => 'success',
-            'message' => 'Database migration completed successfully.',
-            'output' => trim($output),
-            'tables' => [
-                'users' => \Illuminate\Support\Facades\Schema::hasTable('users'),
-                'trusted_devices' => \Illuminate\Support\Facades\Schema::hasTable('trusted_devices'),
-                'verification_codes' => \Illuminate\Support\Facades\Schema::hasTable('verification_codes'),
-                'security_logs' => \Illuminate\Support\Facades\Schema::hasTable('security_logs'),
-                'quizzes' => \Illuminate\Support\Facades\Schema::hasTable('quizzes'),
-                'sections' => \Illuminate\Support\Facades\Schema::hasTable('sections'),
-            ],
-        ]);
-    } catch (\Throwable $e) {
-        return response()->json([
-            'status' => 'error',
-            'message' => $e->getMessage(),
-        ], 500);
-    }
-});
-
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
 Route::post('/verify-login-otp', [AuthController::class, 'verifyLoginOtp'])->middleware('throttle:10,1');
 Route::post('/resend-login-otp', [AuthController::class, 'resendLoginOtp'])->middleware('throttle:5,1');
@@ -63,8 +37,10 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     // Teacher Quiz Routes
-    Route::get('/teacher/dashboard', [QuizController::class, 'teacherDashboard']);
-    Route::get('/teacher/students', [UserController::class, 'teacherStudents']);
+    Route::get('/teacher/dashboard', [QuizController::class, 'teacherDashboard'])
+        ->middleware('role:teacher,principal,dean,developer');
+    Route::get('/teacher/students', [UserController::class, 'teacherStudents'])
+        ->middleware('role:teacher,principal,dean,secretary,developer');
     Route::post('/teacher/quizzes', [QuizController::class, 'store']);
     Route::post('/teacher/quizzes/generate', [QuizController::class, 'generate'])->middleware('throttle:5,1');
     Route::put('/teacher/quizzes/{quiz}', [QuizController::class, 'update']);

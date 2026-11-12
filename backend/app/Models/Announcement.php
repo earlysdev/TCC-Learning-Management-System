@@ -2,15 +2,17 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToDepartment;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Announcement extends Model
 {
-    use HasFactory;
+    use BelongsToDepartment, HasFactory;
 
     protected $fillable = [
         'user_id',
+        'department',
         'title',
         'content',
         'target_role',

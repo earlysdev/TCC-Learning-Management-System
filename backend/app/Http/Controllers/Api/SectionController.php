@@ -42,8 +42,9 @@ class SectionController extends Controller
     public function index(Request $request): JsonResponse
     {
         $department = $this->scopedDepartment($request);
-        $seedDept = $department ?? ($request->user()?->departmentCode() ?? config('lms.default_department', 'CIT'));
-        $this->ensureDefaultBlocksSeeded($seedDept);
+        if ($department !== null) {
+            $this->ensureDefaultBlocksSeeded($department);
+        }
 
         $query = Section::query();
         $studentsQuery = User::where('role', 'student')->whereNotNull('section');
@@ -53,7 +54,7 @@ class SectionController extends Controller
             $studentsQuery->where('department', $department);
         }
 
-        if ($request->has('grade') && !empty($request->grade)) {
+        if ($request->filled('grade')) {
             $query->where('grade', $request->grade);
         }
 
@@ -71,6 +72,7 @@ class SectionController extends Controller
 
             return [
                 'id' => $section->id,
+                'department' => $section->department,
                 'grade' => $section->grade,
                 'name' => $section->name,
                 'display_name' => $section->display_name ?: $section->name,
@@ -200,15 +202,17 @@ class SectionController extends Controller
             ? trim($validated['display_name'])
             : $name;
 
+        $oldGrade = $section->grade;
         $section->update([
             'grade' => $grade,
             'name' => $name,
             'display_name' => $displayName,
         ]);
 
-        if ($oldName !== $name) {
+        if ($oldName !== $name || $oldGrade !== $grade) {
             User::where('role', 'student')
                 ->where('department', $department)
+                ->where('grade', $oldGrade)
                 ->where('section', $oldName)
                 ->update([
                     'section' => $name,
