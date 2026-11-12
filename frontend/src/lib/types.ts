@@ -200,3 +200,108 @@ export interface Subject {
   created_at?: string;
 }
 
+export interface TeacherAiRecommendation {
+  title: string;
+  priority: 'high' | 'medium' | 'positive';
+  category: 'remediation' | 'misconception' | 'integrity' | 'differentiation';
+  rationale: string;
+  action_step: string;
+  target_group: string;
+}
+
+export interface TeacherMissedQuestion {
+  quiz_id: number;
+  quiz_title: string;
+  subject: string;
+  question_index: number;
+  prompt: string;
+  skill: string;
+  attempts: number;
+  missed_count: number;
+  miss_rate: number;
+  most_common_wrong_answer?: string | null;
+}
+
+export interface TeacherCompetencyStat {
+  competency: string;
+  subject: string;
+  questions_answered: number;
+  correct_count: number;
+  missed_count: number;
+  accuracy: number;
+  miss_rate: number;
+  status: 'critical' | 'needs_review' | 'mastered';
+}
+
+export interface TeacherSectionPerformance {
+  section: string;
+  year_level: string;
+  attempts_count: number;
+  students_count: number;
+  average_percentage: number;
+  flagged_attempts: number;
+  status: 'strong' | 'developing' | 'needs_attention';
+}
+
+export interface TeacherAtRiskStudent {
+  student_id: number;
+  name: string;
+  lrn?: string | null;
+  grade?: string | null;
+  section: string;
+  average_percentage: number;
+  attempts_count: number;
+  latest_quiz_title: string;
+  violations: number;
+  priority: 'high' | 'medium';
+}
+
+export interface TeacherRemedialDraft {
+  subject: string;
+  topic: string;
+  difficulty: 'easy' | 'medium' | 'challenging';
+  count: number;
+  target_section?: string | null;
+  reason: string;
+}
+
+export interface TeacherInsightsResponse {
+  selected_quiz_id: number | null;
+  quizzes: Array<{
+    id: number;
+    title: string;
+    subject: string;
+    topic: string;
+    is_published: boolean;
+    attempts_count: number;
+  }>;
+  summary: {
+    quiz_count: number;
+    published_count: number;
+    total_attempts: number;
+    unique_students: number;
+    average_percentage: number;
+    pass_rate: number;
+    at_risk_count: number;
+    flagged_attempts: number;
+    handled_year_level?: string | null;
+  };
+  mastery_bands: {
+    proficient: { count: number; pct: number };
+    developing: { count: number; pct: number };
+    at_risk: { count: number; pct: number };
+  };
+  missed_questions: TeacherMissedQuestion[];
+  weak_competencies: TeacherCompetencyStat[];
+  section_breakdown: TeacherSectionPerformance[];
+  at_risk_students: TeacherAtRiskStudent[];
+  remedial_draft: TeacherRemedialDraft | null;
+  ai: {
+    headline: string;
+    executive_summary: string;
+    recommendations: TeacherAiRecommendation[];
+    teaching_strategies: string[];
+    source: string;
+  };
+}
+

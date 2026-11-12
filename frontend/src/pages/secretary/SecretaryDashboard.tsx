@@ -121,6 +121,8 @@ export default function SecretaryDashboard() {
     system_status: 'Active',
   });
   const [students, setStudents] = useState<User[]>([]);
+  const [teachers, setTeachers] = useState<User[]>([]);
+  const [directoryTab, setDirectoryTab] = useState<'students' | 'teachers'>('students');
   const [sectionsList, setSectionsList] = useState<Section[]>([]);
   const [customSubjects, setCustomSubjects] = useState<Subject[]>([]);
   const [customYearLevels, setCustomYearLevels] = useState<string[]>(() => {
@@ -153,6 +155,7 @@ export default function SecretaryDashboard() {
   const [copiedPassword, setCopiedPassword] = useState(false);
   const [lrn, setLrn] = useState('');
   const [yearLevel, setYearLevel] = useState('1st Year');
+  const [teacherYearLevel, setTeacherYearLevel] = useState('');
   const [dispatchedAccountReceipt, setDispatchedAccountReceipt] = useState<AccountEmailDispatchReceipt | null>(null);
 
   // LMSWO-00064: Manual Section & Year Level Creation state
@@ -324,17 +327,12 @@ export default function SecretaryDashboard() {
         system_status: 'Active',
       });
 
-      const studentsData = await lmsFetch<PaginatedResponse<User> | { data?: { data?: User[] } | User[] } | User[]>('/users?role=student&per_page=500').catch(() => []);
-      if (Array.isArray(studentsData)) {
-        setStudents(studentsData);
-      } else if (studentsData && 'data' in studentsData) {
-        const inner = studentsData.data;
-        if (Array.isArray(inner)) {
-          setStudents(inner);
-        } else if (inner && 'data' in inner && Array.isArray(inner.data)) {
-          setStudents(inner.data);
-        }
-      }
+      const [studentsData, teachersData] = await Promise.all([
+        lmsFetch<PaginatedResponse<User> | { data?: { data?: User[] } | User[] } | User[]>('/users?role=student&per_page=500').catch(() => []),
+        lmsFetch<PaginatedResponse<User> | { data?: { data?: User[] } | User[] } | User[]>('/users?role=teacher&per_page=500').catch(() => []),
+      ]);
+      setStudents(extractCollection<User>(studentsData));
+      setTeachers(extractCollection<User>(teachersData));
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load secretary data');
     } finally {
@@ -545,6 +543,7 @@ export default function SecretaryDashboard() {
       const autoAssign = getAutoSectionAssignment(yearLevel);
       const assignedSection = newUserRole === 'student' ? autoAssign.assignedBlock : null;
 
+      const assignedTeacherGrade = newUserRole === 'teacher' ? (teacherYearLevel.trim() || null) : null;
       const response = await lmsFetch<{
         data?: User;
         message?: string;
@@ -559,7 +558,7 @@ export default function SecretaryDashboard() {
           password,
           role: newUserRole,
           lrn: newUserRole === 'student' ? lrn : null,
-          grade: newUserRole === 'student' ? yearLevel : null,
+          grade: newUserRole === 'student' ? yearLevel : assignedTeacherGrade,
           section: assignedSection,
         }),
       });
@@ -576,7 +575,7 @@ export default function SecretaryDashboard() {
         departmentLabel: `${receiptDepartment} — ${getDepartmentName(receiptDepartment)}`,
         schoolYear: response?.data?.school_year || CURRENT_SCHOOL_YEAR,
         lrn: newUserRole === 'student' ? lrn.trim() : null,
-        grade: newUserRole === 'student' ? yearLevel : null,
+        grade: newUserRole === 'student' ? yearLevel : assignedTeacherGrade,
         section: newUserRole === 'student' ? finalSection : null,
         plainPassword: password,
         issuedBy: user?.name || 'Office of the College Secretary',
@@ -589,7 +588,9 @@ export default function SecretaryDashboard() {
       const baseMsg =
         newUserRole === 'student'
           ? `Student ${fullName} enrolled into ${yearLevel} • ${finalSection}`
-          : `Teacher account for ${fullName} created`;
+          : assignedTeacherGrade
+            ? `Teacher account for ${fullName} created (Assigned to ${assignedTeacherGrade})`
+            : `Teacher account for ${fullName} created (All Year Levels)`;
       const msg = emailDelivered
         ? `${baseMsg} and official account credentials dispatched to ${email.trim()}!`
         : `${baseMsg}. ${fallbackReceipt.mail_warning || response?.message || 'Email was not delivered externally — share the slip below.'}`;
@@ -603,6 +604,7 @@ export default function SecretaryDashboard() {
       setPassword('');
       setShowPassword(false);
       setLrn('');
+      setTeacherYearLevel('');
       await loadSecretaryData();
       await loadSections();
       await loadActivityLogs();
@@ -628,7 +630,30 @@ export default function SecretaryDashboard() {
       showToast(msg, 'success');
       await loadSecretaryData();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to update student status';
+      const msg = err instanceof Error ? err.message : 'Failed to update status';
+      setError(msg);
+      showToast(msg, 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleAssignTeacherYearLevel = async (teacher: User, nextGrade: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await lmsFetch(`/users/${teacher.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ grade: nextGrade || null }),
+      });
+      const label = nextGrade || 'All Year Levels';
+      const msg = `Assigned ${teacher.name} to handle ${label}. Published quizzes from this instructor now appear only to ${label === 'All Year Levels' ? 'all enrolled learners' : `${label} students`}.`;
+      setNotice(msg);
+      showToast(msg, 'success');
+      await loadSecretaryData();
+      await loadActivityLogs();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to assign teacher year level';
       setError(msg);
       showToast(msg, 'error');
     } finally {
@@ -1036,8 +1061,11 @@ export default function SecretaryDashboard() {
           <AccountCredentialsEmailReceipt
             receipt={dispatchedAccountReceipt}
             onDismiss={() => setDispatchedAccountReceipt(null)}
-            onViewDirectory={() => handleSectionChange('student_records')}
-            directoryButtonLabel={dispatchedAccountReceipt.role === 'teacher' ? 'View Account Directory' : 'View in Student Directory'}
+            onViewDirectory={() => {
+              setDirectoryTab(dispatchedAccountReceipt.role === 'teacher' ? 'teachers' : 'students');
+              handleSectionChange('student_records');
+            }}
+            directoryButtonLabel={dispatchedAccountReceipt.role === 'teacher' ? 'View Faculty Directory' : 'View in Student Directory'}
           />
         )}
 
@@ -1351,6 +1379,44 @@ export default function SecretaryDashboard() {
                     />
                   </div>
                 </div>
+
+                {/* Row 4 (Teacher): Assigned Handled Year Level */}
+                {newUserRole === 'teacher' && (
+                  <div
+                    style={{
+                      padding: '0.95rem 1rem',
+                      borderRadius: '10px',
+                      background: 'rgba(245, 158, 11, 0.08)',
+                      border: '1px solid rgba(251, 191, 36, 0.3)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.5rem',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+                      <label htmlFor="sec-teacher-year" style={{ fontSize: '0.84rem', color: 'var(--neutral-200)', fontWeight: 700, margin: 0 }}>
+                        Assigned Year Level to Handle
+                      </label>
+                      <span style={{ fontSize: '0.72rem', color: '#fde68a', fontWeight: 600 }}>Quiz Visibility Scope</span>
+                    </div>
+                    <select
+                      id="sec-teacher-year"
+                      value={teacherYearLevel}
+                      onChange={e => setTeacherYearLevel(e.target.value)}
+                      className="form-select"
+                      style={{ height: '44px', margin: 0, width: '100%', boxSizing: 'border-box' }}
+                    >
+                      <option value="">All Year Levels (Unrestricted — 1st to 4th Year)</option>
+                      {allAvailableYearLevels.map((yr) => (
+                        <option key={yr} value={yr}>{yr} Only</option>
+                      ))}
+                    </select>
+                    <span style={{ fontSize: '0.74rem', color: 'var(--neutral-300)', lineHeight: 1.45 }}>
+                      Quizzes created and published by this teacher will only be visible to students enrolled in{' '}
+                      <strong style={{ color: '#fde68a' }}>{teacherYearLevel || 'all year levels'}</strong>.
+                    </span>
+                  </div>
+                )}
 
                 {/* Row 4 (Student): Year Level & Auto-Assigned Section — Locked 100% on the exact same horizontal line */}
                 {newUserRole === 'student' && (
@@ -2502,18 +2568,36 @@ export default function SecretaryDashboard() {
     );
   };
 
+  const filteredTeachers = teachers.filter((t) => {
+    const matchesSearch = !searchQuery ||
+      t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (t.grade && t.grade.toLowerCase().includes(searchQuery.toLowerCase()));
+    const matchesYear = !blockFilter || (t.grade || 'All Year Levels') === blockFilter;
+    const matchesStatus = !statusFilter || t.status === statusFilter;
+    return matchesSearch && matchesYear && matchesStatus;
+  });
+
+  const handleDirectoryTabChange = (nextTab: 'students' | 'teachers') => {
+    setDirectoryTab(nextTab);
+    setBlockFilter('');
+    setStatusFilter('');
+  };
+
   const renderStudentRecords = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <span style={{ fontSize: '0.8rem', color: 'var(--primary-300)', letterSpacing: '1px', textTransform: 'uppercase', fontWeight: 600 }}>
-            STUDENT REGISTRY
+            {directoryTab === 'students' ? 'STUDENT REGISTRY' : 'FACULTY & YEAR-LEVEL ASSIGNMENTS'}
           </span>
           <h1 style={{ fontSize: '2rem', fontWeight: 800, color: 'white', marginTop: '0.25rem' }}>
-            Student Records
+            {directoryTab === 'students' ? 'Student Records' : 'Faculty Teachers Directory'}
           </h1>
           <p style={{ color: 'var(--neutral-300)' }}>
-            Search, verify, and manage official enrollment status of TCC learners by Block and Year Level.
+            {directoryTab === 'students'
+              ? 'Search, verify, and manage official enrollment status of TCC learners by Block and Year Level.'
+              : 'Assign which Year Level each instructor handles. Teacher quizzes are visible strictly to students in their assigned Year Level.'}
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
@@ -2524,6 +2608,28 @@ export default function SecretaryDashboard() {
             <UserPlus size={16} /> New Registration
           </Button>
         </div>
+      </div>
+
+      {/* Directory View Switcher */}
+      <div className="dean-role-switch" role="tablist" aria-label="Records directory view" style={{ maxWidth: '460px' }}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={directoryTab === 'students'}
+          className={directoryTab === 'students' ? 'active' : ''}
+          onClick={() => handleDirectoryTabChange('students')}
+        >
+          <GraduationCap size={15} /> Enrolled Students ({students.length})
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={directoryTab === 'teachers'}
+          className={directoryTab === 'teachers' ? 'active' : ''}
+          onClick={() => handleDirectoryTabChange('teachers')}
+        >
+          <Users size={15} /> Faculty Teachers ({teachers.length})
+        </button>
       </div>
 
       {notice && (
@@ -2538,30 +2644,45 @@ export default function SecretaryDashboard() {
           <input
             type="text"
             className="form-input"
-            placeholder="Search by student name, ID, block, or email..."
+            placeholder={directoryTab === 'students' ? 'Search by student name, ID, block, or email...' : 'Search by teacher name, year level, or email...'}
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             style={{ height: '42px', margin: 0, width: '100%', boxSizing: 'border-box' }}
           />
         </div>
-        <select 
-          value={blockFilter} 
-          onChange={e => setBlockFilter(e.target.value)}
-          className="form-select"
-          style={{ width: '220px', height: '42px', margin: 0, boxSizing: 'border-box' }}
-        >
-          <option value="">All Year Levels &amp; Blocks</option>
-          {Object.entries(yearLevelBlocksMap).map(([yearLbl, blocks]) => (
-            <optgroup key={yearLbl} label={yearLbl}>
-              <option value={yearLbl}>All {yearLbl}</option>
-              {blocks.map(blk => (
-                <option key={blk} value={blk}>{blk}</option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
-        <select 
-          value={statusFilter} 
+        {directoryTab === 'students' ? (
+          <select
+            value={blockFilter}
+            onChange={e => setBlockFilter(e.target.value)}
+            className="form-select"
+            style={{ width: '220px', height: '42px', margin: 0, boxSizing: 'border-box' }}
+          >
+            <option value="">All Year Levels &amp; Blocks</option>
+            {Object.entries(yearLevelBlocksMap).map(([yearLbl, blocks]) => (
+              <optgroup key={yearLbl} label={yearLbl}>
+                <option value={yearLbl}>All {yearLbl}</option>
+                {blocks.map(blk => (
+                  <option key={blk} value={blk}>{blk}</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        ) : (
+          <select
+            value={blockFilter}
+            onChange={e => setBlockFilter(e.target.value)}
+            className="form-select"
+            style={{ width: '220px', height: '42px', margin: 0, boxSizing: 'border-box' }}
+          >
+            <option value="">All Handled Year Levels</option>
+            <option value="All Year Levels">Unrestricted (All Years)</option>
+            {allAvailableYearLevels.map((yr) => (
+              <option key={yr} value={yr}>{yr}</option>
+            ))}
+          </select>
+        )}
+        <select
+          value={statusFilter}
           onChange={e => setStatusFilter(e.target.value)}
           className="form-select"
           style={{ width: '160px', height: '42px', margin: 0, boxSizing: 'border-box' }}
@@ -2569,10 +2690,79 @@ export default function SecretaryDashboard() {
           <option value="">All Statuses</option>
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
-          <option value="graduated">Graduated</option>
+          {directoryTab === 'students' && <option value="graduated">Graduated</option>}
         </select>
       </div>
 
+      {directoryTab === 'teachers' ? (
+        <GlassCard style={{ padding: 0, overflow: 'hidden' }}>
+          <div className="table-responsive" style={{ margin: 0 }}>
+            <table style={{ width: '100%', minWidth: '720px', borderCollapse: 'collapse', textAlign: 'left', color: 'white', fontSize: '0.9rem' }}>
+              <thead>
+                <tr style={{ background: 'rgba(255,255,255,0.06)', borderBottom: '1px solid var(--glass-border)' }}>
+                  <th style={{ padding: '0.85rem 1.25rem' }}>Teacher Name</th>
+                  <th style={{ padding: '0.85rem 1.25rem' }}>Email Address</th>
+                  <th style={{ padding: '0.85rem 1.25rem' }}>Handled Year Level</th>
+                  <th style={{ padding: '0.85rem 1.25rem' }}>Status</th>
+                  <th style={{ padding: '0.85rem 1.25rem', textAlign: 'right' }}>Assign Year &amp; Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredTeachers.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: 'var(--neutral-400)' }}>
+                      No faculty teachers found matching your filters.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredTeachers.map((teacher) => (
+                    <tr key={teacher.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                      <td style={{ padding: '0.85rem 1.25rem', fontWeight: 700 }}>{teacher.name}</td>
+                      <td style={{ padding: '0.85rem 1.25rem', color: 'var(--neutral-300)' }}>{teacher.email}</td>
+                      <td style={{ padding: '0.85rem 1.25rem' }}>
+                        <Badge variant={teacher.grade ? 'warning' : 'primary'}>
+                          {teacher.grade || 'All Year Levels'}
+                        </Badge>
+                      </td>
+                      <td style={{ padding: '0.85rem 1.25rem' }}>
+                        <Badge variant={teacher.status === 'inactive' ? 'warning' : 'success'}>
+                          {teacher.status || 'Active'}
+                        </Badge>
+                      </td>
+                      <td style={{ padding: '0.85rem 1.25rem', textAlign: 'right' }}>
+                        <div className="table-action-group">
+                          <select
+                            className="table-action-select"
+                            value={teacher.grade || ''}
+                            onChange={(e) => handleAssignTeacherYearLevel(teacher, e.target.value)}
+                            disabled={busy}
+                            aria-label={`Assign year level for ${teacher.name}`}
+                          >
+                            <option value="" style={{ background: '#1a1a2e' }}>All Year Levels</option>
+                            {allAvailableYearLevels.map((yr) => (
+                              <option key={yr} value={yr} style={{ background: '#1a1a2e' }}>{yr}</option>
+                            ))}
+                          </select>
+                          <select
+                            className="table-action-select"
+                            value={teacher.status || 'active'}
+                            onChange={(e) => handleToggleStatus(teacher, e.target.value)}
+                            disabled={busy}
+                            aria-label={`Status for ${teacher.name}`}
+                          >
+                            <option value="active" style={{ background: '#1a1a2e' }}>Set Active</option>
+                            <option value="inactive" style={{ background: '#1a1a2e' }}>Set Inactive</option>
+                          </select>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </GlassCard>
+      ) : (
       <GlassCard style={{ padding: 0, overflow: 'hidden' }}>
         <div className="table-responsive" style={{ margin: 0 }}>
           <table style={{ width: '100%', minWidth: '680px', borderCollapse: 'collapse', textAlign: 'left', color: 'white', fontSize: '0.9rem' }}>
@@ -2612,18 +2802,11 @@ export default function SecretaryDashboard() {
                   </td>
                   <td style={{ padding: '0.85rem 1.25rem', textAlign: 'right' }}>
                     <select
+                      className="table-action-select"
                       value={student.status || 'active'}
                       onChange={e => handleToggleStatus(student, e.target.value)}
                       disabled={busy}
-                      style={{
-                        background: 'rgba(255,255,255,0.1)',
-                        border: '1px solid var(--glass-border)',
-                        color: 'white',
-                        padding: '0.25rem 0.5rem',
-                        borderRadius: 'var(--radius-sm)',
-                        fontSize: '0.8rem',
-                        cursor: 'pointer'
-                      }}
+                      aria-label={`Status for ${student.name}`}
                     >
                       <option value="active" style={{ background: '#1a1a2e' }}>Set Active</option>
                       <option value="inactive" style={{ background: '#1a1a2e' }}>Set Inactive</option>
@@ -2637,6 +2820,7 @@ export default function SecretaryDashboard() {
         </table>
         </div>
       </GlassCard>
+      )}
     </div>
   );
 

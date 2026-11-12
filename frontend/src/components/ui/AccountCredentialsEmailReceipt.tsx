@@ -291,7 +291,9 @@ export const AccountCredentialsEmailReceipt: React.FC<AccountCredentialsEmailRec
             isStudent
               ? `<tr><td class="lbl">Student ID Number</td><td class="val">${esc(receipt.lrn || 'N/A')}</td></tr>
                  <tr><td class="lbl">Year Level &amp; Section</td><td class="val">${esc(receipt.grade || '1st Year')} &bull; ${esc(receipt.section || 'Block - 1A')}</td></tr>`
-              : ''
+              : receipt.role === 'teacher'
+                ? `<tr><td class="lbl">Handled Year Level</td><td class="val">${esc(receipt.grade || 'All Year Levels')}</td></tr>`
+                : ''
           }
           <tr><td class="lbl">Academic Year</td><td class="val">S.Y. ${esc(receipt.school_year)}</td></tr>
           <tr><td class="lbl">Dispatched To Email</td><td class="val">${esc(receipt.recipient)}</td></tr>
@@ -612,6 +614,17 @@ export const AccountCredentialsEmailReceipt: React.FC<AccountCredentialsEmailRec
                     </span>
                   </div>
                 </>
+              )}
+
+              {!isStudent && receipt.role === 'teacher' && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', paddingBottom: '0.5rem', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                  <span style={{ color: 'var(--neutral-400)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                    <GraduationCap size={14} /> Handled Year Level
+                  </span>
+                  <span style={{ color: '#fde68a', fontWeight: 800, textAlign: 'right' }}>
+                    {receipt.grade || 'All Year Levels'}
+                  </span>
+                </div>
               )}
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}>

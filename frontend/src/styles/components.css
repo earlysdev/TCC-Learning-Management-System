@@ -22,6 +22,19 @@
   transform: scale(0.98);
 }
 
+.btn:focus-visible {
+  outline: 2px solid var(--accent-gold-light);
+  outline-offset: 2px;
+}
+
+.btn-icon-left,
+.btn-icon-right {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
 .btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
@@ -99,6 +112,34 @@
 .btn-sm { padding: 0.35rem 0.7rem; font-size: 0.76rem; }
 .btn-md { padding: 0.55rem 1.2rem; font-size: 0.86rem; }
 .btn-lg { padding: 0.7rem 1.45rem; font-size: 0.94rem; }
+
+/* Compact Table Row Action Controls (height/radius parity between action buttons & selects) */
+.table-action-group {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  white-space: nowrap;
+}
+
+.btn.btn-row-action {
+  height: 36px;
+  padding: 0 0.85rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  gap: 0.4rem;
+  flex-shrink: 0;
+  background: rgba(245, 158, 11, 0.14);
+  border: 1px solid rgba(245, 158, 11, 0.38);
+  color: #fde68a;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+.btn.btn-row-action:hover:not(:disabled) {
+  background: rgba(245, 158, 11, 0.24);
+  border-color: rgba(251, 191, 36, 0.75);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.24);
+}
 
 /* Cards */
 .card-glass {
@@ -234,6 +275,20 @@ select:focus,
   border-color: var(--accent-gold, #f59e0b);
   background-color: rgba(48, 10, 16, 0.98);
   box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.3);
+}
+
+select.table-action-select {
+  width: auto;
+  min-width: 132px;
+  height: 36px;
+  padding: 0 2.1rem 0 0.75rem;
+  background-color: rgba(35, 7, 12, 0.9);
+  background-position: right 0.7rem center;
+  border-radius: var(--radius-md);
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1;
+  flex-shrink: 0;
 }
 
 /* System-Themed Native Option Elements */

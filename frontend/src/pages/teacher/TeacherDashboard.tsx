@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import { lmsFetch, getLmsUser, extractCollection } from '../../lmsApi';
-import type { Quiz, User, Subject } from '../../lib/types';
+import type { Quiz, User, Subject, TeacherRemedialDraft } from '../../lib/types';
 import { BSIT_SUBJECT_OPTIONS, ALL_BLOCKS, getYearLevelFromBlock } from '../../lib/constants';
 import { readPdfFile, type ParsedPdfPayload } from '../../lib/pdfUtils';
 import { 
@@ -20,6 +20,7 @@ import ProfileUpdateCard from '../../components/ui/ProfileUpdateCard';
 import QuizEditorModal, { type QuizEditorValues } from './QuizEditorModal';
 import PublishQuizModal, { type PublishAudience, type SectionOption } from './PublishQuizModal';
 import QuizSubmissionsModal from './QuizSubmissionsModal';
+import TeacherAiInsightsPanel from './TeacherAiInsightsPanel';
 import { useToastContext } from '../../contexts/ToastContext';
 
 interface TeacherMetrics {
@@ -48,7 +49,7 @@ function extractQuiz(res: { quiz?: Quiz } | Quiz): Quiz {
   return res as Quiz;
 }
 
-function rosterSections(students: User[]): SectionOption[] {
+function rosterSections(students: User[], handledYearLevel?: string | null): SectionOption[] {
   const safeList = Array.isArray(students) ? students : [];
   const counts = new Map<string, number>();
   safeList.forEach((student) => {
@@ -57,7 +58,11 @@ function rosterSections(students: User[]): SectionOption[] {
     counts.set(blk, (counts.get(blk) || 0) + 1);
   });
 
-  const allBlockLabels = Array.from(new Set([...ALL_BLOCKS, ...Array.from(counts.keys())]));
+  const baseBlocks = handledYearLevel
+    ? ALL_BLOCKS.filter((blk) => getYearLevelFromBlock(blk) === handledYearLevel)
+    : ALL_BLOCKS;
+
+  const allBlockLabels = Array.from(new Set([...baseBlocks, ...Array.from(counts.keys())]));
   return allBlockLabels.map((label) => ({
     id: label,
     label,
@@ -102,12 +107,14 @@ export default function TeacherDashboard() {
   const initialSection = subpage === 'dashboard' ? 'overview' : (subpage || 'overview');
   const [activeSection, setActiveSection] = useState(initialSection);
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
+  const [handledYearLevel, setHandledYearLevel] = useState<string | null>(user?.grade || null);
   const [metrics, setMetrics] = useState<TeacherMetrics>({ quizzes: 0, published: 0, submissions: 0, average: 0 });
   const [students, setStudents] = useState<User[]>([]);
   const [sections, setSections] = useState<SectionOption[]>([]);
   const [editingQuiz, setEditingQuiz] = useState<Quiz | null>(null);
   const [publishingQuiz, setPublishingQuiz] = useState<Quiz | null>(null);
   const [submissionsQuiz, setSubmissionsQuiz] = useState<Quiz | null>(null);
+  const [draftingRemedial, setDraftingRemedial] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -136,9 +143,12 @@ export default function TeacherDashboard() {
     try {
       setLoading(true);
       setError(null);
-      const data = await lmsFetch<{ metrics: TeacherMetrics; quizzes: Quiz[] }>('/teacher/dashboard');
+      const data = await lmsFetch<{ handled_year_level?: string | null; metrics: TeacherMetrics; quizzes: Quiz[] }>('/teacher/dashboard');
       setMetrics(data.metrics || { quizzes: 0, published: 0, submissions: 0, average: 0 });
       setQuizzes(data.quizzes || []);
+      if (data.handled_year_level !== undefined) {
+        setHandledYearLevel(data.handled_year_level);
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Could not load teacher dashboard data');
     } finally {
@@ -151,8 +161,12 @@ export default function TeacherDashboard() {
       const teacherRoster = await lmsFetch<unknown>('/teacher/students').catch(() => null);
       const data = teacherRoster || await lmsFetch<unknown>('/users?role=student');
       const roster = collectionFromResponse<User>(data);
+      const yearHint =
+        teacherRoster && typeof teacherRoster === 'object' && 'handled_year_level' in teacherRoster
+          ? (teacherRoster as { handled_year_level?: string | null }).handled_year_level ?? null
+          : handledYearLevel;
       setStudents(Array.isArray(roster) ? roster : []);
-      setSections((current) => current.length > 0 ? current : rosterSections(roster));
+      setSections((current) => current.length > 0 ? current : rosterSections(roster, yearHint));
     } catch {
       setStudents([]);
     }
@@ -176,7 +190,10 @@ export default function TeacherDashboard() {
     try {
       const data = await lmsFetch<unknown>('/sections');
       const availableSections = toSectionOptions(collectionFromResponse<SectionApiRecord>(data));
-      if (availableSections.length > 0) setSections(availableSections);
+      const filteredSections = handledYearLevel
+        ? availableSections.filter((sec) => getYearLevelFromBlock(sec.label) === handledYearLevel)
+        : availableSections;
+      if (filteredSections.length > 0) setSections(filteredSections);
     } catch {
       // Sections can be derived from the learner roster for the local demo.
     }
@@ -416,11 +433,18 @@ export default function TeacherDashboard() {
           <span style={{ fontSize: '0.8rem', color: 'var(--primary-300)', letterSpacing: '1px', textTransform: 'uppercase', fontWeight: 600 }}>
             TEACHER DASHBOARD
           </span>
-          <h1 style={{ fontSize: '2.25rem', fontWeight: 800, color: 'white', marginTop: '0.25rem' }}>
-            Welcome, {user?.name || 'Teacher'}!
-          </h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
+            <h1 style={{ fontSize: '2.25rem', fontWeight: 800, color: 'white', margin: 0 }}>
+              Welcome, {user?.name || 'Teacher'}!
+            </h1>
+            {handledYearLevel && (
+              <Badge variant="warning">Assigned: {handledYearLevel}</Badge>
+            )}
+          </div>
           <p style={{ color: 'var(--neutral-300)', marginTop: '0.25rem' }}>
-            Author custom assessments, oversee class submissions, and analyze learner mastery.
+            {handledYearLevel
+              ? `Author assessments and track mastery for your assigned ${handledYearLevel} classes.`
+              : 'Author custom assessments, oversee class submissions, and analyze learner mastery.'}
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
@@ -728,8 +752,8 @@ export default function TeacherDashboard() {
               value={selectedTargetSection}
               onChange={setSelectedTargetSection}
               options={[
-                { value: '', label: 'No block · assign later' },
-                ...sections.map((s) => ({
+                { value: '', label: handledYearLevel ? `No block · ${handledYearLevel} (assign later)` : 'No block · assign later' },
+                ...scopedSections.map((s) => ({
                   value: String(s.id),
                   label: `${s.label}${s.studentCount ? ` (${s.studentCount} ${s.studentCount === 1 ? 'student' : 'students'})` : ''}`
                 })),
@@ -1052,17 +1076,29 @@ export default function TeacherDashboard() {
     </div>
   );
 
+  const scopedSections = handledYearLevel
+    ? sections.filter((s) => getYearLevelFromBlock(s.label) === handledYearLevel)
+    : sections;
+  const scopedBlocks = handledYearLevel
+    ? ALL_BLOCKS.filter((blk) => getYearLevelFromBlock(blk) === handledYearLevel)
+    : ALL_BLOCKS;
+
   const renderStudents = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       <div>
         <span style={{ fontSize: '0.8rem', color: 'var(--primary-300)', letterSpacing: '1px', textTransform: 'uppercase', fontWeight: 600 }}>
           STUDENT ROSTER
         </span>
-        <h1 style={{ fontSize: '2rem', fontWeight: 800, color: 'white', marginTop: '0.25rem' }}>
-          Students
-        </h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
+          <h1 style={{ fontSize: '2rem', fontWeight: 800, color: 'white', margin: 0 }}>
+            Students
+          </h1>
+          {handledYearLevel && <Badge variant="warning">Handled: {handledYearLevel}</Badge>}
+        </div>
         <p style={{ color: 'var(--neutral-300)' }}>
-          Directory of student learners enrolled across college blocks (1st Year – 4th Year).
+          {handledYearLevel
+            ? `Directory of ${handledYearLevel} student learners assigned to your teaching load.`
+            : 'Directory of student learners enrolled across college blocks (1st Year – 4th Year).'}
         </p>
       </div>
 
@@ -1078,14 +1114,19 @@ export default function TeacherDashboard() {
           <Select 
             value={blockFilter} 
             onChange={setBlockFilter}
-            options={[
-              { value: '', label: 'All Blocks' },
-              { value: '1st Year', label: 'All 1st Year (1A–1E)' },
-              { value: '2nd Year', label: 'All 2nd Year (2A–2E)' },
-              { value: '3rd Year', label: 'All 3rd Year (3A–3E)' },
-              { value: '4th Year', label: 'All 4th Year (4A–4E)' },
-              ...ALL_BLOCKS.map((blk) => ({ value: blk, label: blk })),
-            ]}
+            options={handledYearLevel
+              ? [
+                  { value: '', label: `All ${handledYearLevel} Blocks` },
+                  ...scopedBlocks.map((blk) => ({ value: blk, label: blk })),
+                ]
+              : [
+                  { value: '', label: 'All Blocks' },
+                  { value: '1st Year', label: 'All 1st Year (1A–1E)' },
+                  { value: '2nd Year', label: 'All 2nd Year (2A–2E)' },
+                  { value: '3rd Year', label: 'All 3rd Year (3A–3E)' },
+                  { value: '4th Year', label: 'All 4th Year (4A–4E)' },
+                  ...ALL_BLOCKS.map((blk) => ({ value: blk, label: blk })),
+                ]}
           />
         </div>
       </div>
@@ -1173,52 +1214,46 @@ export default function TeacherDashboard() {
     </div>
   );
 
+  const handleDraftRemedialQuiz = async (draft: TeacherRemedialDraft) => {
+    setDraftingRemedial(true);
+    setError(null);
+    try {
+      const data = await lmsFetch<{ quiz: Quiz }>('/teacher/quizzes', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: draft.topic,
+          subject: draft.subject,
+          topic: draft.topic,
+          count: draft.count || 5,
+          time_limit_minutes: 15,
+          quiz_type: 'formative',
+          allow_review: true,
+          generate_with_ai: true,
+          difficulty: draft.difficulty || 'medium',
+          target_type: draft.target_section ? 'section' : 'all',
+          target_sections: draft.target_section ? [draft.target_section] : null,
+        }),
+      });
+      setQuizzes((current) => [data.quiz, ...current.filter((q) => q.id !== data.quiz.id)]);
+      setEditingQuiz(data.quiz);
+      setNotice(`AI Remedial Quiz draft "${data.quiz.title}" created from teaching insights. Review and publish when ready.`);
+      showToast(`Drafted remedial quiz "${data.quiz.title}"!`, 'success');
+      void loadDashboard();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to draft AI remedial quiz.';
+      setError(msg);
+      showToast(msg, 'error');
+    } finally {
+      setDraftingRemedial(false);
+    }
+  };
+
   const renderInsights = () => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      <div>
-        <span style={{ fontSize: '0.8rem', color: 'var(--accent-purple-light)', letterSpacing: '1px', textTransform: 'uppercase', fontWeight: 600 }}>
-          INTELLIGENT FEEDBACK
-        </span>
-        <h1 style={{ fontSize: '2rem', fontWeight: 800, color: 'white', marginTop: '0.25rem' }}>
-          AI Teaching Insights
-        </h1>
-        <p style={{ color: 'var(--neutral-300)' }}>
-          Automated analysis of missed competencies and recommended remediation topics.
-        </p>
-      </div>
-
-      {quizzes.length === 0 || metrics.submissions === 0 ? (
-        <GlassCard style={{ textAlign: 'center', padding: '3rem' }}>
-          <Sparkles size={42} style={{ color: 'var(--accent-purple-light)', margin: '0 auto 0.75rem' }} />
-          <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: 'white', margin: 0 }}>No Assessment Telemetry Yet</h3>
-          <p style={{ color: 'var(--neutral-300)', marginTop: '0.5rem', maxWidth: '520px', marginInline: 'auto' }}>
-            Once students complete published quizzes, AI teaching insights and competency remediation suggestions will be generated from live scores.
-          </p>
-        </GlassCard>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
-          <GlassCard style={{ borderLeft: '4px solid var(--accent-purple-light)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-              <Sparkles size={20} style={{ color: 'var(--accent-purple-light)' }} />
-              <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'white' }}>Class Mastery Summary</h3>
-            </div>
-            <p style={{ color: 'var(--neutral-200)', lineHeight: 1.6, fontSize: '0.9rem' }}>
-              Across {metrics.submissions} completed submission(s), the composite class average is <strong>{metrics.average}%</strong> across {metrics.published} published assessment(s).
-            </p>
-          </GlassCard>
-
-          <GlassCard style={{ borderLeft: '4px solid var(--primary-400)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-              <Target size={20} style={{ color: 'var(--primary-400)' }} />
-              <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'white' }}>Suggested Action</h3>
-            </div>
-            <p style={{ color: 'var(--neutral-200)', lineHeight: 1.6, fontSize: '0.9rem' }}>
-              Review individual quiz submission logs to inspect missed skill competencies and verify proctoring integrity alerts per block.
-            </p>
-          </GlassCard>
-        </div>
-      )}
-    </div>
+    <TeacherAiInsightsPanel
+      handledYearLevel={handledYearLevel}
+      draftingRemedial={draftingRemedial}
+      onDraftRemedialQuiz={handleDraftRemedialQuiz}
+    />
   );
 
   const renderSettings = () => (
@@ -1263,9 +1298,9 @@ export default function TeacherDashboard() {
             </div>
           </div>
           <div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', textTransform: 'uppercase', fontWeight: 600 }}>Assigned Blocks</div>
-            <div style={{ color: 'white', fontWeight: 600, marginTop: '0.2rem' }}>
-              1st Year – 4th Year (Blocks 1A–4E)
+            <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', textTransform: 'uppercase', fontWeight: 600 }}>Assigned Year Level &amp; Blocks</div>
+            <div style={{ color: handledYearLevel ? '#fde68a' : 'white', fontWeight: 700, marginTop: '0.2rem' }}>
+              {handledYearLevel ? `${handledYearLevel} (${scopedBlocks.join(', ') || 'Assigned Blocks'})` : '1st Year – 4th Year (All Blocks)'}
             </div>
           </div>
           <div>
@@ -1317,7 +1352,8 @@ export default function TeacherDashboard() {
         quiz={publishingQuiz}
         isOpen={Boolean(publishingQuiz)}
         students={students}
-        sections={sections}
+        sections={scopedSections}
+        handledYearLevel={handledYearLevel}
         busy={busy}
         onClose={() => setPublishingQuiz(null)}
         onPublish={handlePublishQuiz}

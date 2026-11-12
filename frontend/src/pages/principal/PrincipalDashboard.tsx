@@ -138,6 +138,7 @@ export default function PrincipalDashboard() {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [newStudentId, setNewStudentId] = useState('');
   const [newYearLevel, setNewYearLevel] = useState('1st Year');
+  const [newTeacherYearLevel, setNewTeacherYearLevel] = useState('');
   const [placementMode, setPlacementMode] = useState<'auto' | 'manual'>('auto');
   const [manualSection, setManualSection] = useState('');
   const [creatingAccount, setCreatingAccount] = useState(false);
@@ -203,6 +204,17 @@ export default function PrincipalDashboard() {
       setActiveSection(pathToSection[subpage]);
     }
   }, [subpage]);
+
+  useEffect(() => {
+    if (!editingStudent) return;
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !savingPlacement) {
+        setEditingStudent(null);
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [editingStudent, savingPlacement]);
 
   const runSecurityResolution = async <T extends { message?: string }>(
     endpoint: string,
@@ -311,6 +323,28 @@ export default function PrincipalDashboard() {
       await loadDeanData();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Could not update user status';
+      setError(msg);
+      showToast(msg, 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleAssignTeacherYearLevel = async (teacher: User, nextGrade: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await lmsFetch(`/users/${teacher.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ grade: nextGrade || null }),
+      });
+      const label = nextGrade || 'All Year Levels';
+      const msg = `Assigned ${teacher.name} to handle ${label}.`;
+      setNotice(msg);
+      showToast(msg, 'success');
+      await loadDeanData();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Could not assign teacher year level';
       setError(msg);
       showToast(msg, 'error');
     } finally {
@@ -467,6 +501,7 @@ export default function PrincipalDashboard() {
     setNewPassword('');
     setShowNewPassword(false);
     setNewStudentId('');
+    setNewTeacherYearLevel('');
     setPlacementMode('auto');
     setManualSection('');
   };
@@ -519,6 +554,7 @@ export default function PrincipalDashboard() {
     setCreatingAccount(true);
     try {
       const fullName = `${newFirstName} ${newLastName}`.trim();
+      const assignedTeacherGrade = newRole === 'teacher' ? (newTeacherYearLevel.trim() || null) : null;
       const res = await lmsFetch<{
         data?: User;
         message?: string;
@@ -533,7 +569,7 @@ export default function PrincipalDashboard() {
           password: newPassword,
           role: newRole,
           lrn: newRole === 'student' ? newStudentId.trim() : null,
-          grade: newRole === 'student' ? newYearLevel : null,
+          grade: newRole === 'student' ? newYearLevel : assignedTeacherGrade,
           section: newRole === 'student' ? (placementMode === 'manual' && manualSection ? manualSection : 'auto') : null,
         }),
       });
@@ -550,7 +586,7 @@ export default function PrincipalDashboard() {
         departmentLabel: `${receiptDepartment} — ${getDepartmentName(receiptDepartment)}`,
         schoolYear: res?.data?.school_year || CURRENT_SCHOOL_YEAR,
         lrn: newRole === 'student' ? newStudentId.trim() : null,
-        grade: newRole === 'student' ? newYearLevel : null,
+        grade: newRole === 'student' ? newYearLevel : assignedTeacherGrade,
         section: newRole === 'student' ? finalSection : null,
         plainPassword: newPassword,
         issuedBy: user?.name || 'Office of the College Dean',
@@ -861,7 +897,7 @@ export default function PrincipalDashboard() {
                   <th style={{ padding: '0.85rem 1.25rem' }}>Staff Member Name</th>
                   <th style={{ padding: '0.85rem 1.25rem' }}>Role</th>
                   <th style={{ padding: '0.85rem 1.25rem' }}>Official Email</th>
-                  <th style={{ padding: '0.85rem 1.25rem' }}>Department / Office</th>
+                  <th style={{ padding: '0.85rem 1.25rem' }}>Handled Year / Office</th>
                   <th style={{ padding: '0.85rem 1.25rem' }}>Status</th>
                   <th style={{ padding: '0.85rem 1.25rem', textAlign: 'right' }}>Actions</th>
                 </tr>
@@ -887,7 +923,11 @@ export default function PrincipalDashboard() {
                       </td>
                       <td style={{ padding: '0.85rem 1.25rem', color: 'var(--neutral-300)' }}>
                         {u.role === 'teacher'
-                          ? `${getDepartmentName(u.department || departmentCode)} (${u.department || departmentCode} Faculty)`
+                          ? (
+                            <Badge variant={u.grade ? 'warning' : 'primary'}>
+                              {u.grade || 'All Year Levels'}
+                            </Badge>
+                          )
                           : `Office of the ${u.department || departmentCode} Secretary`}
                       </td>
                       <td style={{ padding: '0.85rem 1.25rem' }}>
@@ -896,23 +936,32 @@ export default function PrincipalDashboard() {
                         </Badge>
                       </td>
                       <td style={{ padding: '0.85rem 1.25rem', textAlign: 'right' }}>
-                        <select
-                          value={u.status || 'active'}
-                          onChange={e => handleToggleUserStatus(u, e.target.value)}
-                          disabled={busy}
-                          style={{
-                            background: 'rgba(255,255,255,0.1)',
-                            border: '1px solid var(--glass-border)',
-                            color: 'white',
-                            padding: '0.25rem 0.5rem',
-                            borderRadius: 'var(--radius-sm)',
-                            fontSize: '0.8rem',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          <option value="active" style={{ background: '#1a1a2e' }}>Set Active</option>
-                          <option value="inactive" style={{ background: '#1a1a2e' }}>Set Inactive</option>
-                        </select>
+                        <div className="table-action-group">
+                          {u.role === 'teacher' && (
+                            <select
+                              className="table-action-select"
+                              value={u.grade || ''}
+                              onChange={e => handleAssignTeacherYearLevel(u, e.target.value)}
+                              disabled={busy}
+                              aria-label={`Assign year level for ${u.name}`}
+                            >
+                              <option value="" style={{ background: '#1a1a2e' }}>All Year Levels</option>
+                              {Object.keys(yearLevelBlocksMap).map((yr) => (
+                                <option key={yr} value={yr} style={{ background: '#1a1a2e' }}>{yr}</option>
+                              ))}
+                            </select>
+                          )}
+                          <select
+                            className="table-action-select"
+                            value={u.status || 'active'}
+                            onChange={e => handleToggleUserStatus(u, e.target.value)}
+                            disabled={busy}
+                            aria-label={`Status for ${u.name}`}
+                          >
+                            <option value="active" style={{ background: '#1a1a2e' }}>Set Active</option>
+                            <option value="inactive" style={{ background: '#1a1a2e' }}>Set Inactive</option>
+                          </select>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -1056,29 +1105,31 @@ export default function PrincipalDashboard() {
                           </Badge>
                         </td>
                         <td style={{ padding: '0.85rem 1.25rem', textAlign: 'right' }}>
-                          <div style={{ display: 'inline-flex', gap: '0.5rem', alignItems: 'center', justifyContent: 'flex-end' }}>
-                          <Button variant="outline" size="sm" disabled={busy} onClick={() => openPlacementEditor(u)}>
-                            <Pencil size={13} /> Reassign
-                          </Button>
-                          <select
-                            value={u.status || 'active'}
-                            onChange={e => handleToggleUserStatus(u, e.target.value)}
-                            disabled={busy}
-                            aria-label={`Status for ${u.name}`}
-                            style={{
-                              background: 'rgba(255,255,255,0.1)',
-                              border: '1px solid var(--glass-border)',
-                              color: 'white',
-                              padding: '0.3rem 0.5rem',
-                              borderRadius: 'var(--radius-sm)',
-                              fontSize: '0.8rem',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            <option value="active" style={{ background: '#1a1a2e' }}>Set Active</option>
-                            <option value="inactive" style={{ background: '#1a1a2e' }}>Set Inactive</option>
-                            <option value="graduated" style={{ background: '#1a1a2e' }}>Set Graduated</option>
-                          </select>
+                          <div className="table-action-group">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="btn-row-action"
+                              disabled={busy}
+                              leftIcon={<Pencil size={14} aria-hidden="true" />}
+                              aria-label={`Reassign year level and section for ${u.name}`}
+                              title={`Reassign ${u.name}'s year level and section`}
+                              onClick={() => openPlacementEditor(u)}
+                            >
+                              Reassign
+                            </Button>
+                            <select
+                              className="table-action-select"
+                              value={u.status || 'active'}
+                              onChange={e => handleToggleUserStatus(u, e.target.value)}
+                              disabled={busy}
+                              aria-label={`Status for ${u.name}`}
+                            >
+                              <option value="active" style={{ background: '#1a1a2e' }}>Set Active</option>
+                              <option value="inactive" style={{ background: '#1a1a2e' }}>Set Inactive</option>
+                              <option value="graduated" style={{ background: '#1a1a2e' }}>Set Graduated</option>
+                            </select>
                           </div>
                         </td>
                       </tr>
@@ -1399,6 +1450,18 @@ export default function PrincipalDashboard() {
                   <div style={{ width: `${passwordStrength.score}%`, height: '100%', background: passwordStrength.color, transition: 'width 0.3s' }} />
                 </div>
               </div>
+
+              {newRole === 'teacher' && (
+                <div>
+                  <label style={fieldLabelStyle} htmlFor="dean-teacher-year">Handled Year Level</label>
+                  <select id="dean-teacher-year" className="form-select" style={fieldInputStyle} value={newTeacherYearLevel} onChange={(e) => setNewTeacherYearLevel(e.target.value)}>
+                    <option value="">All Year Levels (Unrestricted)</option>
+                    {Object.keys(yearLevelBlocksMap).map((yr) => (
+                      <option key={yr} value={yr}>{yr} Only</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {isStudent && (
                 <>

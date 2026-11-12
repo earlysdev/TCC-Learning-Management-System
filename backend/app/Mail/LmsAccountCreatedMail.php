@@ -119,9 +119,11 @@ class LmsAccountCreatedMail extends Mailable
         $issuerRole = htmlspecialchars($this->issuerRoleLabel);
         $issuedAt = htmlspecialchars($this->issuedAt);
         $isStudent = strtolower((string) $this->user->role) === 'student';
+        $isTeacher = strtolower((string) $this->user->role) === 'teacher';
         $studentId = htmlspecialchars((string) ($this->user->lrn ?: 'N/A'));
         $yearLevel = htmlspecialchars((string) ($this->user->grade ?: '1st Year'));
         $sectionName = htmlspecialchars((string) ($this->user->section ?: 'Block - 1A'));
+        $handledYearLevel = htmlspecialchars((string) ($this->user->yearLevelLabel() ?: 'All Year Levels'));
 
         $studentProfileRows = $isStudent
             ? <<<HTML
@@ -134,7 +136,14 @@ class LmsAccountCreatedMail extends Mailable
                 <td class="meta-value"><strong style="color: #6ee7b7;">{$yearLevel} &bull; {$sectionName}</strong></td>
               </tr>
 HTML
-            : '';
+            : ($isTeacher
+                ? <<<HTML
+              <tr>
+                <td class="meta-label">Handled Year Level</td>
+                <td class="meta-value"><strong style="color: #fde68a;">{$handledYearLevel}</strong></td>
+              </tr>
+HTML
+                : '');
 
         $studentCredentialRow = $isStudent
             ? <<<HTML

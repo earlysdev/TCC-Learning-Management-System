@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -670,6 +671,273 @@ class LmsAiService
         }
 
         return $fallback;
+    }
+
+    /**
+     * Synthesize actionable AI pedagogical insights and teaching recommendations from aggregated
+     * teacher quiz telemetry. Uses Gemini JSON output when configured, with deterministic fallback.
+     *
+     * @param array<string, mixed> $telemetry
+     * @return array{
+     *   headline: string,
+     *   executive_summary: string,
+     *   recommendations: array<int, array<string, string>>,
+     *   teaching_strategies: array<int, string>,
+     *   source: string
+     * }
+     */
+    public function teacherInsights(array $telemetry, bool $refresh = false): array
+    {
+        $fallback = $this->buildTeacherInsightsFallback($telemetry);
+        $summary = is_array($telemetry['summary'] ?? null) ? $telemetry['summary'] : [];
+        if ((int) ($summary['total_attempts'] ?? 0) === 0) {
+            return $fallback;
+        }
+
+        $cacheKey = 'lms_teacher_insights_' . sha1(json_encode([
+            'v' => 1,
+            'summary' => $summary,
+            'weak' => array_slice($telemetry['weak_competencies'] ?? [], 0, 5),
+            'missed' => array_slice($telemetry['missed_questions'] ?? [], 0, 5),
+            'sections' => array_slice($telemetry['section_breakdown'] ?? [], 0, 6),
+        ]) ?: '');
+
+        if (! $refresh && ($cached = Cache::get($cacheKey)) && is_array($cached)) {
+            return $cached;
+        }
+
+        $key = config('services.gemini.api_key');
+        if (! is_string($key) || trim($key) === '') {
+            Cache::put($cacheKey, $fallback, now()->addMinutes(10));
+            return $fallback;
+        }
+
+        $prompt = "You are an academic instructional coach helping a college IT instructor improve class mastery.\n"
+            . "Analyze the anonymized quiz telemetry below and return ONLY valid JSON.\n\n"
+            . 'Class Summary: ' . json_encode($summary) . "\n"
+            . 'Weakest Competencies: ' . json_encode(array_slice($telemetry['weak_competencies'] ?? [], 0, 5)) . "\n"
+            . 'Most Missed Questions & Misconceptions: ' . json_encode(array_slice($telemetry['missed_questions'] ?? [], 0, 5)) . "\n"
+            . 'Section Performance: ' . json_encode(array_slice($telemetry['section_breakdown'] ?? [], 0, 6)) . "\n\n"
+            . "Return JSON with:\n"
+            . "- headline (string, max 110 chars: sharp diagnosis of the main instructional priority)\n"
+            . "- executive_summary (string, 2-3 concrete sentences citing specific competencies, miss rates, or sections)\n"
+            . "- recommendations (array of 3-4 objects, each with: title, priority ('high'|'medium'|'positive'), category ('remediation'|'misconception'|'integrity'|'differentiation'), rationale, action_step, target_group)\n"
+            . "- teaching_strategies (array of 3 concise, practical next-class teaching activities tailored to the missed topics).";
+
+        foreach ($this->candidateModels() as $model) {
+            try {
+                $response = Http::withoutVerifying()->withHeaders(['x-goog-api-key' => $key])->timeout(18)->post(
+                    "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent",
+                    [
+                        'contents' => [['parts' => [['text' => $prompt]]]],
+                        'generationConfig' => ['responseMimeType' => 'application/json', 'temperature' => 0.3],
+                    ],
+                );
+
+                if ($response->status() === 503 || $response->status() === 429) {
+                    continue;
+                }
+
+                $json = $response->throw()->json();
+                $text = $json['candidates'][0]['content']['parts'][0]['text'] ?? '';
+                $data = json_decode($text, true, flags: JSON_THROW_ON_ERROR);
+
+                if (! is_string($data['headline'] ?? null) || ! is_string($data['executive_summary'] ?? null) || ! is_array($data['recommendations'] ?? null)) {
+                    continue;
+                }
+
+                $allowedPriorities = ['high', 'medium', 'positive'];
+                $allowedCategories = ['remediation', 'misconception', 'integrity', 'differentiation'];
+                $recs = [];
+                foreach (array_slice($data['recommendations'], 0, 4) as $rec) {
+                    if (! is_array($rec) || empty($rec['title']) || empty($rec['action_step'])) {
+                        continue;
+                    }
+                    $priority = strtolower((string) ($rec['priority'] ?? 'medium'));
+                    $category = strtolower((string) ($rec['category'] ?? 'remediation'));
+                    $recs[] = [
+                        'title' => Str::limit(strip_tags((string) $rec['title']), 90),
+                        'priority' => in_array($priority, $allowedPriorities, true) ? $priority : 'medium',
+                        'category' => in_array($category, $allowedCategories, true) ? $category : 'remediation',
+                        'rationale' => Str::limit(strip_tags((string) ($rec['rationale'] ?? '')), 240),
+                        'action_step' => Str::limit(strip_tags((string) $rec['action_step']), 240),
+                        'target_group' => Str::limit(strip_tags((string) ($rec['target_group'] ?? 'All scoped learners')), 80),
+                    ];
+                }
+
+                if ($recs === []) {
+                    continue;
+                }
+
+                $strategies = is_array($data['teaching_strategies'] ?? null)
+                    ? array_values(array_filter(array_slice(array_map(
+                        fn ($item) => Str::limit(strip_tags((string) $item), 220),
+                        $data['teaching_strategies']
+                    ), 0, 4)))
+                    : $fallback['teaching_strategies'];
+
+                $result = [
+                    'headline' => Str::limit(strip_tags($data['headline']), 120),
+                    'executive_summary' => Str::limit(strip_tags($data['executive_summary']), 520),
+                    'recommendations' => $recs,
+                    'teaching_strategies' => $strategies !== [] ? $strategies : $fallback['teaching_strategies'],
+                    'source' => 'gemini',
+                ];
+
+                Cache::put($cacheKey, $result, now()->addMinutes(10));
+                return $result;
+            } catch (\Throwable) {
+                continue;
+            }
+        }
+
+        Cache::put($cacheKey, $fallback, now()->addMinutes(10));
+        return $fallback;
+    }
+
+    /**
+     * @param array<string, mixed> $telemetry
+     * @return array{
+     *   headline: string,
+     *   executive_summary: string,
+     *   recommendations: array<int, array<string, string>>,
+     *   teaching_strategies: array<int, string>,
+     *   source: string
+     * }
+     */
+    private function buildTeacherInsightsFallback(array $telemetry): array
+    {
+        $summary = is_array($telemetry['summary'] ?? null) ? $telemetry['summary'] : [];
+        $totalAttempts = (int) ($summary['total_attempts'] ?? 0);
+        $avg = (float) ($summary['average_percentage'] ?? 0);
+        $passRate = (float) ($summary['pass_rate'] ?? 0);
+        $atRiskCount = (int) ($summary['at_risk_count'] ?? 0);
+        $flaggedCount = (int) ($summary['flagged_attempts'] ?? 0);
+        $handledYear = $summary['handled_year_level'] ?? null;
+
+        if ($totalAttempts === 0) {
+            $scopeNote = $handledYear ? " for your assigned {$handledYear} classes" : '';
+            return [
+                'headline' => 'Awaiting Student Assessment Data',
+                'executive_summary' => "No completed submissions are recorded{$scopeNote} yet. Publish an assessment or select another quiz filter to unlock item-level misconception detection, mastery bands, and remedial quiz drafting.",
+                'recommendations' => [
+                    [
+                        'title' => 'Publish a Baseline Diagnostic Quiz',
+                        'priority' => 'medium',
+                        'category' => 'remediation',
+                        'rationale' => 'A short 5-item formative check establishes baseline competency before deeper lessons.',
+                        'action_step' => 'Create or publish a 5-question formative quiz with 25%–30% conceptual application items.',
+                        'target_group' => $handledYear ?: 'Assigned Year Level',
+                    ],
+                ],
+                'teaching_strategies' => [
+                    'Run a 5-minute ungraded warm-up poll at the start of class to calibrate prior knowledge.',
+                    'Attach a concise study PDF to your first quiz so AI Study Feedback aligns directly with your handout.',
+                    'Enable Live Monitoring during formative checks to spot pacing bottlenecks early.',
+                ],
+                'source' => 'local-heuristic',
+            ];
+        }
+
+        $weakest = $telemetry['weak_competencies'][0] ?? null;
+        $topMissed = $telemetry['missed_questions'][0] ?? null;
+        $sections = is_array($telemetry['section_breakdown'] ?? null) ? $telemetry['section_breakdown'] : [];
+        $lowestSection = $sections[0] ?? null;
+        $highestSection = count($sections) > 1 ? $sections[count($sections) - 1] : null;
+
+        $headline = $weakest
+            ? "Focus Remediation on {$weakest['competency']} ({$weakest['miss_rate']}% miss rate)"
+            : ($avg < 70
+                ? "Class Average at {$avg}% — Immediate Concept Reinforcement Recommended"
+                : "Solid Class Mastery ({$avg}% avg) — Target Remaining Gaps");
+
+        $weakSentence = $weakest
+            ? "The lowest competency is {$weakest['competency']} at {$weakest['accuracy']}% accuracy ({$weakest['missed_count']} missed responses)."
+            : 'Performance varies across assessed items.';
+        $sectionSentence = ($lowestSection && $highestSection && $lowestSection['section'] !== $highestSection['section'])
+            ? " {$lowestSection['section']} averages {$lowestSection['average_percentage']}%, trailing {$highestSection['section']} ({$highestSection['average_percentage']}%)."
+            : ($lowestSection ? " {$lowestSection['section']} currently averages {$lowestSection['average_percentage']}%." : '');
+        $integritySentence = $flaggedCount > 0
+            ? " {$flaggedCount} submission(s) recorded proctoring integrity alerts requiring verification."
+            : '';
+
+        $executiveSummary = "Across {$totalAttempts} submission(s) (" . ($handledYear ?: 'all handled classes') . "), composite mastery is {$avg}% with a {$passRate}% pass rate. {$weakSentence}{$sectionSentence}{$integritySentence}";
+
+        $recommendations = [];
+
+        if ($weakest) {
+            $recommendations[] = [
+                'title' => "Reteach \"{$weakest['competency']}\"",
+                'priority' => ((float) $weakest['accuracy'] < 60) ? 'high' : 'medium',
+                'category' => 'remediation',
+                'rationale' => "Only {$weakest['accuracy']}% of responses on {$weakest['competency']} were correct ({$weakest['missed_count']} of {$weakest['questions_answered']} missed).",
+                'action_step' => "Spend the first 12 minutes of your next lecture walking through a worked example on {$weakest['competency']}, then launch a 5-question remedial formative quiz.",
+                'target_group' => $lowestSection['section'] ?? ($handledYear ?: 'All Learners'),
+            ];
+        }
+
+        if ($topMissed) {
+            $wrongHint = ! empty($topMissed['most_common_wrong_answer'])
+                ? " Many learners selected \"{$topMissed['most_common_wrong_answer']}\"."
+                : '';
+            $recommendations[] = [
+                'title' => "Address Top Misconception ({$topMissed['miss_rate']}% Missed)",
+                'priority' => ((float) $topMissed['miss_rate'] >= 50) ? 'high' : 'medium',
+                'category' => 'misconception',
+                'rationale' => "Item \"" . Str::limit((string) $topMissed['prompt'], 75) . "\" had a {$topMissed['miss_rate']}% error rate.{$wrongHint}",
+                'action_step' => 'Present this exact question anonymously in class and ask learners why the popular distractor is tempting before revealing why the rubric rejects it.',
+                'target_group' => $topMissed['quiz_title'] ?? 'Quiz Takers',
+            ];
+        }
+
+        if ($atRiskCount > 0) {
+            $recommendations[] = [
+                'title' => "Support {$atRiskCount} At-Risk Learner(s) (<60%)",
+                'priority' => 'high',
+                'category' => 'differentiation',
+                'rationale' => "{$atRiskCount} submission(s) scored below the 60% mastery threshold and risk falling behind upcoming summative assessments.",
+                'action_step' => 'Assign the Priority Intervention students a targeted review quiz with Allow Review enabled and pair them with Proficient peers.',
+                'target_group' => "{$atRiskCount} Flagged / Below-60% Learner(s)",
+            ];
+        }
+
+        if ($flaggedCount > 0) {
+            $recommendations[] = [
+                'title' => "Audit {$flaggedCount} Proctoring Integrity Alert(s)",
+                'priority' => 'medium',
+                'category' => 'integrity',
+                'rationale' => 'Tab switches or focus losses occurred during quiz attempts, which can distort actual mastery readings.',
+                'action_step' => 'Inspect timestamps in Submission Logs and enable question shuffling for your next summative exam.',
+                'target_group' => 'Flagged Attempts',
+            ];
+        } elseif ($avg >= 80) {
+            $recommendations[] = [
+                'title' => 'Extend Mastery with Applied Challenges',
+                'priority' => 'positive',
+                'category' => 'differentiation',
+                'rationale' => "Strong overall average ({$avg}%) indicates readiness beyond recall-level items.",
+                'action_step' => 'Introduce 2–3 debugging or scenario-analysis questions in the next assessment to stretch top performers.',
+                'target_group' => $highestSection['section'] ?? 'High-Performing Cohort',
+            ];
+        }
+
+        $strategies = [
+            $weakest
+                ? "10-Minute Micro-Reteach + 5-Item Exit Ticket focused specifically on {$weakest['competency']}."
+                : 'Peer Error Analysis: divide the class into pairs to defend answers on the top 2 missed items.',
+            $lowestSection && $highestSection && $lowestSection['section'] !== $highestSection['section']
+                ? "Targeted Scaffolding for {$lowestSection['section']} ({$lowestSection['average_percentage']}%): provide an annotated formula/syntax sheet before the next lab."
+                : 'Guided Think-Aloud: walk through one missed scenario step-by-step, highlighting why common distractors fail.',
+            'Deploy a one-click AI Remedial Practice Quiz (Allow Review ON) so struggling learners reinforce concepts before summative grading.',
+        ];
+
+        return [
+            'headline' => Str::limit($headline, 120),
+            'executive_summary' => Str::limit($executiveSummary, 520),
+            'recommendations' => array_slice($recommendations, 0, 4),
+            'teaching_strategies' => $strategies,
+            'source' => 'local-heuristic',
+        ];
     }
 
     /**

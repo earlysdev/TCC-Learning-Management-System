@@ -256,15 +256,14 @@ class UserController extends Controller
             ? trim($validated['school_year'])
             : config('lms.school_year', '2026-2027');
 
-        if (empty($validated['grade']) && !empty($validated['section']) && preg_match('/([1-4])[A-Z]/i', $validated['section'], $matches)) {
-            $yearMap = ['1' => '1st Year', '2' => '2nd Year', '3' => '3rd Year', '4' => '4th Year'];
-            $validated['grade'] = $yearMap[$matches[1]] ?? null;
-        }
-
         if ($validated['role'] === 'student') {
-            $validated['grade'] = !empty($validated['grade']) ? trim($validated['grade']) : '1st Year';
+            $validated['grade'] = User::normalizeYearLevel($validated['grade'] ?? null, $validated['section'] ?? null) ?? '1st Year';
+        } elseif ($validated['role'] === 'teacher') {
+            $validated['grade'] = User::normalizeYearLevel($validated['grade'] ?? null);
+            $validated['section'] = null;
+            $validated['lrn'] = null;
         } else {
-            // Staff accounts are not enrolled into class sections
+            // Administrative staff accounts are not enrolled into class sections or year levels
             $validated['grade'] = null;
             $validated['section'] = null;
             $validated['lrn'] = null;
@@ -322,10 +321,14 @@ class UserController extends Controller
             default => "Account created, but live SMTP email delivery to {$user->email} failed.",
         };
 
+        $placementSummary = $user->section
+            ? " ({$user->grade} • {$user->section})"
+            : ($user->role === 'teacher' && $user->yearLevelLabel() ? " (Handles {$user->yearLevelLabel()})" : '');
+
         \App\Models\ActivityLog::create([
             'user_id' => $request->user()?->id,
             'action' => 'create_user',
-            'description' => "Created {$user->role} account for {$user->name}" . ($user->section ? " ({$user->grade} • {$user->section})" : '') . " ({$dispatch['status']} mail to {$user->email})",
+            'description' => "Created {$user->role} account for {$user->name}{$placementSummary} ({$dispatch['status']} mail to {$user->email})",
             'ip_address' => $request->ip(),
             'user_agent' => $request->userAgent(),
         ]);
@@ -371,17 +374,22 @@ class UserController extends Controller
             'section' => 'nullable|string|max:80',
         ]);
 
-        if (empty($validated['grade']) && !empty($validated['section']) && preg_match('/([1-4])[A-Z]/i', $validated['section'], $matches)) {
-            $yearMap = ['1' => '1st Year', '2' => '2nd Year', '3' => '3rd Year', '4' => '4th Year'];
-            $validated['grade'] = $yearMap[$matches[1]] ?? null;
+        if ($user->role === 'student') {
+            $normalizedStudentGrade = User::normalizeYearLevel($validated['grade'] ?? null, $validated['section'] ?? null);
+            if ($normalizedStudentGrade !== null && empty($validated['grade'])) {
+                $validated['grade'] = $normalizedStudentGrade;
+            }
         }
 
-        $previousPlacement = trim(($user->grade ?? '') . ' • ' . ($user->section ?? ''), ' •');
+        $previousPlacement = $user->role === 'teacher'
+            ? ($user->yearLevelLabel() ?: 'All Year Levels')
+            : trim(($user->grade ?? '') . ' • ' . ($user->section ?? ''), ' •');
 
         // Section / Year Level reassignment for students: enforce 50-student capacity and keep grade/section aligned
         $gradeChanged = !empty($validated['grade']) && strcasecmp(trim($validated['grade']), (string) $user->grade) !== 0;
         if ($user->role === 'student' && (!empty($validated['section']) || $gradeChanged)) {
-            $targetGrade = !empty($validated['grade']) ? trim($validated['grade']) : ($user->grade ?: '1st Year');
+            $targetGrade = User::normalizeYearLevel($validated['grade'] ?? null, $validated['section'] ?? null)
+                ?? ($user->grade ?: '1st Year');
             $targetSection = !empty($validated['section']) ? trim($validated['section']) : 'auto';
 
             if (strtolower($targetSection) === 'auto') {
@@ -398,6 +406,11 @@ class UserController extends Controller
 
             $validated['section'] = $targetSection;
             $validated['grade'] = $targetGrade;
+        } elseif ($user->role === 'teacher') {
+            unset($validated['section']);
+            if ($request->exists('grade')) {
+                $validated['grade'] = User::normalizeYearLevel($validated['grade'] ?? null);
+            }
         } elseif ($user->role !== 'student') {
             unset($validated['grade'], $validated['section']);
         }
@@ -416,9 +429,13 @@ class UserController extends Controller
             $user->tokens()->delete();
         }
 
-        $newPlacement = trim(($user->grade ?? '') . ' • ' . ($user->section ?? ''), ' •');
-        $description = $user->role === 'student' && $previousPlacement !== $newPlacement
-            ? "Reassigned {$user->name} from " . ($previousPlacement ?: 'Unassigned') . " to {$newPlacement}"
+        $newPlacement = $user->role === 'teacher'
+            ? ($user->yearLevelLabel() ?: 'All Year Levels')
+            : trim(($user->grade ?? '') . ' • ' . ($user->section ?? ''), ' •');
+        $description = ($user->role === 'student' || $user->role === 'teacher') && $previousPlacement !== $newPlacement
+            ? ($user->role === 'teacher'
+                ? "Assigned {$user->name} to handle {$newPlacement} (was {$previousPlacement})"
+                : "Reassigned {$user->name} from " . ($previousPlacement ?: 'Unassigned') . " to {$newPlacement}")
             : "Updated {$user->role} account details for {$user->name}";
 
         \App\Models\ActivityLog::create([
@@ -491,6 +508,12 @@ class UserController extends Controller
             $query->where('department', $department);
         }
 
+        $actor = $request->user();
+        $handledYearLevel = $actor?->role === 'teacher' ? $actor->yearLevelLabel() : null;
+        if ($handledYearLevel !== null) {
+            $query->forYearLevel($handledYearLevel);
+        }
+
         $students = $query
             ->orderBy('grade')
             ->orderBy('section')
@@ -500,6 +523,7 @@ class UserController extends Controller
 
         return response()->json([
             'status' => 'success',
+            'handled_year_level' => $handledYearLevel,
             'data' => $students
         ]);
     }

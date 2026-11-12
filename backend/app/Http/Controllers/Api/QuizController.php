@@ -14,6 +14,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
 class QuizController extends Controller
 {
@@ -31,10 +32,15 @@ class QuizController extends Controller
         } else {
             $query->visibleTo($user);
         }
-        $quizzes = $query->withCount('attempts')->withAvg('attempts', 'percentage')->latest()->get();
+        $quizzes = $query->with('teacher:id,name,grade,section,role')
+            ->withCount('attempts')
+            ->withAvg('attempts', 'percentage')
+            ->latest()
+            ->get();
         $quizzes->each(fn (Quiz $quiz) => $this->repairQuizQuestionsIfNeeded($quiz));
 
         return response()->json([
+            'handled_year_level' => $user->role === 'teacher' ? $user->yearLevelLabel() : null,
             'metrics' => [
                 'quizzes' => $quizzes->count(),
                 'published' => $quizzes->where('is_published', true)->count(),
@@ -42,6 +48,60 @@ class QuizController extends Controller
                 'average' => round((float) ($quizzes->avg('attempts_avg_percentage') ?? 0), 1),
             ],
             'quizzes' => $quizzes->map(fn (Quiz $quiz) => $this->teacherQuizPayload($quiz)),
+        ]);
+    }
+
+    public function teacherInsights(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $isAuthorized = in_array($user?->role, ['teacher', 'principal', 'dean', 'developer'], true);
+        abort_unless($isAuthorized, 403, 'Your account does not have access to this area.');
+
+        $validated = $request->validate([
+            'quiz_id' => ['nullable', 'integer'],
+            'refresh' => ['nullable', 'boolean'],
+        ]);
+
+        $query = Quiz::query();
+        if ($user->role === 'teacher') {
+            $query->where('teacher_id', $user->id);
+        } else {
+            $query->visibleTo($user);
+        }
+
+        $allQuizzes = $query
+            ->with('teacher:id,name,grade,section,role')
+            ->withCount('attempts')
+            ->latest()
+            ->get();
+
+        $selectedQuizId = isset($validated['quiz_id']) ? (int) $validated['quiz_id'] : null;
+        if ($selectedQuizId !== null) {
+            $selectedQuiz = $allQuizzes->firstWhere('id', $selectedQuizId);
+            abort_unless($selectedQuiz !== null, 404, 'Quiz not found or outside your teaching scope.');
+            $scopedQuizzes = new \Illuminate\Database\Eloquent\Collection([$selectedQuiz]);
+        } else {
+            $scopedQuizzes = $allQuizzes;
+        }
+
+        $scopedQuizzes->loadMissing('attempts.student:id,name,lrn,grade,section,email');
+
+        $handledYearLevel = $user->role === 'teacher' ? $user->yearLevelLabel() : null;
+        $telemetry = $this->buildTeacherTelemetry($scopedQuizzes, $handledYearLevel);
+        $aiInsights = $this->ai->teacherInsights($telemetry, (bool) ($validated['refresh'] ?? false));
+
+        return response()->json([
+            'selected_quiz_id' => $selectedQuizId,
+            'quizzes' => $allQuizzes->map(fn (Quiz $q): array => [
+                'id' => $q->id,
+                'title' => $q->title,
+                'subject' => $q->subject,
+                'topic' => $q->topic,
+                'is_published' => (bool) $q->is_published,
+                'attempts_count' => (int) ($q->attempts_count ?? 0),
+            ])->values()->all(),
+            ...$telemetry,
+            'ai' => $aiInsights,
         ]);
     }
 
@@ -322,6 +382,7 @@ class QuizController extends Controller
                 'user_agent' => $request->userAgent(),
             ]);
 
+            $quiz->loadMissing('teacher:id,grade,section,role');
             $quizDept = $quiz->department ?: config('lms.default_department', 'CIT');
             $students = User::where('role', 'student')
                 ->where('department', $quizDept)
@@ -409,7 +470,10 @@ class QuizController extends Controller
         $quizzes = Quiz::query()
             ->where('is_published', true)
             ->visibleTo($student)
-            ->with(['attempts' => fn ($query) => $query->where('student_id', $student->id)])
+            ->with([
+                'teacher:id,grade,section,role',
+                'attempts' => fn ($query) => $query->where('student_id', $student->id),
+            ])
             ->latest()
             ->get();
 
@@ -1297,6 +1361,18 @@ class QuizController extends Controller
             return false;
         }
 
+        // Enforce Teacher Handled Year Level Isolation (e.g. a 1st Year teacher's quizzes are only visible to 1st Year students)
+        $teacher = $quiz->relationLoaded('teacher')
+            ? $quiz->teacher
+            : $quiz->teacher()->select(['id', 'grade', 'section', 'role'])->first();
+        $teacherYearLevel = $teacher?->yearLevelLabel();
+        if ($teacherYearLevel !== null) {
+            $studentYearLevel = $student->yearLevelLabel();
+            if ($studentYearLevel === null || strcasecmp($teacherYearLevel, $studentYearLevel) !== 0) {
+                return false;
+            }
+        }
+
         $targetType = $quiz->target_type ?? 'all';
         if ($targetType === 'all') {
             return true;
@@ -1469,12 +1545,291 @@ class QuizController extends Controller
         }
     }
 
+    /**
+     * Aggregate question miss rates, competency mastery, section breakdown, mastery distribution,
+     * priority at-risk students, and a remedial quiz draft payload for Teacher AI Teaching Insights.
+     *
+     * @param \Illuminate\Support\Collection<int, Quiz> $quizzes
+     * @return array<string, mixed>
+     */
+    private function buildTeacherTelemetry($quizzes, ?string $handledYearLevel): array
+    {
+        $allAttempts = $quizzes->flatMap(fn (Quiz $quiz) => $quiz->attempts->map(
+            fn (QuizAttempt $attempt) => ['quiz' => $quiz, 'attempt' => $attempt]
+        ));
+
+        $totalAttempts = $allAttempts->count();
+        $uniqueStudents = $allAttempts->pluck('attempt.student_id')->unique()->count();
+        $avgPercentage = $totalAttempts > 0
+            ? round((float) $allAttempts->avg(fn (array $row) => (float) $row['attempt']->percentage), 1)
+            : 0.0;
+        $passCount = $allAttempts->filter(fn (array $row) => (float) $row['attempt']->percentage >= 75)->count();
+        $flaggedAttempts = $allAttempts->filter(fn (array $row) => (int) ($row['attempt']->cheating_attempts_count ?? 0) > 0)->count();
+
+        $proficientCount = $allAttempts->filter(fn (array $row) => (float) $row['attempt']->percentage >= 80)->count();
+        $developingCount = $allAttempts->filter(fn (array $row) => (float) $row['attempt']->percentage >= 60 && (float) $row['attempt']->percentage < 80)->count();
+        $atRiskCount = $allAttempts->filter(fn (array $row) => (float) $row['attempt']->percentage < 60)->count();
+
+        $pct = fn (int $n): float => $totalAttempts > 0 ? round(($n / $totalAttempts) * 100, 1) : 0.0;
+
+        $questionStats = [];
+        $competencyStats = [];
+        $sectionBuckets = [];
+        $studentBuckets = [];
+
+        foreach ($allAttempts as $row) {
+            /** @var Quiz $quiz */
+            $quiz = $row['quiz'];
+            /** @var QuizAttempt $attempt */
+            $attempt = $row['attempt'];
+            $student = $attempt->student;
+
+            $sectionName = trim((string) ($student?->section ?: 'Unassigned Section'));
+            $yearLabel = $student?->yearLevelLabel() ?: 'Unassigned';
+            if (! isset($sectionBuckets[$sectionName])) {
+                $sectionBuckets[$sectionName] = [
+                    'section' => $sectionName,
+                    'year_level' => $yearLabel,
+                    'scores' => [],
+                    'student_ids' => [],
+                    'flagged_attempts' => 0,
+                ];
+            }
+            $sectionBuckets[$sectionName]['scores'][] = (float) $attempt->percentage;
+            $sectionBuckets[$sectionName]['student_ids'][$attempt->student_id] = true;
+            if ((int) ($attempt->cheating_attempts_count ?? 0) > 0) {
+                $sectionBuckets[$sectionName]['flagged_attempts']++;
+            }
+
+            $sid = (int) $attempt->student_id;
+            if (! isset($studentBuckets[$sid])) {
+                $studentBuckets[$sid] = [
+                    'student_id' => $sid,
+                    'name' => $student?->name ?? 'Unknown Student',
+                    'lrn' => $student?->lrn,
+                    'grade' => $student?->yearLevelLabel() ?? $student?->grade,
+                    'section' => $sectionName,
+                    'scores' => [],
+                    'violations' => 0,
+                    'latest_quiz_title' => $quiz->title,
+                ];
+            }
+            $studentBuckets[$sid]['scores'][] = (float) $attempt->percentage;
+            $studentBuckets[$sid]['violations'] += (int) ($attempt->cheating_attempts_count ?? 0);
+
+            $answers = is_array($attempt->answers) ? $attempt->answers : [];
+            $questions = is_array($quiz->questions) ? $quiz->questions : [];
+
+            foreach ($questions as $index => $question) {
+                if (! is_array($question)) {
+                    continue;
+                }
+                $eval = $this->evaluateQuestionAnswer($question, $answers[$index] ?? null);
+                $skillName = trim((string) ($question['skill'] ?? '')) ?: trim((string) ($quiz->topic ?: $quiz->subject));
+                $compKey = strtolower($quiz->subject . '::' . $skillName);
+
+                if (! isset($competencyStats[$compKey])) {
+                    $competencyStats[$compKey] = [
+                        'competency' => $skillName,
+                        'subject' => (string) $quiz->subject,
+                        'questions_answered' => 0,
+                        'correct_count' => 0,
+                        'missed_count' => 0,
+                    ];
+                }
+                $competencyStats[$compKey]['questions_answered']++;
+                if ($eval['is_correct']) {
+                    $competencyStats[$compKey]['correct_count']++;
+                } else {
+                    $competencyStats[$compKey]['missed_count']++;
+                }
+
+                $qKey = $quiz->id . ':' . $index;
+                if (! isset($questionStats[$qKey])) {
+                    $questionStats[$qKey] = [
+                        'quiz_id' => $quiz->id,
+                        'quiz_title' => $quiz->title,
+                        'subject' => $quiz->subject,
+                        'question_index' => (int) $index + 1,
+                        'prompt' => Str::limit((string) ($question['prompt'] ?? 'Question ' . ((int) $index + 1)), 160),
+                        'skill' => $skillName,
+                        'attempts' => 0,
+                        'missed_count' => 0,
+                        'wrong_counts' => [],
+                    ];
+                }
+                $questionStats[$qKey]['attempts']++;
+                if (! $eval['is_correct']) {
+                    $questionStats[$qKey]['missed_count']++;
+                    $wrongLabel = $this->formatWrongAnswerLabel($question, $eval['normalized_answer']);
+                    $questionStats[$qKey]['wrong_counts'][$wrongLabel] = ($questionStats[$qKey]['wrong_counts'][$wrongLabel] ?? 0) + 1;
+                }
+            }
+        }
+
+        $missedQuestions = collect($questionStats)
+            ->filter(fn (array $q) => $q['missed_count'] > 0 && $q['attempts'] > 0)
+            ->map(function (array $q): array {
+                arsort($q['wrong_counts']);
+                $topWrong = array_key_first($q['wrong_counts']);
+                $missRate = round(($q['missed_count'] / $q['attempts']) * 100, 1);
+                return [
+                    'quiz_id' => $q['quiz_id'],
+                    'quiz_title' => $q['quiz_title'],
+                    'subject' => $q['subject'],
+                    'question_index' => $q['question_index'],
+                    'prompt' => $q['prompt'],
+                    'skill' => $q['skill'],
+                    'attempts' => $q['attempts'],
+                    'missed_count' => $q['missed_count'],
+                    'miss_rate' => $missRate,
+                    'most_common_wrong_answer' => $topWrong,
+                ];
+            })
+            ->sortByDesc(fn (array $q) => [$q['miss_rate'], $q['missed_count']])
+            ->take(6)
+            ->values()
+            ->all();
+
+        $weakCompetencies = collect($competencyStats)
+            ->filter(fn (array $c) => $c['questions_answered'] > 0)
+            ->map(function (array $c): array {
+                $accuracy = round(($c['correct_count'] / $c['questions_answered']) * 100, 1);
+                $missRate = round(100 - $accuracy, 1);
+                return [
+                    'competency' => $c['competency'],
+                    'subject' => $c['subject'],
+                    'questions_answered' => $c['questions_answered'],
+                    'correct_count' => $c['correct_count'],
+                    'missed_count' => $c['missed_count'],
+                    'accuracy' => $accuracy,
+                    'miss_rate' => $missRate,
+                    'status' => $accuracy < 55 ? 'critical' : ($accuracy < 75 ? 'needs_review' : 'mastered'),
+                ];
+            })
+            ->sortBy(fn (array $c) => [$c['accuracy'], -$c['missed_count']])
+            ->take(6)
+            ->values()
+            ->all();
+
+        $sectionBreakdown = collect($sectionBuckets)
+            ->map(function (array $b): array {
+                $avg = count($b['scores']) > 0 ? round(array_sum($b['scores']) / count($b['scores']), 1) : 0.0;
+                return [
+                    'section' => $b['section'],
+                    'year_level' => $b['year_level'],
+                    'attempts_count' => count($b['scores']),
+                    'students_count' => count($b['student_ids']),
+                    'average_percentage' => $avg,
+                    'flagged_attempts' => $b['flagged_attempts'],
+                    'status' => $avg >= 80 ? 'strong' : ($avg >= 65 ? 'developing' : 'needs_attention'),
+                ];
+            })
+            ->sortBy('average_percentage')
+            ->values()
+            ->all();
+
+        $atRiskStudents = collect($studentBuckets)
+            ->map(function (array $s): array {
+                $avg = count($s['scores']) > 0 ? round(array_sum($s['scores']) / count($s['scores']), 1) : 0.0;
+                return [
+                    'student_id' => $s['student_id'],
+                    'name' => $s['name'],
+                    'lrn' => $s['lrn'],
+                    'grade' => $s['grade'],
+                    'section' => $s['section'],
+                    'average_percentage' => $avg,
+                    'attempts_count' => count($s['scores']),
+                    'latest_quiz_title' => $s['latest_quiz_title'],
+                    'violations' => $s['violations'],
+                    'priority' => ($avg < 60 || $s['violations'] >= 2) ? 'high' : 'medium',
+                ];
+            })
+            ->filter(fn (array $s) => $s['average_percentage'] < 75 || $s['violations'] >= 2)
+            ->sortBy(fn (array $s) => [$s['average_percentage'], -$s['violations']])
+            ->take(8)
+            ->values()
+            ->all();
+
+        $weakestComp = $weakCompetencies[0] ?? null;
+        $fallbackQuiz = $quizzes->first();
+        $remedialDraft = ($weakestComp || $fallbackQuiz) ? [
+            'subject' => $weakestComp['subject'] ?? ($fallbackQuiz?->subject ?? 'General IT'),
+            'topic' => $weakestComp ? "Remedial Practice: {$weakestComp['competency']}" : "Remedial Review: " . ($fallbackQuiz?->topic ?? 'Core Concepts'),
+            'difficulty' => $avgPercentage < 55 ? 'easy' : 'medium',
+            'count' => 5,
+            'target_section' => ($sectionBreakdown[0]['average_percentage'] ?? 100) < 70 ? $sectionBreakdown[0]['section'] : null,
+            'reason' => $weakestComp
+                ? "Auto-targeted from {$weakestComp['competency']} ({$weakestComp['miss_rate']}% miss rate across {$weakestComp['questions_answered']} responses)."
+                : 'Quick formative check to reinforce core topic mastery.',
+        ] : null;
+
+        return [
+            'summary' => [
+                'quiz_count' => $quizzes->count(),
+                'published_count' => $quizzes->where('is_published', true)->count(),
+                'total_attempts' => $totalAttempts,
+                'unique_students' => $uniqueStudents,
+                'average_percentage' => $avgPercentage,
+                'pass_rate' => $pct($passCount),
+                'at_risk_count' => $atRiskCount,
+                'flagged_attempts' => $flaggedAttempts,
+                'handled_year_level' => $handledYearLevel,
+            ],
+            'mastery_bands' => [
+                'proficient' => ['count' => $proficientCount, 'pct' => $pct($proficientCount)],
+                'developing' => ['count' => $developingCount, 'pct' => $pct($developingCount)],
+                'at_risk' => ['count' => $atRiskCount, 'pct' => $pct($atRiskCount)],
+            ],
+            'missed_questions' => $missedQuestions,
+            'weak_competencies' => $weakCompetencies,
+            'section_breakdown' => $sectionBreakdown,
+            'at_risk_students' => $atRiskStudents,
+            'remedial_draft' => $remedialDraft,
+        ];
+    }
+
+    /** @param array<string, mixed> $question */
+    private function formatWrongAnswerLabel(array $question, mixed $normalizedAnswer): string
+    {
+        $type = (string) ($question['type'] ?? 'multiple_choice');
+        $options = is_array($question['options'] ?? null) ? $question['options'] : [];
+
+        if ($type === 'multiple_answer' && is_array($normalizedAnswer)) {
+            if ($normalizedAnswer === []) {
+                return '(Unanswered)';
+            }
+            $labels = array_map(function (int $idx) use ($options): string {
+                $letter = chr(65 + $idx);
+                $text = isset($options[$idx]) ? Str::limit((string) $options[$idx], 28) : '';
+                return $text !== '' ? "{$letter}: {$text}" : "Option {$letter}";
+            }, $normalizedAnswer);
+
+            return Str::limit(implode(', ', $labels), 55);
+        }
+
+        if (in_array($type, ['identification', 'essay'], true)) {
+            $text = trim((string) $normalizedAnswer);
+            return $text !== '' ? Str::limit($text, 45) : '(Blank)';
+        }
+
+        $idx = is_numeric($normalizedAnswer) ? (int) $normalizedAnswer : -1;
+        if ($idx < 0) {
+            return '(Unanswered)';
+        }
+        $letter = chr(65 + $idx);
+        $optText = isset($options[$idx]) ? Str::limit((string) $options[$idx], 42) : '';
+
+        return $optText !== '' ? "{$letter}: {$optText}" : "Option {$letter}";
+    }
+
     /** @return array<string, mixed> */
     private function teacherQuizPayload(Quiz $quiz): array
     {
         $cleanPdfText = !empty($quiz->reference_pdf_text)
             ? implode(' ', $this->ai->extractCleanSentences((string) $quiz->reference_pdf_text))
             : null;
+        $teacher = $quiz->relationLoaded('teacher') ? $quiz->teacher : null;
 
         return [
             'id' => $quiz->id,
@@ -1495,6 +1850,7 @@ class QuizController extends Controller
             'target_student_ids' => $quiz->target_student_ids ?? [],
             'time_limit_minutes' => $quiz->time_limit_minutes ?? 15,
             'shuffle_questions' => (bool) ($quiz->shuffle_questions ?? false),
+            'teacher_grade' => $teacher?->yearLevelLabel(),
             'attempts_count' => $quiz->attempts_count ?? 0,
             'average' => round((float) ($quiz->attempts_avg_percentage ?? 0), 1),
             'questions' => $quiz->questions ?? [],

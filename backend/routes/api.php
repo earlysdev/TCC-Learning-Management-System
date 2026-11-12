@@ -39,6 +39,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // Teacher Quiz Routes
     Route::get('/teacher/dashboard', [QuizController::class, 'teacherDashboard'])
         ->middleware('role:teacher,principal,dean,developer');
+    Route::get('/teacher/insights', [QuizController::class, 'teacherInsights'])
+        ->middleware('role:teacher,principal,dean,developer');
     Route::get('/teacher/students', [UserController::class, 'teacherStudents'])
         ->middleware('role:teacher,principal,dean,secretary,developer');
     Route::post('/teacher/quizzes', [QuizController::class, 'store']);

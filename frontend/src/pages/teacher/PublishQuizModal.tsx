@@ -28,6 +28,7 @@ interface PublishQuizModalProps {
   isOpen: boolean;
   students: User[];
   sections: SectionOption[];
+  handledYearLevel?: string | null;
   busy?: boolean;
   onClose: () => void;
   onPublish: (audience: PublishAudience) => void;
@@ -41,7 +42,7 @@ const audienceChoices: Array<{ type: AudienceType; label: string; detail: string
 
 const presetMinutes = [5, 10, 15, 20, 30, 45, 60];
 
-export default function PublishQuizModal({ quiz, isOpen, students, sections, busy = false, onClose, onPublish }: PublishQuizModalProps) {
+export default function PublishQuizModal({ quiz, isOpen, students, sections, handledYearLevel = null, busy = false, onClose, onPublish }: PublishQuizModalProps) {
   const { showToast } = useToastContext();
   const [audienceType, setAudienceType] = useState<AudienceType>('all');
   const [sectionIds, setSectionIds] = useState<Array<string | number>>([]);
@@ -102,7 +103,7 @@ export default function PublishQuizModal({ quiz, isOpen, students, sections, bus
   };
 
   const audienceSummary = audienceType === 'all'
-    ? 'all enrolled students'
+    ? (handledYearLevel ? `all ${handledYearLevel} students` : 'all enrolled students')
     : audienceType === 'section'
       ? `${sectionIds.length} selected block${sectionIds.length === 1 ? '' : 's'}`
       : `${studentIds.length} selected student${studentIds.length === 1 ? '' : 's'}`;
