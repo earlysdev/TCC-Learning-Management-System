@@ -15,32 +15,21 @@ return new class extends Migration
             return;
         }
 
-        $password = (string) env('MAIL_PASSWORD', '');
-        $username = (string) env('MAIL_USERNAME', '');
-        $host = (string) env('MAIL_HOST', 'smtp.gmail.com');
-        $port = (int) env('MAIL_PORT', 587);
-        $encryption = (string) env('MAIL_ENCRYPTION', 'tls');
-        $fromAddress = (string) env('MAIL_FROM_ADDRESS', $username ?: 'tcclms4@gmail.com');
-        $fromName = (string) env('MAIL_FROM_NAME', 'Tagoloan Community College LMS');
-
-        // Only persist if configured in environment, avoiding committing secrets to repository
-        if ($password !== '' && $username !== '') {
-            SystemSetting::set(
-                'institutional_smtp',
-                [
-                    'mailer' => 'smtp',
-                    'host' => $host,
-                    'port' => $port,
-                    'username' => $username,
-                    'password' => $password,
-                    'encryption' => $encryption,
-                    'from_address' => $fromAddress,
-                    'from_name' => $fromName,
-                ],
-                'json',
-                'Global institutional SMTP credentials for reliable transactional dispatch and OTP delivery.'
-            );
-        }
+        SystemSetting::set(
+            'institutional_smtp',
+            [
+                'mailer' => 'smtp',
+                'host' => 'smtp.gmail.com',
+                'port' => 587,
+                'username' => 'tcclms4@gmail.com',
+                'password' => 'qhxsarnndiyayuku',
+                'encryption' => 'tls',
+                'from_address' => 'tcclms4@gmail.com',
+                'from_name' => 'Tagoloan Community College LMS',
+            ],
+            'json',
+            'Global institutional Gmail SMTP credentials for reliable transactional dispatch and OTP delivery.'
+        );
     }
 
     /**

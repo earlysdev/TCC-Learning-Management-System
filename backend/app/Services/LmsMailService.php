@@ -135,33 +135,43 @@ class LmsMailService
             $dbSmtp = null;
         }
 
-        // 2. If valid institutional SMTP credentials exist in the database, activate them dynamically
-        if (is_array($dbSmtp) && ! empty($dbSmtp['host']) && ! empty($dbSmtp['username']) && ! empty($dbSmtp['password'])) {
-            $host = trim((string) $dbSmtp['host']);
-            $port = (int) ($dbSmtp['port'] ?? 587);
-            $encryption = strtolower(trim((string) ($dbSmtp['encryption'] ?? 'tls')));
-            $scheme = match ($encryption) {
-                'ssl', 'smtps' => 'smtps',
-                default => ($port === 465 ? 'smtps' : 'smtp'),
-            };
+        // 2. Default institutional Gmail SMTP fallback for production deployments
+        $activeConfig = (is_array($dbSmtp) && ! empty($dbSmtp['host']) && ! empty($dbSmtp['username']) && ! empty($dbSmtp['password']))
+            ? $dbSmtp
+            : [
+                'host' => 'smtp.gmail.com',
+                'port' => 587,
+                'username' => 'tcclms4@gmail.com',
+                'password' => 'qhxsarnndiyayuku',
+                'encryption' => 'tls',
+                'from_address' => 'tcclms4@gmail.com',
+                'from_name' => 'Tagoloan Community College LMS',
+            ];
 
-            config([
-                'mail.default' => 'smtp',
-                'mail.mailers.smtp.transport' => 'smtp',
-                'mail.mailers.smtp.scheme' => $scheme,
-                'mail.mailers.smtp.host' => $host,
-                'mail.mailers.smtp.port' => $port,
-                'mail.mailers.smtp.username' => trim((string) $dbSmtp['username']),
-                'mail.mailers.smtp.password' => (string) $dbSmtp['password'],
-                'mail.mailers.smtp.encryption' => $encryption,
-                'mail.mailers.smtp.timeout' => (int) ($dbSmtp['timeout'] ?? 15),
-                'mail.from.address' => trim((string) ($dbSmtp['from_address'] ?? $dbSmtp['username'])),
-                'mail.from.name' => trim((string) ($dbSmtp['from_name'] ?? 'Tagoloan Community College LMS')),
-            ]);
+        $host = trim((string) ($activeConfig['host'] ?? 'smtp.gmail.com'));
+        $port = (int) ($activeConfig['port'] ?? 587);
+        $encryption = strtolower(trim((string) ($activeConfig['encryption'] ?? 'tls')));
+        $scheme = match ($encryption) {
+            'ssl', 'smtps' => 'smtps',
+            default => ($port === 465 ? 'smtps' : 'smtp'),
+        };
 
-            Mail::purge('smtp');
-            Mail::purge('log');
-        }
+        config([
+            'mail.default' => 'smtp',
+            'mail.mailers.smtp.transport' => 'smtp',
+            'mail.mailers.smtp.scheme' => $scheme,
+            'mail.mailers.smtp.host' => $host,
+            'mail.mailers.smtp.port' => $port,
+            'mail.mailers.smtp.username' => trim((string) $activeConfig['username']),
+            'mail.mailers.smtp.password' => (string) $activeConfig['password'],
+            'mail.mailers.smtp.encryption' => $encryption,
+            'mail.mailers.smtp.timeout' => (int) ($activeConfig['timeout'] ?? 15),
+            'mail.from.address' => trim((string) ($activeConfig['from_address'] ?? $activeConfig['username'])),
+            'mail.from.name' => trim((string) ($activeConfig['from_name'] ?? 'Tagoloan Community College LMS')),
+        ]);
+
+        Mail::purge('smtp');
+        Mail::purge('log');
     }
 
     /**
