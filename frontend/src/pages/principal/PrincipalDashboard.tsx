@@ -12,7 +12,7 @@ import {
 import { 
   Users, ShieldCheck, AlertTriangle, TrendingUp, 
   CheckCircle2, AlertCircle, 
-  Check, CheckCheck, Activity, Send, GraduationCap, Layers,
+  Check, Activity, Send, GraduationCap, Layers,
   UserPlus, KeyRound, Copy, Eye, EyeOff, Pencil, X, Plus, Sparkles, Briefcase
 } from 'lucide-react';
 import GlassCard from '../../components/ui/GlassCard';
@@ -21,6 +21,7 @@ import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import Input from '../../components/ui/Input';
 import ProfileUpdateCard from '../../components/ui/ProfileUpdateCard';
+import SecurityLogsPanel from '../../components/security/SecurityLogsPanel';
 import {
   AccountCredentialsEmailReceipt,
   type AccountEmailDispatchReceipt,
@@ -199,21 +200,22 @@ export default function PrincipalDashboard() {
     }
   }, [subpage]);
 
-  const handleResolveSecurityLog = async (logId: number) => {
+  const runSecurityResolution = async <T extends { message?: string }>(
+    endpoint: string,
+    fallbackSuccess: string,
+    fallbackError: string,
+    onSuccess: (res: T) => void
+  ) => {
     setBusy(true);
     setError(null);
     try {
-      await lmsFetch(`/security-logs/${logId}/resolve`, { method: 'PATCH' });
-      const msg = 'Security log marked as resolved.';
+      const res = await lmsFetch<T>(endpoint, { method: 'PATCH' });
+      const msg = res.message || fallbackSuccess;
       setNotice(msg);
       showToast(msg, 'success');
-      setSecurityLogs(prev => prev.map(l => l.id === logId ? { ...l, is_resolved: true, resolved_at: new Date().toISOString() } : l));
-      setMetrics(prev => ({
-        ...prev,
-        security_alerts: Math.max(0, (Number(prev.security_alerts) || 1) - 1),
-      }));
+      onSuccess(res);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Could not resolve security log';
+      const msg = err instanceof Error ? err.message : fallbackError;
       setError(msg);
       showToast(msg, 'error');
     } finally {
@@ -221,33 +223,61 @@ export default function PrincipalDashboard() {
     }
   };
 
-  const handleResolveAllSecurityLogs = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await lmsFetch<{ message?: string; resolved_count?: number }>('/security-logs/resolve-all', {
-        method: 'PATCH',
-      });
-      const msg = res.message || 'All unresolved security alerts have been successfully resolved.';
-      setNotice(msg);
-      showToast(msg, 'success');
-      setSecurityLogs(prev => prev.map(l => ({
-        ...l,
-        is_resolved: true,
-        resolved_at: l.resolved_at || new Date().toISOString(),
-      })));
-      setMetrics(prev => ({
-        ...prev,
-        security_alerts: 0,
-      }));
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Could not resolve security logs';
-      setError(msg);
-      showToast(msg, 'error');
-    } finally {
-      setBusy(false);
-    }
-  };
+  const handleResolveSecurityLog = (logId: number) =>
+    runSecurityResolution<{ message?: string; data?: SecurityLog }>(
+      `/security-logs/${logId}/resolve`,
+      'Security log marked as resolved.',
+      'Could not resolve security log',
+      (res) => {
+        const updated = res.data;
+        const resolvedAt = updated?.resolved_at || new Date().toISOString();
+        setSecurityLogs(prev => prev.map(l => (
+          l.id === logId
+            ? {
+                ...l,
+                is_resolved: true,
+                resolved_at: l.resolved_at || resolvedAt,
+                resolved_by: l.resolved_by ?? updated?.resolved_by ?? null,
+                resolver: l.resolver ?? updated?.resolver ?? null,
+              }
+            : l
+        )));
+        setMetrics(prev => ({
+          ...prev,
+          security_alerts: Math.max(0, (Number(prev.security_alerts) || 1) - 1),
+        }));
+      }
+    );
+
+  const handleResolveAllSecurityLogs = () =>
+    runSecurityResolution<{
+      message?: string;
+      resolved_count?: number;
+      resolved_at?: string;
+      resolver?: { id: number; name: string } | null;
+    }>(
+      '/security-logs/resolve-all',
+      'All unresolved security alerts have been successfully resolved.',
+      'Could not resolve security logs',
+      (res) => {
+        const resolvedAt = res.resolved_at || new Date().toISOString();
+        setSecurityLogs(prev => prev.map(l => (
+          l.is_resolved
+            ? l
+            : {
+                ...l,
+                is_resolved: true,
+                resolved_at: resolvedAt,
+                resolved_by: res.resolver?.id ?? null,
+                resolver: res.resolver ?? null,
+              }
+        )));
+        setMetrics(prev => ({
+          ...prev,
+          security_alerts: 0,
+        }));
+      }
+    );
 
   const handleToggleUserStatus = async (targetUser: User, newStatus: string) => {
     setBusy(true);
@@ -1088,81 +1118,22 @@ export default function PrincipalDashboard() {
   );
 
   const renderSecurity = () => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      {renderPageHeader(
-        'INSTITUTIONAL SURVEILLANCE & ALL-IN-ONE RESOLUTION',
-        'Security & Access Logs',
-        'Monitor authentication events, unrecognized device alerts, and failed login incidents across your department.',
-        securityLogs.some(l => !l.is_resolved) ? (
-          <Button
-            variant="accent"
-            size="md"
-            disabled={busy}
-            onClick={handleResolveAllSecurityLogs}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700 }}
-          >
-            <CheckCheck size={18} /> All-in-One Resolve ({securityLogs.filter(l => !l.is_resolved).length} Pending)
-          </Button>
-        ) : undefined,
-        '#fbbf24'
-      )}
-
-      <GlassCard style={{ padding: 0, overflow: 'hidden' }}>
-        <div className="table-responsive" style={{ margin: 0 }}>
-          <table style={{ width: '100%', minWidth: '650px', borderCollapse: 'collapse', textAlign: 'left', color: 'white', fontSize: '0.85rem' }}>
-          <thead>
-            <tr style={{ background: 'rgba(255,255,255,0.06)', borderBottom: '1px solid var(--glass-border)' }}>
-              <th style={{ padding: '0.75rem 1rem' }}>Event Type</th>
-              <th style={{ padding: '0.75rem 1rem' }}>User</th>
-              <th style={{ padding: '0.75rem 1rem' }}>IP Address</th>
-              <th style={{ padding: '0.75rem 1rem' }}>Timestamp</th>
-              <th style={{ padding: '0.75rem 1rem' }}>Status</th>
-              <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {securityLogs.length === 0 ? (
-              <tr>
-                <td colSpan={6} style={{ padding: '2rem', textAlign: 'center', color: 'var(--neutral-400)' }}>
-                  No security events on record. System secure.
-                </td>
-              </tr>
-            ) : (
-              securityLogs.map(log => (
-                <tr key={log.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                  <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: log.event_type.includes('fail') ? '#ef5350' : '#66bb6a' }}>
-                    {log.event_type}
-                  </td>
-                  <td style={{ padding: '0.75rem 1rem' }}>{log.user?.name || `User #${log.user_id || 'Unknown'}`}</td>
-                  <td style={{ padding: '0.75rem 1rem', fontFamily: 'monospace' }}>{log.ip_address || '127.0.0.1'}</td>
-                  <td style={{ padding: '0.75rem 1rem', color: 'var(--neutral-400)' }}>
-                    {new Date(log.created_at).toLocaleString()}
-                  </td>
-                  <td style={{ padding: '0.75rem 1rem' }}>
-                    <Badge variant={log.is_resolved ? 'success' : 'error'}>
-                      {log.is_resolved ? 'Resolved' : 'Pending Review'}
-                    </Badge>
-                  </td>
-                  <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
-                    {!log.is_resolved && (
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        disabled={busy}
-                        onClick={() => handleResolveSecurityLog(log.id)}
-                      >
-                        <Check size={14} /> Resolve
-                      </Button>
-                    )}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-        </div>
-      </GlassCard>
-    </div>
+    <SecurityLogsPanel
+      logs={securityLogs}
+      totalPendingMetrics={metrics.security_alerts}
+      busy={busy}
+      onResolveOne={handleResolveSecurityLog}
+      onResolveAll={handleResolveAllSecurityLogs}
+      header={(actionSlot) =>
+        renderPageHeader(
+          'INSTITUTIONAL SURVEILLANCE & ALL-IN-ONE RESOLUTION',
+          'Security & Access Logs',
+          'Monitor authentication events, unrecognized device alerts, and failed login incidents across your department.',
+          actionSlot,
+          '#fbbf24'
+        )
+      }
+    />
   );
 
   const renderAnalytics = () => (
