@@ -41,6 +41,7 @@ interface QuizEditorModalProps {
   isOpen: boolean;
   busy?: boolean;
   subjects?: Subject[];
+  handledYearLevel?: string | null;
   onClose: () => void;
   onSave: (quiz: QuizEditorValues) => void;
 }
@@ -168,7 +169,7 @@ function toEditorValues(quiz: Quiz): QuizEditorValues {
   };
 }
 
-export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects = [], onClose, onSave }: QuizEditorModalProps) {
+export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects = [], handledYearLevel, onClose, onSave }: QuizEditorModalProps) {
   const { showToast } = useToastContext();
   const [draft, setDraft] = useState<QuizEditorValues | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -786,24 +787,29 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
 
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <span className="form-label" style={{ display: 'flex', alignItems: 'center', minHeight: '22px', marginBottom: '0.45rem' }}>
-                Course Code & Subject Description
+                {handledYearLevel
+                  ? `Course Code & Subject Description (${handledYearLevel})`
+                  : 'Course Code & Subject Description'}
               </span>
               <Select
                 value={draft.subject}
                 onChange={(val) => setDraft({ ...draft, subject: val })}
                 style={{ margin: 0 }}
                 options={(() => {
-                  const base = [...BSIT_SUBJECT_OPTIONS];
+                  const base = handledYearLevel
+                    ? BSIT_SUBJECT_OPTIONS.filter((o) => o.yearLevel === handledYearLevel)
+                    : [...BSIT_SUBJECT_OPTIONS];
                   const seen = new Set(base.map((o) => o.value.toLowerCase()));
                   (subjects || []).forEach((s) => {
                     if (/^prac/i.test(s.code || '') || /practicum/i.test(s.name || '')) return;
+                    if (handledYearLevel && s.grade && s.grade !== handledYearLevel) return;
                     const val = s.code && !s.name.startsWith(s.code) ? `${s.code} - ${s.name}` : s.name;
                     if (!seen.has(val.toLowerCase())) {
                       seen.add(val.toLowerCase());
                       base.push({
                         value: val,
-                        label: `[${s.grade || 'BSIT'}] ${s.code ? `${s.code} — ${s.name}` : s.name}`,
-                        yearLevel: (s.grade as any) || '1st Year',
+                        label: `[${s.grade || handledYearLevel || 'BSIT'}] ${s.code ? `${s.code} — ${s.name}` : s.name}`,
+                        yearLevel: (s.grade as any) || handledYearLevel || '1st Year',
                         semester: '1st Semester',
                       });
                     }

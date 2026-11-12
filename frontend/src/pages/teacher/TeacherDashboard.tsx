@@ -99,6 +99,14 @@ function hasDistinctTopic(quiz: Pick<Quiz, 'title' | 'topic'>): boolean {
   return true;
 }
 
+function resolveDefaultSubjectForYear(yearLevel?: string | null): string {
+  if (yearLevel) {
+    const match = BSIT_SUBJECT_OPTIONS.find((s) => s.yearLevel === yearLevel);
+    if (match) return match.value;
+  }
+  return BSIT_SUBJECT_OPTIONS[0]?.value || 'IT 101 - Introduction To Computing';
+}
+
 export default function TeacherDashboard() {
   const user = getLmsUser();
   const { showToast } = useToastContext();
@@ -122,7 +130,7 @@ export default function TeacherDashboard() {
 
   // Manual & PDF/AI Quiz Builder form
   const [quizTitle, setQuizTitle] = useState('');
-  const [subject, setSubject] = useState(BSIT_SUBJECT_OPTIONS[0]?.value || 'IT 101 - Introduction To Computing');
+  const [subject, setSubject] = useState(() => resolveDefaultSubjectForYear(user?.grade));
   const [topic, setTopic] = useState('');
   const [count, setCount] = useState(5);
   const [timeLimitMinutes, setTimeLimitMinutes] = useState(15);
@@ -171,6 +179,15 @@ export default function TeacherDashboard() {
       setStudents([]);
     }
   };
+
+  useEffect(() => {
+    if (handledYearLevel) {
+      const yearOptions = BSIT_SUBJECT_OPTIONS.filter((s) => s.yearLevel === handledYearLevel);
+      if (yearOptions.length > 0 && (!subject || !yearOptions.some((s) => s.value === subject))) {
+        setSubject(yearOptions[0].value);
+      }
+    }
+  }, [handledYearLevel]);
 
   const loadSubjects = async () => {
     try {
@@ -247,7 +264,8 @@ export default function TeacherDashboard() {
     setError(null);
     setNotice(null);
     try {
-      const finalSubject = (subject && subject.trim()) || (subjects[0]?.name) || 'IT 101 - Introduction To Computing';
+      const fallbackSubject = resolveDefaultSubjectForYear(handledYearLevel);
+      const finalSubject = (subject && subject.trim()) || (subjects[0]?.name) || fallbackSubject;
       const fallbackPdfTopic = uploadedPdf ? uploadedPdf.name.replace(/\.pdf$/i, '').replace(/[_-]+/g, ' ').trim() : '';
       const cleanTopic = topic.trim() || quizTitle.trim() || fallbackPdfTopic || 'Course Unit';
       const cleanTitle = quizTitle.trim() || cleanTopic;
@@ -619,21 +637,28 @@ export default function TeacherDashboard() {
             />
 
             <Select
-              label="Course Code & Subject Description (1st – 4th Year • Excl. Practicum)"
+              label={
+                handledYearLevel
+                  ? `Course Code & Subject Description (${handledYearLevel})`
+                  : 'Course Code & Subject Description (1st – 4th Year • Excl. Practicum)'
+              }
               value={subject}
               onChange={setSubject}
               options={(() => {
-                const base = [...BSIT_SUBJECT_OPTIONS];
+                const base = handledYearLevel
+                  ? BSIT_SUBJECT_OPTIONS.filter((o) => o.yearLevel === handledYearLevel)
+                  : [...BSIT_SUBJECT_OPTIONS];
                 const seen = new Set(base.map((o) => o.value.toLowerCase()));
                 subjects.forEach((s) => {
                   if (/^prac/i.test(s.code || '') || /practicum/i.test(s.name || '')) return;
+                  if (handledYearLevel && s.grade && s.grade !== handledYearLevel) return;
                   const val = s.code && !s.name.startsWith(s.code) ? `${s.code} - ${s.name}` : s.name;
                   if (!seen.has(val.toLowerCase())) {
                     seen.add(val.toLowerCase());
                     base.push({
                       value: val,
-                      label: `[${s.grade || 'BSIT'}] ${s.code ? `${s.code} — ${s.name}` : s.name}`,
-                      yearLevel: (s.grade as any) || '1st Year',
+                      label: `[${s.grade || handledYearLevel || 'BSIT'}] ${s.code ? `${s.code} — ${s.name}` : s.name}`,
+                      yearLevel: (s.grade as any) || handledYearLevel || '1st Year',
                       semester: '1st Semester',
                     });
                   }
@@ -1344,6 +1369,7 @@ export default function TeacherDashboard() {
         isOpen={Boolean(editingQuiz)}
         busy={busy}
         subjects={subjects}
+        handledYearLevel={handledYearLevel}
         onClose={() => setEditingQuiz(null)}
         onSave={handleSaveQuiz}
       />
