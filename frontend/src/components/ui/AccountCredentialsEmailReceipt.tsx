@@ -103,6 +103,35 @@ export function createFallbackAccountReceipt(params: {
   };
 }
 
+export type AccountDeliveryStatus = 'sent' | 'simulated' | 'failed';
+
+export function getAccountDeliveryStatus(receipt: Pick<AccountEmailDispatchReceipt, 'sent' | 'simulated' | 'mail_status'>): AccountDeliveryStatus {
+  if (receipt.sent) return 'sent';
+  if (receipt.simulated || receipt.mail_status === 'simulated') return 'simulated';
+  return 'failed';
+}
+
+export function buildAccountCreationFeedback(
+  receipt: Pick<AccountEmailDispatchReceipt, 'sent' | 'simulated' | 'mail_status' | 'recipient'>,
+  baseSummary: string
+): { message: string; variant: 'success' | 'warning' } {
+  const status = getAccountDeliveryStatus(receipt);
+  if (status === 'sent') {
+    return {
+      message: `${baseSummary}. Credentials emailed to ${receipt.recipient}.`,
+      variant: 'success',
+    };
+  }
+  const deliveryNote =
+    status === 'simulated'
+      ? 'Saved to local mail log only — share the slip below.'
+      : 'Email delivery failed — share the slip below.';
+  return {
+    message: `${baseSummary}. ${deliveryNote}`,
+    variant: 'warning',
+  };
+}
+
 interface AccountCredentialsEmailReceiptProps {
   receipt: AccountEmailDispatchReceipt;
   onDismiss: () => void;
@@ -326,11 +355,7 @@ export const AccountCredentialsEmailReceipt: React.FC<AccountCredentialsEmailRec
     printWindow.document.close();
   };
 
-  const deliveryStatus = receipt.sent
-    ? 'sent'
-    : receipt.simulated || receipt.mail_status === 'simulated'
-      ? 'simulated'
-      : 'failed';
+  const deliveryStatus = getAccountDeliveryStatus(receipt);
 
   const deliveryMeta = {
     sent: {

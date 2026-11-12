@@ -25,6 +25,7 @@ import ProfileUpdateCard from '../../components/ui/ProfileUpdateCard';
 import SecurityLogsPanel from '../../components/security/SecurityLogsPanel';
 import {
   AccountCredentialsEmailReceipt,
+  buildAccountCreationFeedback,
   createFallbackAccountReceipt,
   type AccountEmailDispatchReceipt,
 } from '../../components/ui/AccountCredentialsEmailReceipt';
@@ -595,15 +596,11 @@ export default function PrincipalDashboard() {
 
       setDispatchedAccountReceipt(fallbackReceipt);
 
-      const emailDelivered = Boolean(fallbackReceipt.sent);
       const baseMsg = newRole === 'student'
         ? `Student ${fullName} enrolled into ${newYearLevel} • ${finalSection}`
         : `${roleLabel} account for ${fullName} created`;
-      const msg = emailDelivered
-        ? `${baseMsg} and official credentials dispatched to ${newEmail.trim()}.`
-        : `${baseMsg}. ${fallbackReceipt.mail_warning || res?.message || 'Email was not sent to external inbox — share the slip below.'}`;
-      setNotice(msg);
-      showToast(msg, emailDelivered ? 'success' : 'warning');
+      const feedback = buildAccountCreationFeedback(fallbackReceipt, baseMsg);
+      showToast(feedback.message, feedback.variant);
       resetCreateForm();
       await loadDeanData();
     } catch (err: unknown) {

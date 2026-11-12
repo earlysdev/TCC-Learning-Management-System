@@ -26,6 +26,7 @@ import Input from '../../components/ui/Input';
 import ProfileUpdateCard from '../../components/ui/ProfileUpdateCard';
 import {
   AccountCredentialsEmailReceipt,
+  buildAccountCreationFeedback,
   createFallbackAccountReceipt,
   type AccountEmailDispatchReceipt,
 } from '../../components/ui/AccountCredentialsEmailReceipt';
@@ -584,19 +585,14 @@ export default function SecretaryDashboard() {
 
       setDispatchedAccountReceipt(fallbackReceipt);
 
-      const emailDelivered = Boolean(fallbackReceipt.sent);
       const baseMsg =
         newUserRole === 'student'
           ? `Student ${fullName} enrolled into ${yearLevel} • ${finalSection}`
           : assignedTeacherGrade
             ? `Teacher account for ${fullName} created (Assigned to ${assignedTeacherGrade})`
             : `Teacher account for ${fullName} created (All Year Levels)`;
-      const msg = emailDelivered
-        ? `${baseMsg} and official account credentials dispatched to ${email.trim()}!`
-        : `${baseMsg}. ${fallbackReceipt.mail_warning || response?.message || 'Email was not delivered externally — share the slip below.'}`;
-
-      setNotice(msg);
-      showToast(msg, emailDelivered ? 'success' : 'warning');
+      const feedback = buildAccountCreationFeedback(fallbackReceipt, baseMsg);
+      showToast(feedback.message, feedback.variant);
       // Reset form
       setFirstName('');
       setLastName('');
