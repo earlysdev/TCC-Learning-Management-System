@@ -1,5 +1,6 @@
 import { useState, useEffect, type MouseEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { getLmsToken, getLmsUser } from '../lmsApi';
 import { 
   BookOpen, Sparkles, BarChart2,
   ArrowRight, Eye, 
@@ -117,8 +118,33 @@ const academicColleges: AcademicCollege[] = [
 ];
 
 export default function LandingPage() {
+  const navigate = useNavigate();
   const [currentSlide, setCurrentSlide] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Auto-redirect if an active session exists or is logged into in another tab
+  useEffect(() => {
+    const checkActiveSession = () => {
+      const token = getLmsToken();
+      const user = getLmsUser();
+      if (token && user?.role) {
+        const rawRole = String(user.role).toLowerCase();
+        const role = rawRole === 'principal' ? 'dean' : rawRole;
+        navigate(`/${role}`, { replace: true });
+      }
+    };
+
+    checkActiveSession();
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'lms-token' || e.key === 'lms-user') {
+        checkActiveSession();
+      }
+    };
+
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, [navigate]);
 
   const scrollToSection = (e: MouseEvent<HTMLAnchorElement>, sectionId: string) => {
     e.preventDefault();

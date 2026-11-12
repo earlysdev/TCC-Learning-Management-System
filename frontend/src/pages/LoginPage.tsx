@@ -14,7 +14,7 @@ import {
   Check, 
   RefreshCw 
 } from 'lucide-react';
-import { API_BASE, getDeviceId } from '../lmsApi';
+import { API_BASE, getDeviceId, getLmsToken, getLmsUser } from '../lmsApi';
 import type { User } from '../lib/types';
 import CaptchaVerification from '../components/auth/CaptchaVerification';
 import Button from '../components/ui/Button';
@@ -58,6 +58,30 @@ export default function LoginPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [copiedResetPwd, setCopiedResetPwd] = useState(false);
+
+  // Auto-redirect if an active session already exists or is logged into in another tab
+  useEffect(() => {
+    const checkActiveSession = () => {
+      const existingToken = getLmsToken();
+      const existingUser = getLmsUser();
+      if (existingToken && existingUser?.role) {
+        const rawRole = String(existingUser.role).toLowerCase();
+        const role = rawRole === 'principal' ? 'dean' : rawRole;
+        navigate(`/${role}`, { replace: true });
+      }
+    };
+
+    checkActiveSession();
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'lms-token' || e.key === 'lms-user') {
+        checkActiveSession();
+      }
+    };
+
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, [navigate]);
 
   // Cooldown timer for OTP resend
   useEffect(() => {

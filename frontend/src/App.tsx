@@ -84,7 +84,36 @@ function ProtectedRole({ expected, children }: { expected?: string; children: Re
         }
       });
 
-    return () => { mounted = false; };
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'lms-token') {
+        if (!e.newValue) {
+          navigate('/login', { replace: true });
+        } else {
+          void lmsFetch<{ user: { role: string } }>('/me')
+            .then(({ user }) => {
+              if (!mounted) return;
+              const userRole = user.role === 'principal' ? 'dean' : user.role;
+              const matches = !expected || expected === userRole || (expected === 'dean' && userRole === 'developer');
+              if (!matches) {
+                navigate(`/${userRole}`, { replace: true });
+              }
+            })
+            .catch(() => {
+              if (mounted) {
+                void signOut();
+                navigate('/login', { replace: true });
+              }
+            });
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorage);
+
+    return () => {
+      mounted = false;
+      window.removeEventListener('storage', handleStorage);
+    };
   }, [expected, location.pathname, navigate]);
 
   return verified ? (

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import type { User } from '../lib/types'
 import { getLmsToken, getLmsUser, signOut, lmsFetch } from '../lib/api'
 
@@ -13,27 +13,49 @@ export function useAuth() {
     setToken(newToken)
     setIsAuthenticated(true)
 
-    localStorage.removeItem('lms-token')
-    localStorage.removeItem('lms-user')
+    // Store in localStorage so all browser tabs and windows stay synchronized
+    localStorage.setItem('lms-token', newToken)
+    localStorage.setItem('lms-user', JSON.stringify(newUser))
     sessionStorage.removeItem('lms-token')
     sessionStorage.removeItem('lms-user')
 
-    const storage = rememberMe ? localStorage : sessionStorage
-    storage.setItem('lms-token', newToken)
-    storage.setItem('lms-user', JSON.stringify(newUser))
+    if (rememberMe) {
+      localStorage.setItem('lms-remember', 'true')
+    } else {
+      localStorage.removeItem('lms-remember')
+    }
   }, [])
 
   const syncUser = useCallback((updatedUser: User) => {
     setUser(updatedUser)
-    const storage = localStorage.getItem('lms-token') ? localStorage : sessionStorage
-    storage.setItem('lms-user', JSON.stringify(updatedUser))
+    localStorage.setItem('lms-user', JSON.stringify(updatedUser))
   }, [])
 
   const logout = useCallback(() => {
     setUser(null)
     setToken(null)
     setIsAuthenticated(false)
+    localStorage.removeItem('lms-token')
+    localStorage.removeItem('lms-user')
+    localStorage.removeItem('lms-remember')
+    sessionStorage.removeItem('lms-token')
+    sessionStorage.removeItem('lms-user')
     signOut()
+  }, [])
+
+  // Synchronize authentication state across tabs in real-time
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'lms-token' || e.key === 'lms-user') {
+        const currentToken = getLmsToken()
+        const currentUser = getLmsUser()
+        setToken(currentToken)
+        setUser(currentUser)
+        setIsAuthenticated(Boolean(currentToken && currentUser))
+      }
+    }
+    window.addEventListener('storage', handleStorageChange)
+    return () => window.removeEventListener('storage', handleStorageChange)
   }, [])
 
   const refresh = useCallback(async () => {

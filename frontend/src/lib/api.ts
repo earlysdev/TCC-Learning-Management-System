@@ -26,10 +26,14 @@ export function getLmsUser(): User | null {
 }
 
 export function setSession(token: string, user: User, remember = false): void {
-  const storage = remember ? localStorage : sessionStorage
   clearStoredSession()
-  storage.setItem('lms-token', token)
-  storage.setItem('lms-user', JSON.stringify(user))
+  localStorage.setItem('lms-token', token)
+  localStorage.setItem('lms-user', JSON.stringify(user))
+  if (remember) {
+    localStorage.setItem('lms-remember', 'true')
+  } else {
+    localStorage.removeItem('lms-remember')
+  }
 }
 
 export async function lmsFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
