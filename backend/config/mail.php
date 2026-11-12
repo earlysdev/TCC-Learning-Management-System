@@ -14,7 +14,7 @@ return [
     |
     */
 
-    'default' => env('MAIL_MAILER', 'smtp'),
+    'default' => env('MAIL_MAILER') ?: (env('MAIL_HOST') && env('MAIL_USERNAME') ? 'smtp' : 'log'),
 
     /*
     |--------------------------------------------------------------------------
@@ -46,8 +46,8 @@ return [
             'url' => env('MAIL_URL'),
             'host' => env('MAIL_HOST', 'smtp.gmail.com'),
             'port' => (int) env('MAIL_PORT', 587),
-            'username' => env('MAIL_USERNAME', 'tcclms4@gmail.com'),
-            'password' => env('MAIL_PASSWORD', 'qhxsarnndiyayuku'),
+            'username' => env('MAIL_USERNAME'),
+            'password' => env('MAIL_PASSWORD'),
             'timeout' => (int) env('MAIL_TIMEOUT', 15),
             'local_domain' => env('MAIL_EHLO_DOMAIN', parse_url((string) env('APP_URL', 'http://localhost'), PHP_URL_HOST)),
         ],
