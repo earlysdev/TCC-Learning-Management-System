@@ -320,9 +320,15 @@ class AuthController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['sometimes', 'string', 'email', 'max:255'],
-            'password' => ['nullable', 'string', 'min:8'],
-            'code' => ['sometimes', 'nullable', 'string', 'min:6', 'max:8'],
-            'challenge' => ['sometimes', 'nullable', 'string'],
+            'password' => ['required', 'string', 'min:8'],
+            'code' => ['required', 'string', 'size:6'],
+            'challenge' => ['required', 'string'],
+        ], [
+            'password.required' => 'You are required to insert a password before saving settings.',
+            'password.min' => 'The password must be at least 8 characters long.',
+            'code.required' => 'The exact 6-digit email authorization code is required before saving settings.',
+            'code.size' => 'The authorization code must be exactly 6 digits.',
+            'challenge.required' => 'Please request a 6-digit authorization code to your institutional email first.',
         ]);
 
         // Requirement: Institutional School Email is PROTECTED and cannot be altered
@@ -333,65 +339,51 @@ class AuthController extends Controller
             ], 422);
         }
 
+        // Exact 6-digit OTP verification is mandatory to authorize settings updates
+        $verifyResult = $this->otpService->verify(
+            trim($validated['challenge']),
+            trim($validated['code']),
+            VerificationCode::PURPOSE_PASSWORD_CHANGE
+        );
+
+        if (! $verifyResult['success']) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $verifyResult['message'] ?? 'Invalid or expired authorization code. Please enter the exact 6-digit code.',
+                'attempts_remaining' => $verifyResult['attempts_remaining'] ?? 0,
+            ], 422);
+        }
+
         $parts = preg_split('/\s+/', trim($validated['name']), 2);
         $updates = [
             'name' => trim($validated['name']),
             'first_name' => $parts[0] ?? $user->first_name,
             'last_name' => $parts[1] ?? $user->last_name,
+            'password' => Hash::make($validated['password']),
         ];
 
-        // Changing password requires 6-digit code authorization
-        if (! empty($validated['password'])) {
-            $code = trim((string) ($validated['code'] ?? ''));
-            $challenge = trim((string) ($validated['challenge'] ?? ''));
-
-            if (empty($code) || empty($challenge)) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'A verification code is required to update your account password. Click "Request Code" to receive one at your school email.',
-                    'requires_code' => true,
-                ], 422);
-            }
-
-            $verifyResult = $this->otpService->verify(
-                $challenge,
-                $code,
-                VerificationCode::PURPOSE_PASSWORD_CHANGE
-            );
-
-            if (! $verifyResult['success']) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => $verifyResult['message'],
-                    'attempts_remaining' => $verifyResult['attempts_remaining'] ?? 0,
-                ], 422);
-            }
-
-            $updates['password'] = Hash::make($validated['password']);
-
-            SecurityLog::create([
-                'user_id' => $user->id,
-                'event_type' => 'password_changed_with_otp',
-                'ip_address' => $request->ip(),
-                'user_agent' => $request->userAgent(),
-                'details' => ['method' => 'profile_settings_otp'],
-                'is_resolved' => true,
-                'resolved_at' => now(),
-            ]);
-        }
-
         $user->update($updates);
+
+        SecurityLog::create([
+            'user_id' => $user->id,
+            'event_type' => 'password_changed_with_otp',
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'details' => ['method' => 'profile_settings_exact_otp'],
+            'is_resolved' => true,
+            'resolved_at' => now(),
+        ]);
 
         ActivityLog::create([
             'user_id' => $user->id,
             'action' => 'update_profile',
-            'description' => "Updated personal profile" . (!empty($validated['password']) ? " and reset security password" : ""),
+            'description' => "Updated personal profile and verified security password with exact email authorization code",
             'ip_address' => $request->ip(),
             'user_agent' => $request->userAgent(),
         ]);
 
         return response()->json([
-            'message' => 'Profile updated successfully.',
+            'message' => 'Settings and security password updated successfully.',
             'user' => $this->userPayload($user->fresh()),
         ]);
     }
