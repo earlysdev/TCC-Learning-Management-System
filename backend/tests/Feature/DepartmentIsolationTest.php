@@ -28,14 +28,24 @@ class DepartmentIsolationTest extends TestCase
             'department' => 'CIT',
         ])->assertCreated();
 
-        // Second Dean in CIT is rejected
+        // Second Dean in CIT is rejected with specific single-Dean message
         $this->actingAs($developer)->postJson('/api/users', [
             'name' => 'Duplicate CIT Dean',
             'email' => 'dean2.cit@tcc.edu.ph',
             'password' => 'StrongPass!2026',
             'role' => 'dean',
             'department' => 'CIT',
-        ])->assertStatus(422);
+        ])->assertStatus(422)
+            ->assertJsonPath('message', 'The CIT department already has an assigned Dean. Only 1 Dean exists per department.');
+
+        // Non-Dean roles in the same department remain creatable when a Dean already exists
+        $this->actingAs($developer)->postJson('/api/users', [
+            'name' => 'CIT Teacher',
+            'email' => 'teacher.cit@tcc.edu.ph',
+            'password' => 'StrongPass!2026',
+            'role' => 'teacher',
+            'department' => 'CIT',
+        ])->assertCreated();
 
         // Another department (CED) can still have its own single Dean & Secretary
         $this->actingAs($developer)->postJson('/api/users', [

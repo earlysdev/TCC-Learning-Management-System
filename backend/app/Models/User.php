@@ -7,6 +7,7 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Schema;
 use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
@@ -40,7 +41,14 @@ class User extends Authenticatable
     {
         static::saving(function (self $user): void {
             $user->department = $user->departmentCode();
-            $user->dean_department = $user->isDeanRole() ? $user->department : null;
+
+            $needsDeanScopeSync = $user->isDeanRole()
+                ? (! $user->exists || $user->isDirty(['role', 'department']))
+                : ($user->exists && $user->isDirty('role'));
+
+            if ($needsDeanScopeSync && Schema::hasColumn('users', 'dean_department')) {
+                $user->dean_department = $user->isDeanRole() ? $user->department : null;
+            }
         });
     }
 

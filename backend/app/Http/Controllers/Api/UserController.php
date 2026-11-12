@@ -274,9 +274,10 @@ class UserController extends Controller
         $validated['status'] = 'active';
 
         // Enforce single-Dean-per-department and 50-student section cap atomically
+        $isDeanCreation = in_array($validated['role'], ['dean', 'principal'], true);
         try {
-            $user = DB::transaction(function () use ($validated): ?User {
-                if (in_array($validated['role'], ['dean', 'principal'], true)) {
+            $user = DB::transaction(function () use ($validated, $isDeanCreation): ?User {
+                if ($isDeanCreation) {
                     $deanExists = User::where('department', $validated['department'])
                         ->whereIn('role', ['dean', 'principal'])
                         ->lockForUpdate()
@@ -301,7 +302,27 @@ class UserController extends Controller
                 return User::create($validated);
             });
         } catch (\Illuminate\Database\QueryException $e) {
-            $user = null;
+            $isDeanUniqueViolation = $isDeanCreation && (
+                str_contains($e->getMessage(), 'dean_department')
+                || User::where('department', $validated['department'])
+                    ->whereIn('role', ['dean', 'principal'])
+                    ->exists()
+            );
+
+            if ($isDeanUniqueViolation) {
+                $user = null;
+            } else {
+                Log::error('Failed to create LMS user account.', [
+                    'role' => $validated['role'],
+                    'department' => $validated['department'],
+                    'error' => $e->getMessage(),
+                ]);
+
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Could not create the account due to a database constraint or pending migration.',
+                ], 422);
+            }
         }
 
         if ($user === null) {
