@@ -8,35 +8,31 @@ interface NotificationBellProps {
 export default function NotificationBell({ unreadCount, onClick }: NotificationBellProps) {
   return (
     <button 
+      type="button"
       onClick={onClick}
-      style={{
-        position: 'relative',
-        background: 'transparent',
-        border: 'none',
-        color: 'white',
-        cursor: 'pointer',
-        padding: '0.5rem',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center'
-      }}
+      className="topbar-icon-btn"
+      aria-label="Notifications"
+      title="Notifications"
     >
-      <Bell size={24} />
+      <Bell size={18} />
       {unreadCount > 0 && (
         <span style={{
           position: 'absolute',
-          top: '2px',
-          right: '2px',
+          top: '-3px',
+          right: '-3px',
           background: 'var(--error)',
-          color: 'white',
-          fontSize: '0.6rem',
-          fontWeight: 'bold',
-          width: '16px',
+          color: '#ffffff',
+          fontSize: '0.62rem',
+          fontWeight: 700,
+          minWidth: '16px',
           height: '16px',
-          borderRadius: '50%',
+          padding: '0 3px',
+          borderRadius: '9999px',
+          border: '1.5px solid #180408',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center'
+          justifyContent: 'center',
+          lineHeight: 1,
         }}>
           {unreadCount > 9 ? '9+' : unreadCount}
         </span>

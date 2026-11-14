@@ -1,3 +1,5 @@
+import type { User } from './lib/types'
+
 export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? 'http://localhost:8000/api' : '/api')
 
 export function getDeviceId(): string {
@@ -13,38 +15,22 @@ export function getLmsToken(): string | null {
   return localStorage.getItem('lms-token') ?? sessionStorage.getItem('lms-token')
 }
 
-export function getLmsUser(): {
-  id: number
-  name: string
-  first_name?: string
-  last_name?: string
-  email: string
-  role: string
-  grade?: string
-  section?: string
-  status?: string
-  initials?: string
-  lrn?: string
-  department?: string
-} | null {
+export function getLmsUser(): User | null {
   const value = localStorage.getItem('lms-user') ?? sessionStorage.getItem('lms-user')
   if (!value) return null
   try {
-    return JSON.parse(value) as {
-      id: number
-      name: string
-      first_name?: string
-      last_name?: string
-      email: string
-      role: string
-      grade?: string
-      section?: string
-      status?: string
-      initials?: string
-      lrn?: string
-      department?: string
-    }
+    return JSON.parse(value) as User
   } catch { return null }
+}
+
+export function deriveUserInitials(name?: string, fallback = 'U'): string {
+  const trimmed = (name || '').trim()
+  if (!trimmed) return fallback
+  const parts = trimmed.split(/\s+/).filter(Boolean)
+  if (parts.length >= 2) {
+    return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
+  }
+  return trimmed.slice(0, 2).toUpperCase()
 }
 
 export class LmsApiError extends Error {

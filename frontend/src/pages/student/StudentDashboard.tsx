@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../components/layout/DashboardLayout';
-import { lmsFetch, getLmsUser, extractCollection } from '../../lmsApi';
+import { lmsFetch, getLmsUser, extractCollection, deriveUserInitials } from '../../lmsApi';
+import { useAuthContext } from '../../contexts/AuthContext';
 import type { Quiz, Recommendation, Announcement, ReviewQuestion, StudentAnswerValue, Question } from '../../lib/types';
 import { getYearLevelFromBlock } from '../../lib/constants';
 import { 
@@ -18,8 +19,19 @@ import QuizDetailsPdfModal from '../../components/ui/QuizDetailsPdfModal';
 import QuizPrivacyRulesModal from '../../components/ui/QuizPrivacyRulesModal';
 import { useToastContext } from '../../contexts/ToastContext';
 
+function isSafeHttpUrl(url?: string | null): boolean {
+  if (!url || typeof url !== 'string') return false;
+  try {
+    const parsed = new URL(url.trim());
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 export default function StudentDashboard() {
-  const user = getLmsUser();
+  const { user: authUser } = useAuthContext();
+  const user = authUser ?? getLmsUser();
   const { showToast } = useToastContext();
   const { subpage } = useParams<{ subpage?: string }>();
   const navigate = useNavigate();
@@ -227,21 +239,19 @@ export default function StudentDashboard() {
     : '0';
 
   const renderOverview = () => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      <div className="page-header" style={{ marginBottom: 0 }}>
         <div>
-          <span style={{ fontSize: '0.8rem', color: 'var(--primary-300)', letterSpacing: '1px', textTransform: 'uppercase', fontWeight: 600 }}>
-            STUDENT DASHBOARD
-          </span>
-          <h1 style={{ fontSize: '2.25rem', fontWeight: 800, color: 'white', marginTop: '0.25rem' }}>
+          <div className="page-eyebrow">STUDENT DASHBOARD</div>
+          <h1 className="page-title">
             Welcome back, {user?.name || 'Student'}!
           </h1>
-          <p style={{ color: 'var(--neutral-300)', marginTop: '0.25rem' }}>
+          <p className="page-subtitle">
             Track your progress, take your assigned quizzes, and view AI-driven recommendations.
           </p>
         </div>
-        <Button variant="accent" onClick={() => setActiveSection('quizzes')}>
-          <BookOpen size={16} /> Take a Quiz
+        <Button variant="accent" onClick={() => handleSectionChange('quizzes')}>
+          <BookOpen size={15} /> Take a Quiz
         </Button>
       </div>
 
@@ -422,7 +432,7 @@ export default function StudentDashboard() {
                       size="sm"
                       onClick={() => {
                         openQuiz(quiz);
-                        setActiveSection('quizzes');
+                        handleSectionChange('quizzes');
                       }}
                       style={{ flex: 1 }}
                     >
@@ -794,7 +804,7 @@ export default function StudentDashboard() {
                       <ExternalLink size={14} /> STUDY REFERENCES & LEARNING MATERIALS:
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                      {quizResult.recommendation.references.map((ref, i) => (
+                      {quizResult.recommendation.references.filter((ref) => isSafeHttpUrl(ref.url)).map((ref, i) => (
                         <a
                           key={i}
                           href={ref.url}
@@ -1320,7 +1330,7 @@ export default function StudentDashboard() {
                     {Number(quiz.percentage).toFixed(0)}%
                   </Badge>
                 </div>
-                <Button variant="outline" size="sm" onClick={() => { openQuiz(quiz); setActiveSection('quizzes'); }}>
+                <Button variant="outline" size="sm" onClick={() => { openQuiz(quiz); handleSectionChange('quizzes'); }}>
                   Review
                 </Button>
               </div>
@@ -1334,10 +1344,8 @@ export default function StudentDashboard() {
   const renderScores = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       <div>
-        <span style={{ fontSize: '0.8rem', color: 'var(--primary-300)', letterSpacing: '1px', textTransform: 'uppercase', fontWeight: 600 }}>
-          ACADEMIC PERFORMANCE
-        </span>
-        <h1 style={{ fontSize: '2rem', fontWeight: 800, color: 'white', marginTop: '0.25rem' }}>
+        <div className="page-eyebrow">ACADEMIC PERFORMANCE</div>
+        <h1 className="page-title">
           Scores & Analytics
         </h1>
         <p style={{ color: 'var(--neutral-300)' }}>
@@ -1513,7 +1521,7 @@ export default function StudentDashboard() {
                             <ExternalLink size={13} /> STUDY REFERENCES:
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                            {q.recommendation.references.map((ref, idx) => (
+                            {q.recommendation.references.filter((ref) => isSafeHttpUrl(ref.url)).map((ref, idx) => (
                               <a
                                 key={idx}
                                 href={ref.url}
@@ -1558,61 +1566,65 @@ export default function StudentDashboard() {
   );
 
   const renderSettings = () => (
-    <div style={{ maxWidth: '650px', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+    <div className="profile-page-container" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       <div>
-        <span style={{ fontSize: '0.8rem', color: 'var(--primary-300)', letterSpacing: '1px', textTransform: 'uppercase', fontWeight: 600 }}>
-          ACCOUNT DETAILS
-        </span>
-        <h1 style={{ fontSize: '2rem', fontWeight: 800, color: 'white', marginTop: '0.25rem' }}>
+        <div className="page-eyebrow">ACCOUNT DETAILS</div>
+        <h1 className="page-title">
           Student Profile
         </h1>
-        <p style={{ color: 'var(--neutral-300)' }}>
+        <p className="page-subtitle">
           Official registration and enrollment records at Tagoloan Community College.
         </p>
       </div>
 
-      <GlassCard>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', marginBottom: '1.5rem' }}>
-          <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'linear-gradient(135deg, var(--primary-500), var(--accent-purple))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', fontWeight: 800, color: 'white' }}>
-            {user?.initials || 'S'}
-          </div>
-          <div>
-            <h2 style={{ fontSize: '1.3rem', fontWeight: 700, color: 'white' }}>{user?.name || 'Student Name'}</h2>
-            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
-              <Badge variant="success">Active Student</Badge>
-              <Badge variant="primary">{user?.section || 'Block - 1A'}</Badge>
+      <GlassCard className="profile-card" style={{ marginBottom: 0 }}>
+        <div className="profile-header-row">
+          <div className="profile-identity-main">
+            <div className="profile-avatar-lg">
+              {user?.profile_picture ? (
+                <img src={user.profile_picture} alt={user.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                deriveUserInitials(user?.name, user?.initials || 'S')
+              )}
+            </div>
+            <div className="profile-identity-meta">
+              <h2 className="profile-identity-name">{user?.name || 'Student Name'}</h2>
+              <div className="profile-identity-badges">
+                <Badge variant="success">Active Student</Badge>
+                <Badge variant="primary">{user?.section || 'Block - 1A'}</Badge>
+              </div>
             </div>
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.25rem', borderTop: '1px solid var(--glass-border)', paddingTop: '1.25rem' }}>
-          <div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', textTransform: 'uppercase', fontWeight: 600 }}>Student ID</div>
-            <div style={{ color: 'white', fontWeight: 600, marginTop: '0.2rem', fontFamily: 'monospace', fontSize: '1.05rem' }}>
+        <div className="profile-info-grid">
+          <div className="profile-info-tile">
+            <div className="profile-info-label">Student ID</div>
+            <div className="profile-info-value" style={{ fontFamily: 'monospace' }}>
               {user?.lrn || '20273710'}
             </div>
           </div>
-          <div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', textTransform: 'uppercase', fontWeight: 600 }}>Email Address</div>
-            <div style={{ color: 'white', fontWeight: 600, marginTop: '0.2rem' }}>
+          <div className="profile-info-tile">
+            <div className="profile-info-label">Email Address</div>
+            <div className="profile-info-value">
               {user?.email || 'student@tcc.edu.ph'}
             </div>
           </div>
-          <div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', textTransform: 'uppercase', fontWeight: 600 }}>Academic Department</div>
-            <div style={{ color: '#fbbf24', fontWeight: 700, marginTop: '0.2rem' }}>
+          <div className="profile-info-tile">
+            <div className="profile-info-label">Academic Department</div>
+            <div className="profile-info-value profile-info-value--gold">
               {user?.department ? `${user.department} Department` : 'College of Information Technology (CIT)'}
             </div>
           </div>
-          <div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', textTransform: 'uppercase', fontWeight: 600 }}>Block</div>
-            <div style={{ color: 'white', fontWeight: 600, marginTop: '0.2rem' }}>
+          <div className="profile-info-tile">
+            <div className="profile-info-label">Block &amp; Year Level</div>
+            <div className="profile-info-value">
               {user?.section || 'Block - 1A'} ({getYearLevelFromBlock(user?.section)})
             </div>
           </div>
-          <div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', textTransform: 'uppercase', fontWeight: 600 }}>School Year</div>
-            <div style={{ color: 'white', fontWeight: 600, marginTop: '0.2rem' }}>
+          <div className="profile-info-tile">
+            <div className="profile-info-label">School Year</div>
+            <div className="profile-info-value">
               2026–2027
             </div>
           </div>
@@ -1648,7 +1660,7 @@ export default function StudentDashboard() {
           onStartQuiz={(q) => {
             if (q.attempted) {
               openQuiz(q);
-              setActiveSection('quizzes');
+              handleSectionChange('quizzes');
             } else {
               requestTakeQuiz(q);
             }

@@ -160,9 +160,8 @@ export default function ProfileUpdateCard() {
       setNotice(msg);
       showToast(msg, res.mail_status && res.mail_status !== 'sent' ? 'warning' : 'success');
 
-      if (res.debug_code) {
+      if (res.debug_code && import.meta.env.DEV) {
         setDebugCode(res.debug_code);
-        setCode(res.debug_code);
         showToast(`Demo authorization code: ${res.debug_code}`, 'info');
       }
     } catch (err: unknown) {
@@ -276,10 +275,10 @@ export default function ProfileUpdateCard() {
       <div className="settings-card-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', minWidth: 0 }}>
           <div className="settings-header-emblem">
-            <ShieldCheck size={22} />
+            <ShieldCheck size={20} />
           </div>
           <div style={{ minWidth: 0 }}>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#ffffff', margin: 0, letterSpacing: '-0.01em' }}>
+            <h3 style={{ fontSize: '1.18rem', fontWeight: 700, color: '#ffffff', margin: 0, letterSpacing: '-0.01em' }}>
               Account Settings &amp; Security
             </h3>
             <p style={{ color: 'var(--neutral-300)', fontSize: '0.84rem', margin: '0.2rem 0 0', lineHeight: 1.45 }}>
@@ -307,74 +306,85 @@ export default function ProfileUpdateCard() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-        {/* Symmetrical 2-Column Grid: Full Name and Locked Institutional Email */}
-        <div className="settings-grid-2">
-          <div className="form-group" style={{ margin: 0 }}>
-            <div className="settings-label-row">
-              <label className="form-label" htmlFor="settings-user-name">
-                Full Name / Display Name
-              </label>
-            </div>
-            <div className="settings-input-wrap">
-              <UserIcon size={16} className="input-icon-left" />
-              <input
-                id="settings-user-name"
-                type="text"
-                className="form-input"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                placeholder="e.g. Juan Dela Cruz"
-              />
-            </div>
-            <p className="settings-field-helper">
-              {fieldGuidance.nameHelper}
-            </p>
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.4rem' }}>
+        {/* Section 1: Verified Identity Details */}
+        <div className="settings-section-block">
+          <div className="settings-section-heading">
+            <h4 className="settings-section-title">1. Verified Identity Details</h4>
           </div>
 
-          <div className="form-group" style={{ margin: 0 }}>
-            <div className="settings-label-row">
-              <label className="form-label" htmlFor="settings-user-email">
-                Institutional Email
-              </label>
-              <span className="settings-lock-badge">
-                <Lock size={10} /> Locked
-              </span>
+          <div className="settings-grid-2">
+            <div className="form-group" style={{ margin: 0 }}>
+              <div className="settings-label-row">
+                <label className="form-label" htmlFor="settings-user-name">
+                  Full Name / Display Name
+                </label>
+              </div>
+              <div className="settings-input-wrap">
+                <UserIcon size={16} className="input-icon-left" />
+                <input
+                  id="settings-user-name"
+                  type="text"
+                  className="form-input"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  placeholder="e.g. Juan Dela Cruz"
+                />
+              </div>
+              <p className="settings-field-helper">
+                {fieldGuidance.nameHelper}
+              </p>
             </div>
-            <div className="settings-input-wrap">
-              <Mail size={16} className="input-icon-left" />
-              <input
-                id="settings-user-email"
-                type="email"
-                value={email}
-                disabled
-                readOnly
-                className="form-input settings-input-locked"
-                aria-label="Institutional email address (locked)"
-              />
-              <Lock size={14} className="input-icon-right" />
+
+            <div className="form-group" style={{ margin: 0 }}>
+              <div className="settings-label-row">
+                <label className="form-label" htmlFor="settings-user-email">
+                  Institutional Email
+                </label>
+                <span className="settings-lock-badge">
+                  <Lock size={10} /> Locked
+                </span>
+              </div>
+              <div className="settings-input-wrap">
+                <Mail size={16} className="input-icon-left" />
+                <input
+                  id="settings-user-email"
+                  type="email"
+                  value={email}
+                  disabled
+                  readOnly
+                  className="form-input settings-input-locked"
+                  aria-label="Institutional email address (locked)"
+                />
+                <Lock size={14} className="input-icon-right" />
+              </div>
+              <p className="settings-field-helper">
+                {fieldGuidance.emailLockHelper}
+              </p>
             </div>
-            <p className="settings-field-helper">
-              {fieldGuidance.emailLockHelper}
-            </p>
           </div>
         </div>
 
-        {/* Security Password & Mandatory Email Authorization Box */}
+        {/* Section 2: Password Verification & Optional Update */}
         <div className="settings-password-box">
           <div className="settings-password-box-header">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
               <div className="settings-password-icon-badge">
                 <KeyRound size={16} />
               </div>
               <div>
-                <span style={{ fontWeight: 800, fontSize: '0.98rem', color: '#ffffff' }}>
-                  Password Verification &amp; Email Authorization
-                </span>
-                <span style={{ marginLeft: '0.5rem', fontSize: '0.72rem', fontWeight: 800, color: '#fbbf24', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Required to Save
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: 700, fontSize: '0.94rem', color: '#ffffff' }}>
+                    2. Password Verification &amp; Credentials
+                  </span>
+                  <span className="settings-lock-badge" style={{ textTransform: 'none', fontWeight: 600 }}>
+                    Required to Save
+                  </span>
+                </div>
+                <p style={{ margin: '0.15rem 0 0', fontSize: '0.76rem', color: 'var(--neutral-400)' }}>
+                  Confirm your current password to authorize changes, or set a new password below.
+                </p>
               </div>
             </div>
 
@@ -395,7 +405,7 @@ export default function ProfileUpdateCard() {
           <div className="form-group" style={{ margin: 0 }}>
             <div className="settings-label-row">
               <label className="form-label" htmlFor="settings-current-password">
-                Current Security Password <span style={{ color: '#fbbf24', fontWeight: 700 }}>* (Required)</span>
+                Current Security Password <span style={{ color: '#fbbf24', fontWeight: 600 }}>* (Required)</span>
               </label>
             </div>
             <div className="settings-input-wrap has-right-control">
@@ -429,7 +439,7 @@ export default function ProfileUpdateCard() {
             <div className="form-group" style={{ margin: 0 }}>
               <div className="settings-label-row">
                 <label className="form-label" htmlFor="settings-new-password">
-                  New Password
+                  New Password <span style={{ color: 'var(--neutral-400)', fontWeight: 500, fontSize: '0.76rem' }}>(Optional)</span>
                 </label>
               </div>
               <div className="settings-input-wrap has-right-control">
@@ -487,23 +497,43 @@ export default function ProfileUpdateCard() {
               </div>
             </div>
           )}
+        </div>
 
-          {/* Mandatory Exact 6-Digit Email Authorization Code Box */}
-          <div className="settings-otp-box">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.65rem' }}>
+        {/* Section 3: Mandatory Exact 6-Digit Email Authorization Code Box */}
+        <div className="settings-otp-box">
+          <div className="settings-otp-row">
+            <div style={{ minWidth: 0, flex: '1 1 280px' }}>
               <label
                 htmlFor="settings-otp-code"
-                style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: '#fde68a', fontSize: '0.86rem', fontWeight: 700, cursor: 'pointer' }}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: '#fde68a', fontSize: '0.88rem', fontWeight: 700, cursor: 'pointer', marginBottom: '0.25rem' }}
               >
-                <Mail size={16} /> Exact 6-Digit Email Authorization Code <span style={{ color: '#fbbf24' }}>* (Required)</span>
+                <Mail size={16} /> 3. Email Authorization Code <span style={{ color: '#fbbf24', fontWeight: 600 }}>* (Required)</span>
               </label>
+              <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--neutral-200)', lineHeight: 1.5 }}>
+                Click <strong>&quot;Request 6-Digit Code&quot;</strong> to send a one-time verification code to <strong>{emailHint || email}</strong>.
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
+              <input
+                id="settings-otp-code"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                placeholder="6-digit code"
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+                className="form-input settings-otp-input"
+                required
+              />
               <button
                 type="button"
                 onClick={handleRequestCode}
                 disabled={requestingCode || cooldown > 0}
                 className="settings-btn-otp"
               >
-                <RefreshCw size={12} className={requestingCode ? 'spin' : ''} />
+                <RefreshCw size={13} className={requestingCode ? 'spin' : ''} />
                 {cooldown > 0
                   ? `Resend in ${cooldown}s`
                   : challenge
@@ -511,67 +541,48 @@ export default function ProfileUpdateCard() {
                     : 'Request 6-Digit Code'}
               </button>
             </div>
-
-            <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--neutral-200)', lineHeight: 1.5 }}>
-              Click <strong>&quot;Request 6-Digit Code&quot;</strong> to receive your one-time code at <strong>{emailHint || email}</strong>. Both your current password and exact 6-digit code are required to save changes.
-            </p>
-
-            {debugCode && (
-              <div className="settings-demo-banner">
-                <div style={{ fontSize: '0.76rem', color: '#fef08a' }}>
-                  <strong>Demo Code:</strong>{' '}
-                  <span style={{ fontFamily: 'monospace', fontSize: '1.08rem', fontWeight: 800, letterSpacing: '4px', color: '#fbbf24', marginLeft: '0.4rem' }}>
-                    {debugCode}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCode(debugCode);
-                    showToast('Demo code auto-filled!', 'success');
-                  }}
-                  style={{
-                    background: 'rgba(245, 158, 11, 0.25)',
-                    color: '#ffffff',
-                    border: '1px solid #fbbf24',
-                    padding: '0.25rem 0.65rem',
-                    borderRadius: '4px',
-                    fontSize: '0.72rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Auto-Fill
-                </button>
-              </div>
-            )}
-
-            <div>
-              <input
-                id="settings-otp-code"
-                type="text"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={6}
-                placeholder="Enter 6-digit code (e.g. 581942)"
-                value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-                className="form-input settings-otp-input"
-                required
-              />
-            </div>
           </div>
+
+          {debugCode && (
+            <div className="settings-demo-banner">
+              <div style={{ fontSize: '0.76rem', color: '#fef08a' }}>
+                <strong>Demo Code:</strong>{' '}
+                <span style={{ fontFamily: 'monospace', fontSize: '1.04rem', fontWeight: 700, letterSpacing: '4px', color: '#fbbf24', marginLeft: '0.4rem' }}>
+                  {debugCode}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setCode(debugCode);
+                  showToast('Demo code auto-filled!', 'success');
+                }}
+                style={{
+                  background: 'rgba(245, 158, 11, 0.22)',
+                  color: '#ffffff',
+                  border: '1px solid #fbbf24',
+                  padding: '0.25rem 0.65rem',
+                  borderRadius: '4px',
+                  fontSize: '0.72rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Auto-Fill
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Footer Action Bar */}
         <div className="settings-card-footer">
-          <span style={{ fontSize: '0.78rem', color: 'var(--neutral-400)', display: 'inline-flex', alignItems: 'center', gap: '0.45rem' }}>
+          <span className="settings-requirements-note">
             <ShieldCheck size={15} style={{ color: '#4ade80', flexShrink: 0 }} />
             Current password and exact 6-digit email code are required to save settings.
           </span>
           <div style={{ marginLeft: 'auto' }}>
-            <Button type="submit" variant="accent" size="lg" isLoading={saving} disabled={!canSubmit}>
-              <Save size={16} /> Save Settings &amp; Security Changes
+            <Button type="submit" variant="accent" size="md" isLoading={saving} disabled={!canSubmit}>
+              <Save size={15} /> Save Settings &amp; Security Changes
             </Button>
           </div>
         </div>

@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../components/layout/DashboardLayout';
-import { lmsFetch, getLmsUser, extractCollection } from '../../lmsApi';
+import { lmsFetch, getLmsUser, extractCollection, deriveUserInitials } from '../../lmsApi';
+import { useAuthContext } from '../../contexts/AuthContext';
 import type { User, Quiz, SecurityLog, ActivityLog, PaginatedResponse, Announcement, Section } from '../../lib/types';
 import {
   YEAR_LEVEL_BLOCKS,
@@ -92,7 +93,8 @@ const sectionToPath: Record<string, string> = {
 };
 
 export default function PrincipalDashboard() {
-  const user = getLmsUser();
+  const { user: authUser } = useAuthContext();
+  const user = authUser ?? getLmsUser();
   const departmentCode = (user?.department || 'CIT').toUpperCase();
   const departmentName = getDepartmentName(departmentCode);
   const { showToast } = useToastContext();
@@ -675,15 +677,15 @@ export default function PrincipalDashboard() {
     title: string,
     description: string,
     actions?: React.ReactNode,
-    eyebrowColor = 'var(--primary-300)'
+    eyebrowColor = 'var(--accent-gold)'
   ) => (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '1rem' }}>
+    <div className="page-header" style={{ marginBottom: 0 }}>
       <div style={{ minWidth: 0, flex: '1 1 380px' }}>
-        <span style={{ fontSize: '0.78rem', color: eyebrowColor, letterSpacing: '1px', textTransform: 'uppercase', fontWeight: 700 }}>
+        <div className="page-eyebrow" style={{ color: eyebrowColor }}>
           {eyebrow}
-        </span>
-        <h1 style={{ fontSize: '2rem', fontWeight: 800, color: 'white', margin: '0.25rem 0 0' }}>{title}</h1>
-        <p style={{ color: 'var(--neutral-300)', margin: '0.3rem 0 0' }}>{description}</p>
+        </div>
+        <h1 className="page-title">{title}</h1>
+        <p className="page-subtitle">{description}</p>
       </div>
       {actions && <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap' }}>{actions}</div>}
     </div>
@@ -753,7 +755,7 @@ export default function PrincipalDashboard() {
             key={action.title}
             type="button"
             onClick={action.onClick}
-            className="glass-card"
+            className="card-glass hoverable"
             style={{
               display: 'flex', alignItems: 'flex-start', gap: '0.85rem', textAlign: 'left', cursor: 'pointer',
               padding: '1rem 1.1rem', border: '1px solid var(--glass-border)', borderRadius: 'var(--radius-lg)',
@@ -1268,7 +1270,7 @@ export default function PrincipalDashboard() {
   );
 
   const renderSettings = () => (
-    <div style={{ maxWidth: '760px', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+    <div className="profile-page-container" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       {renderPageHeader(
         'EXECUTIVE CREDENTIALS',
         'Dean Profile',
@@ -1277,37 +1279,49 @@ export default function PrincipalDashboard() {
         'var(--error)'
       )}
 
-      <GlassCard>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', marginBottom: '1.5rem' }}>
-          <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'linear-gradient(135deg, var(--error), var(--accent-purple))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', fontWeight: 800, color: 'white' }}>
-            {user?.initials || 'D'}
-          </div>
-          <div>
-            <h2 style={{ fontSize: '1.3rem', fontWeight: 700, color: 'white' }}>{user?.name || 'College Dean'}</h2>
-            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
-              <Badge variant="error">College Dean</Badge>
-              <Badge variant="success">Active</Badge>
+      <GlassCard className="profile-card" style={{ marginBottom: 0 }}>
+        <div className="profile-header-row">
+          <div className="profile-identity-main">
+            <div className="profile-avatar-lg">
+              {user?.profile_picture ? (
+                <img src={user.profile_picture} alt={user.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                deriveUserInitials(user?.name, user?.initials || 'D')
+              )}
+            </div>
+            <div className="profile-identity-meta">
+              <h2 className="profile-identity-name">{user?.name || 'College Dean'}</h2>
+              <div className="profile-identity-badges">
+                <Badge variant="error">College Dean</Badge>
+                <Badge variant="success">Active</Badge>
+              </div>
             </div>
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.25rem', borderTop: '1px solid var(--glass-border)', paddingTop: '1.25rem' }}>
-          <div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', textTransform: 'uppercase', fontWeight: 600 }}>Email Address</div>
-            <div style={{ color: 'white', fontWeight: 600, marginTop: '0.2rem' }}>
+        <div className="profile-info-grid">
+          <div className="profile-info-tile">
+            <div className="profile-info-label">Email Address</div>
+            <div className="profile-info-value">
               {user?.email || 'dean@tcc.edu.ph'}
             </div>
           </div>
-          <div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', textTransform: 'uppercase', fontWeight: 600 }}>Office</div>
-            <div style={{ color: 'white', fontWeight: 600, marginTop: '0.2rem' }}>
+          <div className="profile-info-tile">
+            <div className="profile-info-label">Office</div>
+            <div className="profile-info-value">
               Office of the Dean ({departmentCode})
             </div>
           </div>
-          <div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', textTransform: 'uppercase', fontWeight: 600 }}>Department</div>
-            <div style={{ color: 'white', fontWeight: 600, marginTop: '0.2rem' }}>
+          <div className="profile-info-tile">
+            <div className="profile-info-label">Department</div>
+            <div className="profile-info-value profile-info-value--gold">
               {departmentCode} — {departmentName}
+            </div>
+          </div>
+          <div className="profile-info-tile">
+            <div className="profile-info-label">School Year</div>
+            <div className="profile-info-value">
+              2026–2027
             </div>
           </div>
         </div>

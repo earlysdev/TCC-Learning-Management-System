@@ -14,6 +14,7 @@ export interface User {
   status?: string;
   initials?: string;
   lrn?: string;
+  profile_picture?: string | null;
 }
 
 export interface Quiz {

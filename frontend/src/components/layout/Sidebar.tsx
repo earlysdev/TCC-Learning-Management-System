@@ -3,6 +3,7 @@ import { ROLE_CONFIGS } from '../../lib/constants';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { useToastContext } from '../../contexts/ToastContext';
+import { deriveUserInitials } from '../../lmsApi';
 import { LogOut } from 'lucide-react';
 import Badge from '../ui/Badge';
 
@@ -28,9 +29,9 @@ export default function Sidebar({ role, isOpen, onClose }: SidebarProps) {
     <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
       <div className="sidebar-brand">
         <img src="/assets/images/logo.png" alt="TCC Logo" />
-        <div>
+        <div style={{ minWidth: 0 }}>
           <div className="sidebar-brand-text">TCC LMS</div>
-          <Badge variant={config.badgeColor} className="mt-1" style={{ fontSize: '0.65rem' }}>
+          <Badge variant={config.badgeColor} className="mt-1" style={{ fontSize: '0.64rem', padding: '0.16rem 0.52rem' }}>
             {config.label}
           </Badge>
         </div>
@@ -46,36 +47,42 @@ export default function Sidebar({ role, isOpen, onClose }: SidebarProps) {
               to={item.path}
               className={({ isActive }) => `sidebar-item ${isActive ? 'sidebar-item-active' : ''}`}
               onClick={() => {
-                showToast(`Switched to ${item.label}.`, 'info');
                 if (window.innerWidth <= 1024) onClose();
               }}
             >
-              <Icon size={20} />
-              <span>{item.label}</span>
+              <span className="sidebar-item-icon">
+                <Icon size={18} />
+              </span>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</span>
             </NavLink>
           );
         })}
       </nav>
 
       <div className="sidebar-footer">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-          <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'var(--primary-600)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
-            {user?.initials || 'U'}
+        <div className="sidebar-user-card">
+          <div className="sidebar-user-avatar">
+            {user?.profile_picture ? (
+              <img src={user.profile_picture} alt={user.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              deriveUserInitials(user?.name, user?.initials || 'U')
+            )}
           </div>
-          <div style={{ overflow: 'hidden' }}>
-            <div style={{ fontSize: '0.875rem', fontWeight: 600, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+          <div className="sidebar-user-info">
+            <div className="sidebar-user-name">
               {user?.name || 'User'}
             </div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+            <div className="sidebar-user-role" style={{ textTransform: 'none', color: 'var(--neutral-400)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {user?.email}
             </div>
           </div>
         </div>
         <button 
+          type="button"
           onClick={handleLogout}
-          style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.5rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', borderRadius: 'var(--radius-md)', color: 'var(--neutral-200)', cursor: 'pointer', transition: 'all 0.2s' }}
+          className="sidebar-logout-btn"
         >
-          <LogOut size={16} />
+          <LogOut size={15} />
           <span>Sign Out</span>
         </button>
       </div>

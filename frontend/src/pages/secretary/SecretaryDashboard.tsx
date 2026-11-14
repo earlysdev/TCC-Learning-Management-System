@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../components/layout/DashboardLayout';
-import { lmsFetch, getLmsUser, extractCollection } from '../../lmsApi';
+import { lmsFetch, getLmsUser, extractCollection, deriveUserInitials } from '../../lmsApi';
+import { useAuthContext } from '../../contexts/AuthContext';
 import type { User, ActivityLog, PaginatedResponse, Section, Subject } from '../../lib/types';
 import {
   YEAR_LEVEL_BLOCKS,
@@ -106,8 +107,15 @@ function computeNextBlockSuggestion(yearLevel: string, existingBlocks: string[])
   return `Block - ${yrNum}${existingBlocks.length + 1}`;
 }
 
+function escapeCsvCell(value: unknown): string {
+  const raw = String(value ?? '');
+  const sanitized = /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw;
+  return `"${sanitized.replace(/"/g, '""')}"`;
+}
+
 export default function SecretaryDashboard() {
-  const user = getLmsUser();
+  const { user: authUser } = useAuthContext();
+  const user = authUser ?? getLmsUser();
   const departmentCode = (user?.department || 'CIT').toUpperCase();
   const departmentName = getDepartmentName(departmentCode);
   const { showToast } = useToastContext();
@@ -657,17 +665,22 @@ export default function SecretaryDashboard() {
     }
   };
 
-  const filteredStudents = students.filter(s => {
-    const matchesSearch = !searchQuery || 
-      s.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      (s.lrn && s.lrn.includes(searchQuery)) ||
-      (s.section && s.section.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      s.email.toLowerCase().includes(searchQuery.toLowerCase());
-    const studentYear = getYearLevelFromBlock(s.section, s.grade);
-    const matchesBlock = !blockFilter || s.section === blockFilter || studentYear === blockFilter;
-    const matchesStatus = !statusFilter || s.status === statusFilter;
-    return matchesSearch && matchesBlock && matchesStatus;
-  });
+  const filteredStudents = useMemo(
+    () =>
+      students.filter((s) => {
+        const matchesSearch =
+          !searchQuery ||
+          s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (s.lrn && s.lrn.includes(searchQuery)) ||
+          (s.section && s.section.toLowerCase().includes(searchQuery.toLowerCase())) ||
+          s.email.toLowerCase().includes(searchQuery.toLowerCase());
+        const studentYear = getYearLevelFromBlock(s.section, s.grade);
+        const matchesBlock = !blockFilter || s.section === blockFilter || studentYear === blockFilter;
+        const matchesStatus = !statusFilter || s.status === statusFilter;
+        return matchesSearch && matchesBlock && matchesStatus;
+      }),
+    [students, searchQuery, blockFilter, statusFilter]
+  );
 
   // Merge official 58 BSIT subjects (excluding Practicum and legacy Math 1/2/3/NSTP 1 duplicates) with any extra custom subjects added via API
   const allCurriculumSubjects: CurriculumSubjectItem[] = useMemo(() => {
@@ -765,15 +778,15 @@ export default function SecretaryDashboard() {
       scopeSummary = `${reportYearFilter === 'ALL' ? 'All Year Levels' : reportYearFilter} • ${reportStatusFilter === 'ALL' ? 'All Statuses' : reportStatusFilter}`;
       const header = ['No.', 'Student ID', 'Full Name', 'Year Level', 'Class Section / Block', 'Email Address', 'Enrollment Status'];
       const body = rows.map((s, idx) => [
-        String(idx + 1),
-        s.lrn || 'N/A',
-        `"${(s.name || '').replace(/"/g, '""')}"`,
-        getYearLevelFromBlock(s.section, s.grade),
-        s.section || 'Block - 1A',
-        s.email || '',
-        (s.status || 'active').toUpperCase(),
+        escapeCsvCell(idx + 1),
+        escapeCsvCell(s.lrn || 'N/A'),
+        escapeCsvCell(s.name || ''),
+        escapeCsvCell(getYearLevelFromBlock(s.section, s.grade)),
+        escapeCsvCell(s.section || 'Block - 1A'),
+        escapeCsvCell(s.email || ''),
+        escapeCsvCell((s.status || 'active').toUpperCase()),
       ]);
-      csvContent = [header.join(','), ...body.map((r) => r.join(','))].join('\n');
+      csvContent = [header.map(escapeCsvCell).join(','), ...body.map((r) => r.join(','))].join('\n');
       filename = `TCC_Student_Masterlist_${new Date().toISOString().slice(0, 10)}.csv`;
     } else if (reportId === 'graduating_roster') {
       docCode = 'TCC-REG-FORM-02';
@@ -783,15 +796,15 @@ export default function SecretaryDashboard() {
       scopeSummary = '4th Year BSIT (Blocks 4A–4E) • S.Y. 2026–2027';
       const header = ['No.', 'Student ID', 'Candidate Name', 'Year Level', 'Assigned Block', 'Email Address', 'Graduation Status'];
       const body = rows.map((s, idx) => [
-        String(idx + 1),
-        s.lrn || 'N/A',
-        `"${(s.name || '').replace(/"/g, '""')}"`,
-        getYearLevelFromBlock(s.section, s.grade),
-        s.section || 'Block - 4A',
-        s.email || '',
-        (s.status || 'active').toUpperCase(),
+        escapeCsvCell(idx + 1),
+        escapeCsvCell(s.lrn || 'N/A'),
+        escapeCsvCell(s.name || ''),
+        escapeCsvCell(getYearLevelFromBlock(s.section, s.grade)),
+        escapeCsvCell(s.section || 'Block - 4A'),
+        escapeCsvCell(s.email || ''),
+        escapeCsvCell((s.status || 'active').toUpperCase()),
       ]);
-      csvContent = [header.join(','), ...body.map((r) => r.join(','))].join('\n');
+      csvContent = [header.map(escapeCsvCell).join(','), ...body.map((r) => r.join(','))].join('\n');
       filename = `TCC_Graduating_Roster_SY2026_2027_${new Date().toISOString().slice(0, 10)}.csv`;
     } else if (reportId === 'section_capacity') {
       docCode = 'TCC-REG-FORM-03';
@@ -805,20 +818,20 @@ export default function SecretaryDashboard() {
           const vacant = Math.max(0, MAX_STUDENTS_PER_SECTION - enrolled);
           const status = enrolled >= MAX_STUDENTS_PER_SECTION ? 'FULL (50/50)' : 'VACANT AVAILABLE';
           allRows.push([
-            String(idx++),
-            yr,
-            blk,
-            String(enrolled),
-            String(MAX_STUDENTS_PER_SECTION),
-            String(vacant),
-            status,
+            escapeCsvCell(idx++),
+            escapeCsvCell(yr),
+            escapeCsvCell(blk),
+            escapeCsvCell(enrolled),
+            escapeCsvCell(MAX_STUDENTS_PER_SECTION),
+            escapeCsvCell(vacant),
+            escapeCsvCell(status),
           ]);
         });
       });
       count = allRows.length;
       scopeSummary = `${reportYearFilter === 'ALL' ? '1st–4th Year Sections' : reportYearFilter} • Max 50 Students/Section`;
       const header = ['No.', 'Year Level', 'Class Section / Block', 'Enrolled Students', 'Max Capacity', 'Vacant Slots', 'Section Status'];
-      csvContent = [header.join(','), ...allRows.map((r) => r.join(','))].join('\n');
+      csvContent = [header.map(escapeCsvCell).join(','), ...allRows.map((r) => r.join(','))].join('\n');
       filename = `TCC_Section_Capacity_Report_${new Date().toISOString().slice(0, 10)}.csv`;
     } else {
       docCode = 'TCC-REG-FORM-04';
@@ -830,16 +843,16 @@ export default function SecretaryDashboard() {
       scopeSummary = `${reportYearFilter === 'ALL' ? '1st–4th Year BSIT' : reportYearFilter} (Excl. Practicum)`;
       const header = ['Course Code', 'Descriptive Title', 'Year Level', 'Semester', 'Lec', 'Lab', 'Total Units (TU)', 'Prerequisite'];
       const body = rows.map((c) => [
-        `"${c.code}"`,
-        `"${c.name.replace(/"/g, '""')}"`,
-        c.yearLevel,
-        c.semester,
-        String(c.lec),
-        String(c.lab),
-        String(c.units),
-        `"${c.prerequisite}"`,
+        escapeCsvCell(c.code),
+        escapeCsvCell(c.name),
+        escapeCsvCell(c.yearLevel),
+        escapeCsvCell(c.semester),
+        escapeCsvCell(c.lec),
+        escapeCsvCell(c.lab),
+        escapeCsvCell(c.units),
+        escapeCsvCell(c.prerequisite),
       ]);
-      csvContent = [header.join(','), ...body.map((r) => r.join(','))].join('\n');
+      csvContent = [header.map(escapeCsvCell).join(','), ...body.map((r) => r.join(','))].join('\n');
       filename = `TCC_BSIT_Curriculum_Prospectus_${new Date().toISOString().slice(0, 10)}.csv`;
     }
 
@@ -960,7 +973,7 @@ export default function SecretaryDashboard() {
       <GlassCard>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
           <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'white' }}>Recently Enrolled Students</h2>
-          <Button variant="outline" size="sm" onClick={() => setActiveSection('student_records')}>
+          <Button variant="outline" size="sm" onClick={() => handleSectionChange('student_records')}>
             Full Directory <ArrowRight size={14} />
           </Button>
         </div>
@@ -3174,15 +3187,17 @@ export default function SecretaryDashboard() {
               </div>
             </div>
           ) : (
-            <table
-              style={{
-                width: '100%',
-                borderCollapse: 'collapse',
-                textAlign: 'left',
-                color: 'white',
-                fontSize: '0.84rem',
-              }}
-            >
+            <div className="table-responsive" style={{ marginTop: 0 }}>
+              <table
+                style={{
+                  width: '100%',
+                  minWidth: '720px',
+                  borderCollapse: 'collapse',
+                  textAlign: 'left',
+                  color: 'white',
+                  fontSize: '0.84rem',
+                }}
+              >
               <thead>
                 <tr
                   style={{
@@ -3283,7 +3298,8 @@ export default function SecretaryDashboard() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+              </table>
+            </div>
           )}
         </GlassCard>
 
@@ -3650,50 +3666,60 @@ export default function SecretaryDashboard() {
   );
 
   const renderSettings = () => (
-    <div style={{ maxWidth: '650px', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+    <div className="profile-page-container" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       <div>
-        <span style={{ fontSize: '0.8rem', color: 'var(--primary-300)', letterSpacing: '1px', textTransform: 'uppercase', fontWeight: 600 }}>
-          ACCOUNT DETAILS
-        </span>
-        <h1 style={{ fontSize: '2rem', fontWeight: 800, color: 'white', marginTop: '0.25rem' }}>
+        <div className="page-eyebrow">ACCOUNT DETAILS</div>
+        <h1 className="page-title">
           Secretary Profile
         </h1>
-        <p style={{ color: 'var(--neutral-300)' }}>
+        <p className="page-subtitle">
           Secretary and administrative credentials at Tagoloan Community College.
         </p>
       </div>
 
-      <GlassCard>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', marginBottom: '1.5rem' }}>
-          <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'linear-gradient(135deg, var(--warning), var(--accent-purple))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', fontWeight: 800, color: 'white' }}>
-            {user?.initials || 'S'}
-          </div>
-          <div>
-            <h2 style={{ fontSize: '1.3rem', fontWeight: 700, color: 'white' }}>{user?.name || 'School Secretary'}</h2>
-            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
-              <Badge variant="warning">School Secretary</Badge>
-              <Badge variant="success">Active</Badge>
+      <GlassCard className="profile-card" style={{ marginBottom: 0 }}>
+        <div className="profile-header-row">
+          <div className="profile-identity-main">
+            <div className="profile-avatar-lg">
+              {user?.profile_picture ? (
+                <img src={user.profile_picture} alt={user.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                deriveUserInitials(user?.name, user?.initials || 'S')
+              )}
+            </div>
+            <div className="profile-identity-meta">
+              <h2 className="profile-identity-name">{user?.name || 'School Secretary'}</h2>
+              <div className="profile-identity-badges">
+                <Badge variant="warning">School Secretary</Badge>
+                <Badge variant="success">Active</Badge>
+              </div>
             </div>
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.25rem', borderTop: '1px solid var(--glass-border)', paddingTop: '1.25rem' }}>
-          <div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', textTransform: 'uppercase', fontWeight: 600 }}>Email Address</div>
-            <div style={{ color: 'white', fontWeight: 600, marginTop: '0.2rem' }}>
+        <div className="profile-info-grid">
+          <div className="profile-info-tile">
+            <div className="profile-info-label">Email Address</div>
+            <div className="profile-info-value">
               {user?.email || 'secretary@tcc.edu.ph'}
             </div>
           </div>
-          <div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', textTransform: 'uppercase', fontWeight: 600 }}>Office</div>
-            <div style={{ color: 'white', fontWeight: 600, marginTop: '0.2rem' }}>
+          <div className="profile-info-tile">
+            <div className="profile-info-label">Office</div>
+            <div className="profile-info-value">
               Office of the Secretary ({departmentCode})
             </div>
           </div>
-          <div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', textTransform: 'uppercase', fontWeight: 600 }}>Department</div>
-            <div style={{ color: 'white', fontWeight: 600, marginTop: '0.2rem' }}>
+          <div className="profile-info-tile">
+            <div className="profile-info-label">Department</div>
+            <div className="profile-info-value profile-info-value--gold">
               {departmentCode} — {departmentName}
+            </div>
+          </div>
+          <div className="profile-info-tile">
+            <div className="profile-info-label">School Year</div>
+            <div className="profile-info-value">
+              2026–2027
             </div>
           </div>
         </div>
