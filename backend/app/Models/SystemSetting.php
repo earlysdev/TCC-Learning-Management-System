@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Schema;
 
 class SystemSetting extends Model
 {
@@ -19,13 +20,16 @@ class SystemSetting extends Model
 
     public static function get(string $key, $default = null, ?string $department = null)
     {
+        $hasDeptColumn = Schema::hasColumn('system_settings', 'department');
         $setting = null;
-        if ($department !== null) {
+        if ($hasDeptColumn && $department !== null) {
             $setting = self::where('department', strtoupper(trim($department)))
                 ->where('key', $key)
                 ->first();
         }
-        $setting ??= self::whereNull('department')->where('key', $key)->first();
+        $setting ??= $hasDeptColumn
+            ? self::whereNull('department')->where('key', $key)->first()
+            : self::where('key', $key)->first();
 
         if (!$setting) {
             return $default;
@@ -46,10 +50,11 @@ class SystemSetting extends Model
             default => (string) $value,
         };
 
+        $hasDeptColumn = Schema::hasColumn('system_settings', 'department');
         $normalizedDept = $department !== null ? strtoupper(trim($department)) : null;
 
         return self::updateOrCreate(
-            ['department' => $normalizedDept, 'key' => $key],
+            $hasDeptColumn ? ['department' => $normalizedDept, 'key' => $key] : ['key' => $key],
             [
                 'value' => $stringValue,
                 'type' => $type,

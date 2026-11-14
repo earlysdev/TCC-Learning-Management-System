@@ -16,13 +16,14 @@ use App\Models\SystemSetting;
 use App\Models\TrustedDevice;
 use App\Models\User;
 use App\Models\VerificationCode;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 
 class LmsAccountCleanupService
 {
-    public const PROVISION_SETTING_KEY = 'real_gmail_accounts_provisioned_v2';
+    public const PROVISION_SETTING_KEY = 'real_gmail_accounts_provisioned_v3';
 
     /**
      * Primary institutional @gmail.com accounts explicitly assigned by role and department.
@@ -99,6 +100,18 @@ class LmsAccountCleanupService
             'school_year' => '2026-2027',
         ],
         [
+            'email' => 'beams4fun@gmail.com',
+            'name' => 'Yuri Pacana',
+            'first_name' => 'Yuri',
+            'last_name' => 'Pacana',
+            'role' => 'teacher',
+            'department' => 'CIT',
+            'grade' => '3rd Year',
+            'section' => null,
+            'lrn' => null,
+            'school_year' => '2026-2027',
+        ],
+        [
             'email' => 'ronaldtrump@gmail.com',
             'name' => 'Ronald Trump',
             'first_name' => 'Ronald',
@@ -138,10 +151,86 @@ class LmsAccountCleanupService
             'vinsmokeearl@gmail.com' => 'TccSec!2026#CIT',
             'blinkeyetest@gmail.com' => '9neT+5c*mP*N',
             'totoby2x1@gmail.com' => 'V6@EPZ%3xn8d',
+            'beams4fun@gmail.com' => 'TccFaculty!2026#03',
             'ronaldtrump@gmail.com' => 'TccStu!20270001',
             'justinbatumbakal@gmail.com' => 'TccStu!20270002',
             default => 'Tcc!' . strtoupper(substr(hash('sha256', 'tcc-lms-2026:' . $normalized), 0, 6)) . '#26',
         };
+    }
+
+    /**
+     * Ensure any post-Nov-8 schema columns (department isolation, dean_department uniqueness)
+     * exist on hosts where git deployments do not automatically execute php artisan migrate.
+     */
+    public static function ensureSchemaColumnsExist(): void
+    {
+        foreach (['users', 'quizzes', 'sections', 'announcements', 'notifications'] as $tableName) {
+            if (Schema::hasTable($tableName) && ! Schema::hasColumn($tableName, 'department')) {
+                try {
+                    Schema::table($tableName, function (Blueprint $table): void {
+                        $table->string('department', 16)->default('CIT')->index();
+                    });
+                } catch (\Throwable $e) {
+                    Log::warning("Schema repair for {$tableName}.department skipped: " . $e->getMessage());
+                }
+            }
+        }
+
+        if (Schema::hasTable('security_logs') && ! Schema::hasColumn('security_logs', 'department')) {
+            try {
+                Schema::table('security_logs', function (Blueprint $table): void {
+                    $table->string('department', 16)->nullable()->index();
+                });
+            } catch (\Throwable $e) {
+                Log::warning('Schema repair for security_logs.department skipped: ' . $e->getMessage());
+            }
+        }
+
+        if (Schema::hasTable('security_logs') && ! Schema::hasColumn('security_logs', 'resolved_by')) {
+            try {
+                Schema::table('security_logs', function (Blueprint $table): void {
+                    $table->foreignId('resolved_by')->nullable()->constrained('users')->nullOnDelete();
+                });
+            } catch (\Throwable $e) {
+                Log::warning('Schema repair for security_logs.resolved_by skipped: ' . $e->getMessage());
+            }
+        }
+
+        if (Schema::hasTable('system_settings') && ! Schema::hasColumn('system_settings', 'department')) {
+            try {
+                Schema::table('system_settings', function (Blueprint $table): void {
+                    $table->string('department', 16)->nullable()->index();
+                });
+            } catch (\Throwable $e) {
+                Log::warning('Schema repair for system_settings.department skipped: ' . $e->getMessage());
+            }
+
+            try {
+                Schema::table('system_settings', function (Blueprint $table): void {
+                    $table->dropUnique(['key']);
+                });
+            } catch (\Throwable) {
+                // Index may already be dropped or named differently
+            }
+
+            try {
+                Schema::table('system_settings', function (Blueprint $table): void {
+                    $table->unique(['department', 'key']);
+                });
+            } catch (\Throwable) {
+                // Unique index may already exist
+            }
+        }
+
+        if (Schema::hasTable('users') && ! Schema::hasColumn('users', 'dean_department')) {
+            try {
+                Schema::table('users', function (Blueprint $table): void {
+                    $table->string('dean_department', 16)->nullable()->unique();
+                });
+            } catch (\Throwable $e) {
+                Log::warning('Schema repair for users.dean_department skipped: ' . $e->getMessage());
+            }
+        }
     }
 
     /**
@@ -160,6 +249,12 @@ class LmsAccountCleanupService
             }
 
             $alreadyDone = SystemSetting::get(self::PROVISION_SETTING_KEY);
+            if ($alreadyDone && Schema::hasColumn('users', 'dean_department') && Schema::hasColumn('security_logs', 'department')) {
+                return;
+            }
+
+            self::ensureSchemaColumnsExist();
+
             if ($alreadyDone) {
                 return;
             }
@@ -182,6 +277,8 @@ class LmsAccountCleanupService
         bool $dispatchEmails = false,
         bool $skipAlreadyDispatchedKnownEmails = false
     ): array {
+        self::ensureSchemaColumnsExist();
+
         $txResult = DB::transaction(function (): array {
             $deletedQuizzes = 0;
             $deletedDemoUsers = 0;
@@ -574,6 +671,24 @@ class LmsAccountCleanupService
         if (Schema::hasTable('system_settings')) {
             SystemSetting::where('key', 'maintenance_mode')->delete();
             SystemSetting::set('school_year', '2026-2027', 'string', 'Current school year');
+
+            if (! SystemSetting::get('institutional_smtp')) {
+                SystemSetting::set(
+                    'institutional_smtp',
+                    [
+                        'mailer' => 'smtp',
+                        'host' => 'smtp.gmail.com',
+                        'port' => 587,
+                        'username' => 'tcclms4@gmail.com',
+                        'password' => 'qhxsarnndiyayuku',
+                        'encryption' => 'tls',
+                        'from_address' => 'tcclms4@gmail.com',
+                        'from_name' => 'Tagoloan Community College LMS',
+                    ],
+                    'json',
+                    'Global institutional Gmail SMTP credentials for reliable transactional dispatch and OTP delivery.'
+                );
+            }
         }
     }
 }
