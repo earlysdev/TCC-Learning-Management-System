@@ -3,12 +3,19 @@ import { useParams, useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import { lmsFetch, getLmsUser, extractCollection } from '../../lmsApi';
 import type { Quiz, User, Subject, TeacherRemedialDraft } from '../../lib/types';
-import { BSIT_SUBJECT_OPTIONS, ALL_BLOCKS, getYearLevelFromBlock, buildSubjectOptionsForYear } from '../../lib/constants';
+import {
+  BSIT_SUBJECT_OPTIONS,
+  ALL_BLOCKS,
+  getYearLevelFromBlock,
+  buildSubjectOptionsForYear,
+  formatCourseLabel,
+  extractSubjectName,
+} from '../../lib/constants';
 import { readPdfFile, type ParsedPdfPayload } from '../../lib/pdfUtils';
 import { 
   BookOpen, CheckCircle2, Users, Target, Sparkles, 
   ArrowRight, AlertCircle, Eye, EyeOff, Pencil,
-  ShieldAlert, FileText, Upload, X
+  ShieldAlert, FileText, Upload, X, Copy, Trash2
 } from 'lucide-react';
 import GlassCard from '../../components/ui/GlassCard';
 import StatCard from '../../components/ui/StatCard';
@@ -16,6 +23,7 @@ import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import Input from '../../components/ui/Input';
 import Select from '../../components/ui/Select';
+import Modal from '../../components/ui/Modal';
 import ProfileUpdateCard from '../../components/ui/ProfileUpdateCard';
 import QuizEditorModal, { type QuizEditorValues } from './QuizEditorModal';
 import PublishQuizModal, { type PublishAudience, type SectionOption } from './PublishQuizModal';
@@ -131,7 +139,8 @@ export default function TeacherDashboard() {
   // Manual & PDF/AI Quiz Builder form
   const [quizTitle, setQuizTitle] = useState('');
   const [subject, setSubject] = useState(() => resolveDefaultSubjectForYear(user?.grade));
-  const [topic, setTopic] = useState('');
+  const [topic, setTopic] = useState(() => extractSubjectName(resolveDefaultSubjectForYear(user?.grade)));
+  const topicManuallyEditedRef = useRef(false);
   const [count, setCount] = useState(5);
   const [timeLimitMinutes, setTimeLimitMinutes] = useState(15);
   const [quizType, setQuizType] = useState<'formative' | 'summative'>('formative');
@@ -142,6 +151,18 @@ export default function TeacherDashboard() {
   const [generateWithAi, setGenerateWithAi] = useState(false);
   const [aiDifficulty, setAiDifficulty] = useState<'easy' | 'medium' | 'challenging'>('medium');
   const createPdfInputRef = useRef<HTMLInputElement>(null);
+  const [duplicatingQuizId, setDuplicatingQuizId] = useState<number | null>(null);
+  const [quizToDelete, setQuizToDelete] = useState<Quiz | null>(null);
+  const [deletingQuiz, setDeletingQuiz] = useState(false);
+
+  const handleCourseChange = (nextCourse: string) => {
+    setSubject(nextCourse);
+    const derivedTopic = extractSubjectName(nextCourse);
+    if (derivedTopic) {
+      setTopic(derivedTopic);
+      topicManuallyEditedRef.current = false;
+    }
+  };
 
   // Student filter
   const [studentSearch, setStudentSearch] = useState('');
@@ -184,7 +205,11 @@ export default function TeacherDashboard() {
     if (handledYearLevel) {
       const yearOptions = BSIT_SUBJECT_OPTIONS.filter((s) => s.yearLevel === handledYearLevel);
       if (yearOptions.length > 0 && (!subject || !yearOptions.some((s) => s.value === subject))) {
-        setSubject(yearOptions[0].value);
+        const nextCourse = yearOptions[0].value;
+        setSubject(nextCourse);
+        if (!topicManuallyEditedRef.current) {
+          setTopic(extractSubjectName(nextCourse));
+        }
       }
     }
   }, [handledYearLevel]);
@@ -196,7 +221,11 @@ export default function TeacherDashboard() {
       setSubjects(Array.isArray(list) ? list : []);
       if (Array.isArray(list) && list.length > 0 && !subject) {
         const first = list[0];
-        setSubject(first.code ? `${first.code} - ${first.name}` : first.name);
+        const nextCourse = first.code ? `${first.code} • ${first.name}` : first.name;
+        setSubject(nextCourse);
+        if (!topicManuallyEditedRef.current) {
+          setTopic(extractSubjectName(nextCourse));
+        }
       }
     } catch {
       // Subjects are optional
@@ -245,7 +274,7 @@ export default function TeacherDashboard() {
       setUploadedPdf(parsed);
       setGenerateWithAi(true);
       showToast(`PDF "${parsed.name}" uploaded and ready.`, 'success');
-      if (!topic.trim() && !quizTitle.trim()) {
+      if (!topic.trim()) {
         const cleanFileName = parsed.name.replace(/\.pdf$/i, '').replace(/[_-]+/g, ' ').trim();
         if (cleanFileName) setTopic(cleanFileName);
       }
@@ -260,15 +289,17 @@ export default function TeacherDashboard() {
 
   const handleCreateManualQuiz = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (busy) return;
     setBusy(true);
     setError(null);
     setNotice(null);
     try {
       const fallbackSubject = resolveDefaultSubjectForYear(handledYearLevel);
       const finalSubject = (subject && subject.trim()) || (subjects[0]?.name) || fallbackSubject;
+      const derivedSubjectName = extractSubjectName(finalSubject);
       const fallbackPdfTopic = uploadedPdf ? uploadedPdf.name.replace(/\.pdf$/i, '').replace(/[_-]+/g, ' ').trim() : '';
-      const cleanTopic = topic.trim() || quizTitle.trim() || fallbackPdfTopic || 'Course Unit';
-      const cleanTitle = quizTitle.trim() || cleanTopic;
+      const cleanTopic = topic.trim() || derivedSubjectName || fallbackPdfTopic || 'Course Unit';
+      const cleanTitle = quizTitle.trim();
       const questionCount = Math.max(1, Math.min(50, Number(count) || 1));
       const data = await lmsFetch<{ quiz: Quiz }>('/teacher/quizzes', {
         method: 'POST',
@@ -296,11 +327,12 @@ export default function TeacherDashboard() {
         : generateWithAi
           ? `with ${questionCount} AI-generated questions based on topic "${cleanTopic}"`
           : `with ${questionCount} question ${questionCount === 1 ? 'slot' : 'slots'}`;
-      const msg = `Quiz draft "${data.quiz.title}" created ${sourceNote}. Review and customize in the editor.`;
+      const msg = `Quiz "${data.quiz.title}" created ${sourceNote}.`;
       setNotice(msg);
-      showToast(`Quiz draft "${data.quiz.title}" created!`, 'success');
+      showToast(`"${data.quiz.title}" created.`, 'success');
       setQuizTitle('');
-      setTopic('');
+      topicManuallyEditedRef.current = false;
+      setTopic(extractSubjectName(finalSubject));
       setUploadedPdf(null);
       setGenerateWithAi(false);
       setQuizzes((current) => [data.quiz, ...current.filter((quiz) => quiz.id !== data.quiz.id)]);
@@ -313,6 +345,60 @@ export default function TeacherDashboard() {
       showToast(msg, 'error');
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleDuplicateQuiz = async (quiz: Quiz) => {
+    if (busy || duplicatingQuizId !== null) return;
+    setDuplicatingQuizId(quiz.id);
+    setError(null);
+    setNotice(null);
+    try {
+      const data = await lmsFetch<{ quiz: Quiz; message?: string }>(`/teacher/quizzes/${quiz.id}/duplicate`, {
+        method: 'POST',
+      });
+      const duplicated = extractQuiz(data);
+      setQuizzes((current) => [duplicated, ...current.filter((item) => item.id !== duplicated.id)]);
+      const msg = `Duplicated "${quiz.title}" as "${duplicated.title}".`;
+      setNotice(msg);
+      showToast(msg, 'success');
+      void loadDashboard();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Could not duplicate quiz';
+      setError(msg);
+      showToast(msg, 'error');
+    } finally {
+      setDuplicatingQuizId(null);
+    }
+  };
+
+  const handleConfirmDeleteQuiz = async () => {
+    if (!quizToDelete || deletingQuiz) return;
+    setDeletingQuiz(true);
+    setError(null);
+    try {
+      await lmsFetch(`/teacher/quizzes/${quizToDelete.id}`, {
+        method: 'DELETE',
+      });
+      const deletedTitle = quizToDelete.title;
+      const deletedId = quizToDelete.id;
+      try {
+        localStorage.removeItem(`tcc_quiz_draft_${deletedId}`);
+      } catch {
+        // Ignore storage errors
+      }
+      setQuizzes((current) => current.filter((item) => item.id !== deletedId));
+      setQuizToDelete(null);
+      const msg = `"${deletedTitle}" has been deleted.`;
+      setNotice(msg);
+      showToast(msg, 'info');
+      void loadDashboard();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Could not delete quiz';
+      setError(msg);
+      showToast(msg, 'error');
+    } finally {
+      setDeletingQuiz(false);
     }
   };
 
@@ -518,30 +604,30 @@ export default function TeacherDashboard() {
                   alignItems: 'center',
                   padding: '1rem',
                   borderRadius: 'var(--radius-md)',
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid var(--glass-border)',
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(255,255,255,0.08)',
                   flexWrap: 'wrap',
                   gap: '1rem'
                 }}
               >
                 <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-                    <Badge variant="primary">{quiz.subject}</Badge>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
+                    <Badge variant="primary">{formatCourseLabel(quiz.subject)}</Badge>
                     {hasDistinctTopic(quiz) && (
-                      <span style={{ fontSize: '0.8rem', color: 'var(--neutral-400)' }}>{quiz.topic}</span>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--neutral-300)' }}>• {quiz.topic}</span>
                     )}
                     {quiz.generated_by_ai && (
-                      <span style={{ fontSize: '0.75rem', color: 'var(--accent-purple-light)', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
-                        <Sparkles size={12} /> AI Generated
+                      <span style={{ fontSize: '0.75rem', color: 'var(--accent-gold-light)', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                        • <Sparkles size={12} /> AI
                       </span>
                     )}
                   </div>
-                  <div style={{ fontWeight: 700, color: 'white', fontSize: '1.05rem' }}>{quiz.title}</div>
+                  <div style={{ fontWeight: 700, color: 'white', fontSize: '1.02rem' }}>{quiz.title}</div>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
                   <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: '0.85rem', color: 'var(--neutral-300)' }}>
+                    <div style={{ fontSize: '0.82rem', color: 'var(--neutral-300)' }}>
                       <strong>{quiz.attempts_count || 0}</strong> attempts • <strong>{quiz.average || 0}%</strong> avg
                     </div>
                     <Badge variant={quiz.is_published ? 'success' : 'warning'}>
@@ -556,8 +642,18 @@ export default function TeacherDashboard() {
                     >
                       <Pencil size={14} /> Edit
                     </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={busy || duplicatingQuizId === quiz.id}
+                      isLoading={duplicatingQuizId === quiz.id}
+                      onClick={() => handleDuplicateQuiz(quiz)}
+                      title="Duplicate quiz with next sequential number"
+                    >
+                      <Copy size={14} /> Duplicate
+                    </Button>
                     <Button 
-                      variant={quiz.is_published ? 'outline' : 'primary'} 
+                      variant={quiz.is_published ? 'outline' : 'accent'} 
                       size="sm"
                       disabled={busy}
                       onClick={() => {
@@ -576,7 +672,7 @@ export default function TeacherDashboard() {
                       size="sm"
                       onClick={() => setSubmissionsQuiz(quiz)}
                     >
-                      <ShieldAlert size={14} /> Proctoring ({quiz.attempts_count || 0})
+                      <ShieldAlert size={14} /> Submissions ({quiz.attempts_count || 0})
                     </Button>
                   </div>
                 </div>
@@ -588,495 +684,542 @@ export default function TeacherDashboard() {
     </div>
   );
 
+  const sectionHeaderStyle: React.CSSProperties = {
+    fontSize: '0.75rem',
+    fontWeight: 700,
+    textTransform: 'uppercase',
+    letterSpacing: '0.06em',
+    color: 'rgba(255, 255, 255, 0.55)',
+    marginBottom: '0.85rem',
+  };
+
   const renderQuizzes = () => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
       <div>
-        <span style={{ fontSize: '0.8rem', color: 'var(--primary-300)', letterSpacing: '1px', textTransform: 'uppercase', fontWeight: 600 }}>
-          CURRICULUM & ASSESSMENTS
+        <span style={{ fontSize: '0.78rem', color: 'var(--primary-300)', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600 }}>
+          CURRICULUM &amp; ASSESSMENTS
         </span>
-        <h1 style={{ fontSize: '2rem', fontWeight: 800, color: 'white', marginTop: '0.25rem' }}>
-          Quizzes & Assessment Builder
+        <h1 style={{ fontSize: '1.85rem', fontWeight: 800, color: 'white', margin: '0.2rem 0 0.25rem' }}>
+          Quiz Management
         </h1>
-        <p style={{ color: 'var(--neutral-300)' }}>
-          Author custom assessments for BSIT courses, configure questions & answer keys, set point weights, and publish to blocks.
+        <p style={{ color: 'var(--neutral-300)', fontSize: '0.9rem', margin: 0 }}>
+          Create, configure, duplicate, and manage course assessments.
         </p>
       </div>
 
       {notice && (
-        <div style={{ background: 'rgba(67, 160, 71, 0.2)', border: '1px solid var(--success)', padding: '0.75rem 1rem', borderRadius: 'var(--radius-md)', color: '#c8e6c9', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <CheckCircle2 size={18} /> {notice}
+        <div style={{ background: 'rgba(46, 125, 50, 0.16)', border: '1px solid rgba(129, 199, 132, 0.35)', padding: '0.75rem 1rem', borderRadius: 'var(--radius-md)', color: '#c8e6c9', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.88rem' }}>
+          <CheckCircle2 size={17} /> {notice}
         </div>
       )}
 
       {error && (
-        <div style={{ background: 'rgba(239, 83, 80, 0.2)', border: '1px solid var(--error)', padding: '0.75rem 1rem', borderRadius: 'var(--radius-md)', color: '#ffcdd2', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <AlertCircle size={18} /> {error}
+        <div style={{ background: 'rgba(211, 47, 47, 0.16)', border: '1px solid rgba(239, 154, 154, 0.35)', padding: '0.75rem 1rem', borderRadius: 'var(--radius-md)', color: '#ffcdd2', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.88rem' }}>
+          <AlertCircle size={17} /> {error}
         </div>
       )}
 
-      {/* Manual Quiz Builder Form */}
-      <GlassCard style={{ borderLeft: '4px solid var(--primary-400)', position: 'relative', zIndex: 30 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
-          <div style={{ background: 'var(--primary-600)', padding: '0.5rem', borderRadius: 'var(--radius-md)', color: 'white' }}>
-            <Pencil size={22} />
-          </div>
+      {/* Create New Quiz Card */}
+      <GlassCard style={{ position: 'relative', zIndex: 30, border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', paddingBottom: '1rem', marginBottom: '1.25rem', borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
           <div>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'white' }}>Create New Quiz</h2>
-            <p style={{ fontSize: '0.85rem', color: 'var(--neutral-300)' }}>Select a BSIT course, enter a topic, and open the Question Builder to author your questions and answer keys manually.</p>
+            <h2 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#f8fafc', margin: 0 }}>Create New Quiz</h2>
           </div>
+          {handledYearLevel && (
+            <span style={{ fontSize: '0.76rem', color: 'rgba(255, 255, 255, 0.6)', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.08)', padding: '0.2rem 0.6rem', borderRadius: '999px', fontWeight: 600 }}>
+              {handledYearLevel} Courses
+            </span>
+          )}
         </div>
 
-        <form onSubmit={handleCreateManualQuiz} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          {/* Row 1: Quiz Title, BSIT Subject, and Topic */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem' }}>
-            <Input
-              label="Quiz Title (Optional · uses Topic if blank)"
-              value={quizTitle}
-              onChange={(e) => setQuizTitle(e.target.value)}
-              placeholder="e.g. Midterm Quiz 1 (No extra title added)"
-            />
-
-            <Select
-              label={
-                handledYearLevel
-                  ? `Course Code & Subject Description (${handledYearLevel})`
-                  : 'Course Code & Subject Description (1st – 4th Year • Excl. Practicum)'
-              }
-              value={subject}
-              onChange={setSubject}
-              options={buildSubjectOptionsForYear(handledYearLevel, subjects)}
-            />
-
-            <Input
-              label="Topic / Unit"
-              value={topic}
-              onChange={(e) => setTopic(e.target.value)}
-              placeholder="e.g. Data Structures, OOP Principles, Relational Databases"
-              required={!quizTitle.trim() && !uploadedPdf}
-            />
-          </div>
-
-          {/* Row 2: Custom Question Count, Time Limit, Quiz Type & Block Targeting */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem', alignItems: 'start' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+        <form onSubmit={handleCreateManualQuiz} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          {/* Section A: Basic Information */}
+          <div>
+            <div style={sectionHeaderStyle}>Basic Information</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
               <Input
-                label="Number of Questions (1–50)"
-                type="number"
-                min={1}
-                max={50}
-                value={String(count)}
+                label="Quiz Title"
+                value={quizTitle}
+                onChange={(e) => setQuizTitle(e.target.value)}
+                placeholder="e.g. Quiz 1, Midterm Examination"
+              />
+
+              <Select
+                label="Course Code & Subject"
+                value={subject}
+                onChange={handleCourseChange}
+                options={buildSubjectOptionsForYear(handledYearLevel, subjects)}
+              />
+
+              <Input
+                label="Topic / Unit"
+                value={topic}
                 onChange={(e) => {
-                  const parsed = parseInt(e.target.value, 10);
-                  if (Number.isNaN(parsed)) {
-                    setCount(1);
-                  } else {
-                    setCount(Math.max(1, Math.min(50, parsed)));
-                  }
+                  topicManuallyEditedRef.current = true;
+                  setTopic(e.target.value);
                 }}
+                placeholder="e.g. Introduction to Computing"
                 required
               />
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', marginRight: '0.15rem' }}>Quick set:</span>
-                {[1, 3, 5, 10, 15, 20, 30].map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    onClick={() => setCount(preset)}
-                    style={{
-                      padding: '0.18rem 0.55rem',
-                      fontSize: '0.75rem',
-                      fontWeight: 600,
-                      borderRadius: '999px',
-                      cursor: 'pointer',
-                      border: count === preset ? '1px solid var(--primary-400)' : '1px solid rgba(255,255,255,0.12)',
-                      background: count === preset ? 'rgba(63, 81, 181, 0.3)' : 'rgba(255,255,255,0.04)',
-                      color: count === preset ? 'white' : 'var(--neutral-300)',
-                      transition: 'all 0.15s ease',
-                    }}
-                  >
-                    {preset}
-                  </button>
-                ))}
-              </div>
             </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
-              <Input
-                label="Time Limit (Minutes · Auto-Submit)"
-                type="number"
-                min={1}
-                max={300}
-                value={String(timeLimitMinutes)}
-                onChange={(e) => {
-                  const parsed = parseInt(e.target.value, 10);
-                  if (Number.isNaN(parsed)) {
-                    setTimeLimitMinutes(15);
-                  } else {
-                    setTimeLimitMinutes(Math.max(1, Math.min(300, parsed)));
-                  }
-                }}
-                required
-              />
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: '0.75rem', color: 'var(--neutral-400)', marginRight: '0.15rem' }}>Presets:</span>
-                {[5, 10, 15, 30, 45, 60].map((mins) => (
-                  <button
-                    key={mins}
-                    type="button"
-                    onClick={() => setTimeLimitMinutes(mins)}
-                    style={{
-                      padding: '0.18rem 0.55rem',
-                      fontSize: '0.75rem',
-                      fontWeight: 600,
-                      borderRadius: '999px',
-                      cursor: 'pointer',
-                      border: timeLimitMinutes === mins ? '1px solid #fbbf24' : '1px solid rgba(255,255,255,0.12)',
-                      background: timeLimitMinutes === mins ? 'rgba(251, 191, 36, 0.22)' : 'rgba(255,255,255,0.04)',
-                      color: timeLimitMinutes === mins ? '#fbbf24' : 'var(--neutral-300)',
-                      transition: 'all 0.15s ease',
-                    }}
-                  >
-                    {mins}m
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <Select
-              label="Quiz Type (Formative / Summative)"
-              value={quizType}
-              onChange={(val) => setQuizType(val === 'summative' ? 'summative' : 'formative')}
-              options={[
-                { value: 'formative', label: 'Formative · Live Student Monitoring' },
-                { value: 'summative', label: 'Summative · Final Submission Only' },
-              ]}
-            />
-
-            <Select
-              label="Target Block (Optional)"
-              value={selectedTargetSection}
-              onChange={setSelectedTargetSection}
-              options={[
-                { value: '', label: handledYearLevel ? `No block · ${handledYearLevel} (assign later)` : 'No block · assign later' },
-                ...scopedSections.map((s) => ({
-                  value: String(s.id),
-                  label: `${s.label}${s.studentCount ? ` (${s.studentCount} ${s.studentCount === 1 ? 'student' : 'students'})` : ''}`
-                })),
-              ]}
-            />
           </div>
 
-          {/* Row 2.2: Allow Answer Review Checkbox */}
-          <label
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '0.85rem',
-              padding: '0.75rem 1.1rem',
-              borderRadius: 'var(--radius-md)',
-              cursor: 'pointer',
-              background: allowReview ? 'rgba(67, 160, 71, 0.1)' : 'rgba(255, 255, 255, 0.03)',
-              border: allowReview ? '1px solid rgba(67, 160, 71, 0.35)' : '1px solid rgba(255, 255, 255, 0.08)',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem' }}>
-              <input
-                type="checkbox"
-                checked={allowReview}
-                onChange={(e) => setAllowReview(e.target.checked)}
-                style={{ width: '17px', height: '17px', accentColor: 'var(--success)', cursor: 'pointer', flexShrink: 0 }}
-              />
-              <div>
-                <div style={{ fontWeight: 700, color: 'white', fontSize: '0.9rem' }}>
-                  Allow Answer Review for Completed Quizzes
-                </div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--neutral-300)' }}>
-                  When checked, students will be able to review the quiz questions along with their selected answers and the correct answer key after submitting.
+          {/* Section B: Quiz Configuration */}
+          <div style={{ paddingTop: '1.25rem', borderTop: '1px solid rgba(255, 255, 255, 0.07)' }}>
+            <div style={sectionHeaderStyle}>Quiz Configuration</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '1rem', alignItems: 'start' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                <Input
+                  label="Number of Questions"
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={String(count)}
+                  onChange={(e) => {
+                    const parsed = parseInt(e.target.value, 10);
+                    setCount(Number.isNaN(parsed) ? 1 : Math.max(1, Math.min(50, parsed)));
+                  }}
+                  required
+                />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', flexWrap: 'wrap' }}>
+                  {[5, 10, 15, 20, 30].map((preset) => {
+                    const active = count === preset;
+                    return (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setCount(preset)}
+                        style={{
+                          height: '24px',
+                          padding: '0 0.55rem',
+                          fontSize: '0.73rem',
+                          fontWeight: 600,
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          border: active ? '1px solid rgba(245, 158, 11, 0.6)' : '1px solid rgba(255,255,255,0.1)',
+                          background: active ? 'rgba(245, 158, 11, 0.16)' : 'rgba(255,255,255,0.03)',
+                          color: active ? '#fbbf24' : 'rgba(255,255,255,0.65)',
+                        }}
+                      >
+                        {preset}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
-            </div>
-            <Badge variant={allowReview ? 'success' : 'warning'}>
-              {allowReview ? 'Answer Review Enabled' : 'Review Disabled'}
-            </Badge>
-          </label>
 
-          {/* Row 2.5: PDF Upload for Quiz Instructions, AI Question Generation & Post-Quiz Study Feedback */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                <Input
+                  label="Time Limit (Minutes)"
+                  type="number"
+                  min={1}
+                  max={300}
+                  value={String(timeLimitMinutes)}
+                  onChange={(e) => {
+                    const parsed = parseInt(e.target.value, 10);
+                    setTimeLimitMinutes(Number.isNaN(parsed) ? 15 : Math.max(1, Math.min(300, parsed)));
+                  }}
+                  required
+                />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', flexWrap: 'wrap' }}>
+                  {[10, 15, 30, 45, 60].map((mins) => {
+                    const active = timeLimitMinutes === mins;
+                    return (
+                      <button
+                        key={mins}
+                        type="button"
+                        onClick={() => setTimeLimitMinutes(mins)}
+                        style={{
+                          height: '24px',
+                          padding: '0 0.55rem',
+                          fontSize: '0.73rem',
+                          fontWeight: 600,
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          border: active ? '1px solid rgba(245, 158, 11, 0.6)' : '1px solid rgba(255,255,255,0.1)',
+                          background: active ? 'rgba(245, 158, 11, 0.16)' : 'rgba(255,255,255,0.03)',
+                          color: active ? '#fbbf24' : 'rgba(255,255,255,0.65)',
+                        }}
+                      >
+                        {mins}m
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <Select
+                label="Quiz Type"
+                value={quizType}
+                onChange={(val) => setQuizType(val === 'summative' ? 'summative' : 'formative')}
+                options={[
+                  { value: 'formative', label: 'Formative • Live Monitoring' },
+                  { value: 'summative', label: 'Summative • Final Submission' },
+                ]}
+              />
+
+              <Select
+                label="Target Block"
+                value={selectedTargetSection}
+                onChange={setSelectedTargetSection}
+                options={[
+                  { value: '', label: handledYearLevel ? `All ${handledYearLevel} Blocks • Assign Later` : 'All Blocks • Assign Later' },
+                  ...scopedSections.map((s) => ({
+                    value: String(s.id),
+                    label: `${s.label}${s.studentCount ? ` • ${s.studentCount} ${s.studentCount === 1 ? 'student' : 'students'}` : ''}`,
+                  })),
+                ]}
+              />
+            </div>
+          </div>
+
+          {/* Section C: Quiz Options */}
+          <div style={{ paddingTop: '1.25rem', borderTop: '1px solid rgba(255, 255, 255, 0.07)' }}>
+            <div style={sectionHeaderStyle}>Quiz Options</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '0.85rem' }}>
+              {/* Option 1: Allow Answer Review */}
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '0.75rem',
+                  padding: '0.85rem 1rem',
+                  borderRadius: 'var(--radius-md)',
+                  cursor: 'pointer',
+                  background: 'rgba(255, 255, 255, 0.025)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', minWidth: 0 }}>
+                  <input
+                    type="checkbox"
+                    checked={allowReview}
+                    onChange={(e) => setAllowReview(e.target.checked)}
+                    style={{ width: '16px', height: '16px', accentColor: 'var(--accent-gold, #f59e0b)', cursor: 'pointer', flexShrink: 0 }}
+                  />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, color: '#f8fafc', fontSize: '0.88rem' }}>Allow Answer Review</div>
+                    <div style={{ fontSize: '0.76rem', color: 'rgba(255, 255, 255, 0.55)', marginTop: '0.1rem' }}>
+                      Show answer key after submission
+                    </div>
+                  </div>
+                </div>
+              </label>
+
+              {/* Option 2: PDF Upload (Secondary) */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '0.75rem',
+                  padding: '0.85rem 1rem',
+                  borderRadius: 'var(--radius-md)',
+                  background: 'rgba(255, 255, 255, 0.025)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0 }}>
+                  <FileText size={16} style={{ color: 'rgba(255, 255, 255, 0.6)', flexShrink: 0 }} />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, color: '#f8fafc', fontSize: '0.88rem' }}>PDF Reference</div>
+                    <div style={{ fontSize: '0.76rem', color: 'rgba(255, 255, 255, 0.55)', marginTop: '0.1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {uploadedPdf ? uploadedPdf.name : 'Optional handout for students & AI'}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0 }}>
+                  <input
+                    ref={createPdfInputRef}
+                    type="file"
+                    accept=".pdf,application/pdf"
+                    onChange={handlePdfUploadChange}
+                    style={{ display: 'none' }}
+                  />
+                  {uploadedPdf && (
+                    <button
+                      type="button"
+                      onClick={() => setUploadedPdf(null)}
+                      title="Remove PDF"
+                      style={{
+                        width: '30px',
+                        height: '30px',
+                        borderRadius: '6px',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        background: 'rgba(255, 255, 255, 0.04)',
+                        color: 'rgba(255, 255, 255, 0.7)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => createPdfInputRef.current?.click()}
+                  >
+                    <Upload size={13} /> {uploadedPdf ? 'Change' : 'Upload PDF'}
+                  </Button>
+                </div>
+              </div>
+
+              {/* Option 3: AI Question Generation (Secondary) */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '0.75rem',
+                  padding: '0.85rem 1rem',
+                  borderRadius: 'var(--radius-md)',
+                  background: 'rgba(255, 255, 255, 0.025)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                }}
+              >
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', cursor: 'pointer', minWidth: 0, flex: 1 }}>
+                  <input
+                    type="checkbox"
+                    checked={generateWithAi}
+                    onChange={(e) => setGenerateWithAi(e.target.checked)}
+                    style={{ width: '16px', height: '16px', accentColor: 'var(--accent-gold, #f59e0b)', cursor: 'pointer', flexShrink: 0 }}
+                  />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, color: '#f8fafc', fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                      <span>AI Question Generation</span>
+                    </div>
+                    <div style={{ fontSize: '0.76rem', color: 'rgba(255, 255, 255, 0.55)', marginTop: '0.1rem' }}>
+                      {uploadedPdf ? 'Draft questions from uploaded PDF' : 'Draft questions from Topic / Unit'}
+                    </div>
+                  </div>
+                </label>
+
+                {generateWithAi && (
+                  <select
+                    aria-label="AI Difficulty"
+                    value={aiDifficulty}
+                    onChange={(e) => setAiDifficulty(e.target.value as 'easy' | 'medium' | 'challenging')}
+                    className="form-select"
+                    style={{ width: 'auto', height: '32px', padding: '0 1.85rem 0 0.65rem', fontSize: '0.78rem', flexShrink: 0 }}
+                  >
+                    <option value="easy">Easy</option>
+                    <option value="medium">Medium</option>
+                    <option value="challenging">Challenging</option>
+                  </select>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Section D: Primary Action */}
           <div
             style={{
               display: 'flex',
-              justifyContent: 'space-between',
+              justifyContent: 'flex-end',
               alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: '1rem',
-              padding: '1rem 1.15rem',
-              borderRadius: 'var(--radius-md)',
-              background: uploadedPdf ? 'rgba(67, 160, 71, 0.1)' : 'rgba(245, 158, 11, 0.06)',
-              border: uploadedPdf ? '1px solid rgba(67, 160, 71, 0.35)' : '1px solid rgba(245, 158, 11, 0.22)',
+              paddingTop: '1rem',
+              borderTop: '1px solid rgba(255, 255, 255, 0.08)',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', flex: '1 1 300px', minWidth: 0 }}>
-              <div style={{ background: uploadedPdf ? 'rgba(67, 160, 71, 0.25)' : 'rgba(245, 158, 11, 0.2)', color: uploadedPdf ? '#a5d6a7' : '#fbbf24', padding: '0.55rem', borderRadius: 'var(--radius-md)', flexShrink: 0 }}>
-                <FileText size={20} />
-              </div>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 700, color: 'white', fontSize: '0.92rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                  <span>PDF Upload for Instructions & AI Question Generation (Optional)</span>
-                  {uploadedPdf && (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.76rem', background: 'rgba(67, 160, 71, 0.25)', color: '#c8e6c9', border: '1px solid rgba(67, 160, 71, 0.45)', padding: '0.15rem 0.55rem', borderRadius: '999px' }}>
-                      <FileText size={12} /> {uploadedPdf.name}
-                      <button
-                        type="button"
-                        onClick={() => setUploadedPdf(null)}
-                        title="Remove uploaded PDF"
-                        style={{ background: 'transparent', border: 'none', color: '#ffcdd2', cursor: 'pointer', padding: 0, display: 'inline-flex' }}
-                      >
-                        <X size={13} />
-                      </button>
-                    </span>
-                  )}
-                </div>
-                <p style={{ margin: '0.2rem 0 0', fontSize: '0.8rem', color: 'var(--neutral-300)', lineHeight: 1.45 }}>
-                  {uploadedPdf
-                    ? `AI will read "${uploadedPdf.name}" to generate ${count} questions and provide study feedback after quiz submission.`
-                    : 'Upload a PDF handout so AI generates questions and study feedback from the PDF, or leave empty to base AI questions on the Topic / Unit.'}
-                </p>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-              <input
-                ref={createPdfInputRef}
-                type="file"
-                accept=".pdf,application/pdf"
-                onChange={handlePdfUploadChange}
-                style={{ display: 'none' }}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => createPdfInputRef.current?.click()}
-                style={{ gap: '0.4rem' }}
-              >
-                <Upload size={14} /> {uploadedPdf ? 'Change PDF' : 'Upload PDF (.pdf)'}
-              </Button>
-
-              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.83rem', color: 'white', cursor: 'pointer', background: 'rgba(255,255,255,0.05)', padding: '0.4rem 0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid rgba(255,255,255,0.12)' }}>
-                <input
-                  type="checkbox"
-                  checked={generateWithAi}
-                  onChange={(e) => setGenerateWithAi(e.target.checked)}
-                  style={{ accentColor: 'var(--accent-gold, #f59e0b)', width: '15px', height: '15px' }}
-                />
-                <Sparkles size={14} style={{ color: '#fbbf24' }} />
-                <span>{uploadedPdf ? 'AI Generate from PDF' : 'AI Generate from Topic'}</span>
-              </label>
-
-              {generateWithAi && (
-                <select
-                  aria-label="AI Difficulty"
-                  value={aiDifficulty}
-                  onChange={(e) => setAiDifficulty(e.target.value as 'easy' | 'medium' | 'challenging')}
-                  className="form-select"
-                  style={{ width: 'auto', height: '35px', padding: '0 2rem 0 0.75rem', fontSize: '0.8rem' }}
-                >
-                  <option value="easy">Easy</option>
-                  <option value="medium">Medium</option>
-                  <option value="challenging">Challenging</option>
-                </select>
-              )}
-            </div>
-          </div>
-
-          {/* Row 3: Action Bar */}
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: '1rem',
-            paddingTop: '0.75rem',
-            borderTop: '1px solid rgba(255, 255, 255, 0.08)'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--neutral-400)', fontSize: '0.85rem' }}>
-              <BookOpen size={16} style={{ color: 'var(--primary-300)', flexShrink: 0 }} />
-              <span>
-                {generateWithAi
-                  ? uploadedPdf
-                    ? `AI will generate ${count} questions from "${uploadedPdf.name}" and open the editor for review.`
-                    : `AI will generate ${count} questions from your Topic / Unit and open the editor for review.`
-                  : 'Opens the interactive Question Editor where you can type questions, set points per item, and mark correct answers.'}
-              </span>
-            </div>
-
             <Button
               variant="accent"
               type="submit"
               disabled={busy || !subject}
-              style={{ padding: '0.75rem 1.75rem', whiteSpace: 'nowrap' }}
+              isLoading={busy}
+              style={{ height: '42px', padding: '0 1.4rem', boxShadow: 'none' }}
             >
-              {generateWithAi ? <Sparkles size={16} /> : <Pencil size={16} />}
+              {!busy && (generateWithAi ? <Sparkles size={16} /> : <Pencil size={16} />)}
               {busy
                 ? generateWithAi
-                  ? 'Generating AI Quiz...'
+                  ? 'Generating Questions...'
                   : 'Creating Quiz...'
                 : generateWithAi
-                  ? uploadedPdf
-                    ? `Generate ${count} Questions from PDF`
-                    : `Generate ${count} Questions with AI`
+                  ? 'Create & Generate Questions'
                   : 'Create Quiz & Add Questions'}
             </Button>
           </div>
         </form>
       </GlassCard>
 
-      {/* Quizzes List */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', position: 'relative', zIndex: 1 }}>
-        <h2 style={{ fontSize: '1.3rem', fontWeight: 700, color: 'white' }}>Your Created Quizzes ({quizzes.length})</h2>
+      {/* Created Quizzes List */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', position: 'relative', zIndex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h2 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#f8fafc', margin: 0 }}>
+            Created Quizzes ({quizzes.length})
+          </h2>
+        </div>
 
-        {quizzes.map(quiz => (
-          <GlassCard key={quiz.id}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1rem' }}>
-              <div>
-                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.35rem', flexWrap: 'wrap' }}>
-                  <Badge variant="primary">{quiz.subject}</Badge>
-                  {hasDistinctTopic(quiz) && (
-                    <span style={{ fontSize: '0.85rem', color: 'var(--neutral-300)' }}>Topic: {quiz.topic}</span>
-                  )}
-                  {quiz.reference_pdf_name && (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem', color: '#fbbf24', background: 'rgba(245, 158, 11, 0.14)', border: '1px solid rgba(245, 158, 11, 0.3)', padding: '0.15rem 0.5rem', borderRadius: '999px' }}>
-                      <FileText size={12} /> {quiz.reference_pdf_name}
+        {quizzes.length === 0 ? (
+          <GlassCard style={{ textAlign: 'center', padding: '2.25rem', color: 'rgba(255,255,255,0.55)', fontSize: '0.9rem' }}>
+            No quizzes created yet. Use the form above to create your first assessment.
+          </GlassCard>
+        ) : (
+          quizzes.map((quiz) => (
+            <GlassCard key={quiz.id} style={{ border: '1px solid rgba(255, 255, 255, 0.08)', padding: '1.25rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+                <div style={{ minWidth: 0, flex: '1 1 280px' }}>
+                  <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center', marginBottom: '0.4rem', flexWrap: 'wrap' }}>
+                    <Badge variant="primary">{formatCourseLabel(quiz.subject)}</Badge>
+                    <Badge variant={quiz.is_published ? 'success' : 'warning'}>
+                      {quiz.is_published ? 'Published' : 'Draft'}
+                    </Badge>
+                    <span style={{ fontSize: '0.76rem', color: 'rgba(255, 255, 255, 0.6)', background: 'rgba(255, 255, 255, 0.04)', border: '1px solid rgba(255, 255, 255, 0.08)', padding: '0.15rem 0.55rem', borderRadius: '999px' }}>
+                      {quiz.quiz_type === 'summative' ? 'Summative' : 'Formative'}
                     </span>
-                  )}
-                  {quiz.generated_by_ai && (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem', color: '#c4b5fd', background: 'rgba(124, 58, 237, 0.18)', border: '1px solid rgba(167, 139, 250, 0.3)', padding: '0.15rem 0.5rem', borderRadius: '999px' }}>
-                      <Sparkles size={12} /> AI Generated
-                    </span>
-                  )}
-                  <Badge variant={quiz.is_published ? 'success' : 'warning'}>
-                    {quiz.is_published ? 'Published' : 'Draft'}
-                  </Badge>
-                  <span
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.25rem',
-                      fontSize: '0.74rem',
-                      fontWeight: 600,
-                      color: quiz.quiz_type === 'summative' ? '#fbbf24' : '#a5d6a7',
-                      background: quiz.quiz_type === 'summative' ? 'rgba(245, 158, 11, 0.14)' : 'rgba(67, 160, 71, 0.16)',
-                      border: quiz.quiz_type === 'summative' ? '1px solid rgba(245, 158, 11, 0.35)' : '1px solid rgba(67, 160, 71, 0.35)',
-                      padding: '0.15rem 0.55rem',
-                      borderRadius: '999px',
-                    }}
-                  >
-                    {quiz.quiz_type === 'summative' ? 'Summative Exam' : 'Formative • Live View'}
-                  </span>
-                  {quiz.allow_review && (
-                    <span
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.25rem',
-                        fontSize: '0.74rem',
-                        color: '#93c5fd',
-                        background: 'rgba(59, 130, 246, 0.14)',
-                        border: '1px solid rgba(59, 130, 246, 0.3)',
-                        padding: '0.15rem 0.55rem',
-                        borderRadius: '999px',
-                      }}
-                    >
-                      <CheckCircle2 size={12} /> Answer Review Allowed
-                    </span>
-                  )}
+                    {quiz.reference_pdf_name && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.75)', background: 'rgba(255, 255, 255, 0.04)', border: '1px solid rgba(255, 255, 255, 0.08)', padding: '0.15rem 0.5rem', borderRadius: '999px' }}>
+                        <FileText size={11} /> {quiz.reference_pdf_name}
+                      </span>
+                    )}
+                  </div>
+                  <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#f8fafc', margin: '0 0 0.25rem' }}>
+                    {quiz.title}
+                  </h3>
+                  <p style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.83rem', margin: 0 }}>
+                    {quiz.topic ? `${quiz.topic} • ` : ''}
+                    {quiz.question_count} {quiz.question_count === 1 ? 'Question' : 'Questions'} • {quiz.time_limit_minutes || 15} mins
+                    {quiz.allow_review ? ' • Review Enabled' : ''}
+                    {quiz.question_count >= 3 && quiz.shuffle_questions ? ' • Shuffled' : ''}
+                    {' • '}{quiz.attempts_count || 0} {quiz.attempts_count === 1 ? 'Submission' : 'Submissions'} ({quiz.average || 0}% avg)
+                  </p>
                 </div>
-                <h3 style={{ fontSize: '1.35rem', fontWeight: 700, color: 'white' }}>{quiz.title}</h3>
-                <p style={{ color: 'var(--neutral-300)', fontSize: '0.85rem', marginTop: '0.2rem' }}>
-                  {quiz.question_count} Questions • {quiz.time_limit_minutes || 15} Mins{quiz.question_count >= 3 && quiz.shuffle_questions ? ' • Shuffled' : ''} • {quiz.attempts_count || 0} Submissions • {quiz.average || 0}% Class Average
-                </p>
-              </div>
 
-              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => setEditingQuiz(quiz)}
-                >
-                  <Pencil size={14} /> Edit Questions
-                </Button>
-                <Button 
-                  variant={quiz.is_published ? 'outline' : 'primary'}
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => {
-                    if (quiz.is_published) {
-                      handleTogglePublish(quiz);
-                    } else {
-                      setPublishingQuiz(quiz);
-                    }
-                  }}
-                >
-                  {quiz.is_published ? <EyeOff size={14} /> : <Eye size={14} />}
-                  {quiz.is_published ? 'Unpublish' : 'Publish / Assign'}
-                </Button>
-                {quiz.is_published && (
+                <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', alignItems: 'center' }}>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setPublishingQuiz(quiz)}
-                    title="Change target audience (all, block, individual)"
+                    onClick={() => setEditingQuiz(quiz)}
                   >
-                    <Target size={14} /> Target: {quizAudienceLabel(quiz) || 'All'}
+                    <Pencil size={14} /> Edit
                   </Button>
-                )}
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => setSubmissionsQuiz(quiz)}
-                >
-                  <ShieldAlert size={14} />{' '}
-                  {quiz.quiz_type === 'summative'
-                    ? `Submissions & Proctoring (${quiz.attempts_count || 0})`
-                    : `Live Monitor & Submissions (${quiz.attempts_count || 0})`}
-                </Button>
-              </div>
-            </div>
-
-            {/* Questions preview */}
-            {quiz.questions && quiz.questions.length > 0 && (
-              <details style={{ background: 'rgba(0,0,0,0.2)', padding: '0.75rem 1rem', borderRadius: 'var(--radius-md)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                <summary style={{ color: 'var(--primary-300)', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem' }}>
-                  Preview Questions & Answer Key ({quiz.questions.length})
-                </summary>
-                <div style={{ marginTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  {quiz.questions.map((q, idx) => (
-                    <div key={idx} style={{ fontSize: '0.875rem', color: 'var(--neutral-200)' }}>
-                      <strong>{idx + 1}. {q.prompt}</strong>
-                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
-                        {q.options.map((opt, optIdx) => (
-                          <span 
-                            key={optIdx} 
-                            style={{ 
-                              padding: '0.2rem 0.5rem', 
-                              borderRadius: '4px',
-                              background: optIdx === q.correct_index ? 'rgba(67, 160, 71, 0.3)' : 'rgba(255,255,255,0.05)',
-                              border: optIdx === q.correct_index ? '1px solid var(--success)' : '1px solid transparent',
-                              color: optIdx === q.correct_index ? '#a5d6a7' : 'var(--neutral-300)',
-                              fontWeight: optIdx === q.correct_index ? 600 : 400
-                            }}
-                          >
-                            {String.fromCharCode(65 + optIdx)}. {opt} {optIdx === q.correct_index && '✓'}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={busy || duplicatingQuizId === quiz.id}
+                    isLoading={duplicatingQuizId === quiz.id}
+                    onClick={() => handleDuplicateQuiz(quiz)}
+                    title="Duplicate quiz with sequential title"
+                  >
+                    <Copy size={14} /> Duplicate
+                  </Button>
+                  <Button
+                    variant={quiz.is_published ? 'outline' : 'accent'}
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => {
+                      if (quiz.is_published) {
+                        handleTogglePublish(quiz);
+                      } else {
+                        setPublishingQuiz(quiz);
+                      }
+                    }}
+                    style={!quiz.is_published ? { boxShadow: 'none' } : undefined}
+                  >
+                    {quiz.is_published ? <EyeOff size={14} /> : <Eye size={14} />}
+                    {quiz.is_published ? 'Unpublish' : 'Publish'}
+                  </Button>
+                  {quiz.is_published && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPublishingQuiz(quiz)}
+                      title="Configure target block or student audience"
+                    >
+                      <Target size={14} /> {quizAudienceLabel(quiz) || 'All'}
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSubmissionsQuiz(quiz)}
+                  >
+                    <ShieldAlert size={14} /> Submissions ({quiz.attempts_count || 0})
+                  </Button>
+                  <button
+                    type="button"
+                    onClick={() => setQuizToDelete(quiz)}
+                    disabled={busy}
+                    title={`Delete "${quiz.title}"`}
+                    aria-label={`Delete ${quiz.title}`}
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '6px',
+                      border: '1px solid rgba(239, 83, 80, 0.28)',
+                      background: 'rgba(239, 83, 80, 0.08)',
+                      color: '#fca5a5',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: busy ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
-              </details>
-            )}
-          </GlassCard>
-        ))}
+              </div>
+
+              {quiz.questions && quiz.questions.length > 0 && (
+                <details style={{ marginTop: '0.85rem', background: 'rgba(0,0,0,0.2)', padding: '0.65rem 0.9rem', borderRadius: 'var(--radius-md)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <summary style={{ color: 'rgba(255, 255, 255, 0.75)', fontWeight: 600, cursor: 'pointer', fontSize: '0.82rem' }}>
+                    Preview Questions &amp; Answer Key ({quiz.questions.length})
+                  </summary>
+                  <div style={{ marginTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                    {quiz.questions.map((q, idx) => {
+                      const qType = q.type || 'multiple_choice';
+                      return (
+                        <div key={idx} style={{ fontSize: '0.84rem', color: 'var(--neutral-200)' }}>
+                          <strong>{idx + 1}. {q.prompt || '(Untitled question)'}</strong>
+                          {qType === 'identification' ? (
+                            <div style={{ marginTop: '0.25rem', fontSize: '0.78rem', color: '#a5d6a7' }}>
+                              Answer Key: <strong>{q.correct_answer || q.options?.[0] || '(None)'}</strong>
+                            </div>
+                          ) : qType === 'essay' ? (
+                            <div style={{ marginTop: '0.25rem', fontSize: '0.78rem', color: 'rgba(255, 255, 255, 0.65)' }}>
+                              Essay Response {q.correct_answer ? `• Reference: ${q.correct_answer}` : ''}
+                            </div>
+                          ) : (
+                            Array.isArray(q.options) && q.options.length > 0 && (
+                              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
+                                {q.options.map((opt, optIdx) => {
+                                  const isCorrect =
+                                    qType === 'multiple_answer' && Array.isArray(q.correct_indices) && q.correct_indices.length > 0
+                                      ? q.correct_indices.includes(optIdx)
+                                      : optIdx === q.correct_index;
+                                  return (
+                                    <span
+                                      key={optIdx}
+                                      style={{
+                                        padding: '0.15rem 0.5rem',
+                                        borderRadius: '4px',
+                                        fontSize: '0.78rem',
+                                        background: isCorrect ? 'rgba(46, 125, 50, 0.25)' : 'rgba(255,255,255,0.04)',
+                                        border: isCorrect ? '1px solid rgba(129, 199, 132, 0.45)' : '1px solid rgba(255,255,255,0.06)',
+                                        color: isCorrect ? '#a5d6a7' : 'var(--neutral-300)',
+                                        fontWeight: isCorrect ? 600 : 400,
+                                      }}
+                                    >
+                                      {String.fromCharCode(65 + optIdx)}. {opt} {isCorrect && '✓'}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            )
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </details>
+              )}
+            </GlassCard>
+          ))
+        )}
       </div>
     </div>
   );
@@ -1370,6 +1513,40 @@ export default function TeacherDashboard() {
         isOpen={Boolean(submissionsQuiz)}
         onClose={() => setSubmissionsQuiz(null)}
       />
+
+      <Modal
+        isOpen={Boolean(quizToDelete)}
+        onClose={() => !deletingQuiz && setQuizToDelete(null)}
+        title="Delete Quiz"
+        maxWidth="480px"
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setQuizToDelete(null)}
+              disabled={deletingQuiz}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="error"
+              onClick={handleConfirmDeleteQuiz}
+              isLoading={deletingQuiz}
+              disabled={deletingQuiz}
+            >
+              Delete Quiz
+            </Button>
+          </>
+        }
+      >
+        <p style={{ margin: 0, color: 'rgba(255, 255, 255, 0.85)', fontSize: '0.92rem', lineHeight: 1.55 }}>
+          Are you sure you want to permanently delete{' '}
+          <strong style={{ color: '#f8fafc' }}>{quizToDelete?.title}</strong> (
+          {formatCourseLabel(quizToDelete?.subject)})? This action will remove the quiz and any associated student attempts.
+        </p>
+      </Modal>
     </DashboardLayout>
   );
 }

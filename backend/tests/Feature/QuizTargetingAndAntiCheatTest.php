@@ -189,16 +189,131 @@ class QuizTargetingAndAntiCheatTest extends TestCase
 
         $response = $this->actingAs($teacher)->postJson('/api/teacher/quizzes', [
             'title' => '',
-            'subject' => 'IT 108 - Data Structures & Algorithms',
+            'subject' => 'IT 108 • Data Structures & Algorithms',
             'topic' => 'Binary Search Trees',
             'count' => 12,
         ]);
 
         $response->assertStatus(201);
-        $response->assertJsonPath('quiz.title', 'Binary Search Trees');
+        $response->assertJsonPath('quiz.title', 'Quiz 1');
         $response->assertJsonPath('quiz.topic', 'Binary Search Trees');
         $response->assertJsonPath('quiz.question_count', 12);
         $this->assertCount(12, $response->json('quiz.questions'));
+
+        // Creating a second quiz with empty title in the same course auto-assigns Quiz 2
+        $secondResponse = $this->actingAs($teacher)->postJson('/api/teacher/quizzes', [
+            'title' => '',
+            'subject' => 'IT 108 - Data Structures & Algorithms',
+            'topic' => 'AVL Trees',
+            'count' => 5,
+        ]);
+        $secondResponse->assertStatus(201);
+        $secondResponse->assertJsonPath('quiz.title', 'Quiz 2');
+
+        // Loading teacher dashboard does not randomize manual quiz correct_index
+        $secondQuizId = $secondResponse->json('quiz.id');
+        $this->actingAs($teacher)->getJson('/api/teacher/dashboard')->assertStatus(200);
+        $freshManual = Quiz::findOrFail($secondQuizId);
+        foreach ($freshManual->questions as $q) {
+            $this->assertSame(0, $q['correct_index']);
+        }
+    }
+
+    public function test_quiz_duplication_assigns_sequential_names_handles_deleted_numbers_and_isolates_questions(): void
+    {
+        $teacher = User::where('role', 'teacher')->first() ?? User::factory()->create(['role' => 'teacher']);
+
+        $originalRes = $this->actingAs($teacher)->postJson('/api/teacher/quizzes', [
+            'title' => 'Quiz 1',
+            'subject' => 'IT 101 • Introduction To Computing',
+            'topic' => 'Introduction To Computing',
+            'quiz_type' => 'summative',
+            'time_limit_minutes' => 30,
+            'allow_review' => false,
+            'instructions' => 'Answer all items carefully.',
+            'questions' => [
+                [
+                    'type' => 'multiple_choice',
+                    'prompt' => 'Which unit performs arithmetic operations in the CPU?',
+                    'skill' => 'CPU Architecture',
+                    'points' => 2,
+                    'options' => ['ALU', 'CU', 'RAM', 'BIOS'],
+                    'correct_index' => 0,
+                ],
+            ],
+        ]);
+        $originalRes->assertStatus(201);
+        $quiz1Id = $originalRes->json('quiz.id');
+
+        // 1st duplication -> Quiz 2
+        $dup1 = $this->actingAs($teacher)->postJson("/api/teacher/quizzes/{$quiz1Id}/duplicate");
+        $dup1->assertStatus(201);
+        $dup1->assertJsonPath('quiz.title', 'Quiz 2');
+        $quiz2Id = $dup1->json('quiz.id');
+
+        // 2nd duplication -> Quiz 3
+        $dup2 = $this->actingAs($teacher)->postJson("/api/teacher/quizzes/{$quiz1Id}/duplicate");
+        $dup2->assertStatus(201);
+        $dup2->assertJsonPath('quiz.title', 'Quiz 3');
+        $quiz3Id = $dup2->json('quiz.id');
+
+        // 3rd duplication -> Quiz 4
+        $dup3 = $this->actingAs($teacher)->postJson("/api/teacher/quizzes/{$quiz1Id}/duplicate");
+        $dup3->assertStatus(201);
+        $dup3->assertJsonPath('quiz.title', 'Quiz 4');
+
+        // Delete Quiz 2 -> next duplication reclaims Quiz 2 without colliding with Quiz 3 or Quiz 4
+        $this->actingAs($teacher)->deleteJson("/api/teacher/quizzes/{$quiz2Id}")->assertStatus(200);
+
+        $dupReclaimed = $this->actingAs($teacher)->postJson("/api/teacher/quizzes/{$quiz1Id}/duplicate");
+        $dupReclaimed->assertStatus(201);
+        $dupReclaimed->assertJsonPath('quiz.title', 'Quiz 2');
+
+        // Next duplication after reclaiming Quiz 2 advances to Quiz 5
+        $dup5 = $this->actingAs($teacher)->postJson("/api/teacher/quizzes/{$quiz3Id}/duplicate");
+        $dup5->assertStatus(201);
+        $dup5->assertJsonPath('quiz.title', 'Quiz 5');
+
+        // Custom name duplication: Midterm Examination -> Midterm Examination 2 -> Midterm Examination 3
+        $customRes = $this->actingAs($teacher)->postJson('/api/teacher/quizzes', [
+            'title' => 'Midterm Examination',
+            'subject' => 'IT 101 • Introduction To Computing',
+            'topic' => 'Midterm Coverage',
+            'count' => 2,
+        ]);
+        $customRes->assertStatus(201);
+        $customId = $customRes->json('quiz.id');
+
+        $customDup1 = $this->actingAs($teacher)->postJson("/api/teacher/quizzes/{$customId}/duplicate");
+        $customDup1->assertStatus(201);
+        $customDup1->assertJsonPath('quiz.title', 'Midterm Examination 2');
+        $customDup1Id = $customDup1->json('quiz.id');
+
+        $customDup2 = $this->actingAs($teacher)->postJson("/api/teacher/quizzes/{$customDup1Id}/duplicate");
+        $customDup2->assertStatus(201);
+        $customDup2->assertJsonPath('quiz.title', 'Midterm Examination 3');
+
+        // Editing duplicated quiz questions must NOT mutate the original quiz
+        $this->actingAs($teacher)->putJson("/api/teacher/quizzes/{$quiz3Id}", [
+            'questions' => [
+                [
+                    'type' => 'multiple_choice',
+                    'prompt' => 'Modified question in Quiz 3 only?',
+                    'skill' => 'Memory Hierarchy',
+                    'points' => 5,
+                    'options' => ['Cache', 'SSD', 'HDD', 'Tape'],
+                    'correct_index' => 0,
+                ],
+            ],
+        ])->assertStatus(200);
+
+        $freshOriginal = Quiz::findOrFail($quiz1Id);
+        $freshDup3 = Quiz::findOrFail($quiz3Id);
+
+        $this->assertSame('Which unit performs arithmetic operations in the CPU?', $freshOriginal->questions[0]['prompt']);
+        $this->assertSame(2, $freshOriginal->questions[0]['points']);
+        $this->assertSame('Modified question in Quiz 3 only?', $freshDup3->questions[0]['prompt']);
+        $this->assertSame(5, $freshDup3->questions[0]['points']);
     }
 
     public function test_teacher_can_upload_pdf_for_ai_question_generation_and_post_quiz_study_feedback(): void

@@ -1,10 +1,20 @@
 import { useEffect, useState, useRef } from 'react';
-import { 
-  Plus, Trash2, ArrowUp, ArrowDown, ChevronsUp, ChevronsDown, 
-  Award, CheckCircle2, Clock3, Shuffle, FileText, Sparkles, Upload, X 
+import {
+  Plus,
+  Trash2,
+  ArrowUp,
+  ArrowDown,
+  ChevronsUp,
+  ChevronsDown,
+  CheckCircle2,
+  Shuffle,
+  FileText,
+  Sparkles,
+  Upload,
+  X,
 } from 'lucide-react';
 import type { Question, QuestionType, Quiz, Subject } from '../../lib/types';
-import { buildSubjectOptionsForYear } from '../../lib/constants';
+import { buildSubjectOptionsForYear, extractSubjectName, formatCourseLabel } from '../../lib/constants';
 import { readPdfFile } from '../../lib/pdfUtils';
 import { lmsFetch } from '../../lmsApi';
 import Modal from '../../components/ui/Modal';
@@ -125,18 +135,20 @@ function normalizeQuestionForEditor(question: Question): QuizEditorQuestion {
     ? Math.max(0, Math.min(options.length - 1, Number(question.correct_index)))
     : 0;
 
-  const rawIndices = Array.isArray(question.correct_indices) && question.correct_indices.length > 0
-    ? question.correct_indices
-        .map((n) => Number(n))
-        .filter((n) => Number.isInteger(n) && n >= 0 && n < options.length)
-    : [correctIndex];
+  const rawIndices =
+    Array.isArray(question.correct_indices) && question.correct_indices.length > 0
+      ? question.correct_indices
+          .map((n) => Number(n))
+          .filter((n) => Number.isInteger(n) && n >= 0 && n < options.length)
+      : [correctIndex];
   const correctIndices = rawIndices.length > 0 ? Array.from(new Set(rawIndices)).sort((a, b) => a - b) : [0];
 
-  const correctAnswer = typeof question.correct_answer === 'string'
-    ? question.correct_answer
-    : qType === 'identification'
-      ? (rawOptions[0] || '')
-      : '';
+  const correctAnswer =
+    typeof question.correct_answer === 'string'
+      ? question.correct_answer
+      : qType === 'identification'
+        ? rawOptions[0] || ''
+        : '';
 
   return {
     type: qType,
@@ -152,11 +164,12 @@ function normalizeQuestionForEditor(question: Question): QuizEditorQuestion {
 
 function toEditorValues(quiz: Quiz): QuizEditorValues {
   const qList = quiz.questions || [];
+  const normalizedSubject = formatCourseLabel(quiz.subject);
   return {
     id: quiz.id,
     title: quiz.title,
-    subject: quiz.subject,
-    topic: quiz.topic,
+    subject: normalizedSubject,
+    topic: quiz.topic || extractSubjectName(normalizedSubject),
     instructions: quiz.instructions || '',
     reference_pdf_name: quiz.reference_pdf_name || null,
     reference_pdf_text: quiz.reference_pdf_text || null,
@@ -169,7 +182,58 @@ function toEditorValues(quiz: Quiz): QuizEditorValues {
   };
 }
 
-export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects = [], handledYearLevel, onClose, onSave }: QuizEditorModalProps) {
+function toStorageDraftPayload(values: QuizEditorValues): QuizEditorValues {
+  return {
+    ...values,
+    reference_pdf_text: null,
+    pdf_base64: null,
+  };
+}
+
+const sectionCardStyle: React.CSSProperties = {
+  background: 'rgba(255, 255, 255, 0.025)',
+  border: '1px solid rgba(255, 255, 255, 0.08)',
+  borderRadius: 'var(--radius-lg, 10px)',
+  padding: '1.15rem',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '0.9rem',
+};
+
+const sectionTitleStyle: React.CSSProperties = {
+  fontSize: '0.75rem',
+  fontWeight: 700,
+  textTransform: 'uppercase',
+  letterSpacing: '0.06em',
+  color: 'rgba(255, 255, 255, 0.55)',
+  margin: 0,
+};
+
+const iconActionBtnStyle = (disabled = false, destructive = false): React.CSSProperties => ({
+  width: '30px',
+  height: '30px',
+  borderRadius: '6px',
+  border: destructive ? '1px solid rgba(239, 83, 80, 0.28)' : '1px solid rgba(255, 255, 255, 0.1)',
+  background: destructive ? 'rgba(239, 83, 80, 0.08)' : 'rgba(255, 255, 255, 0.04)',
+  color: disabled ? 'rgba(255, 255, 255, 0.25)' : destructive ? '#fca5a5' : 'rgba(255, 255, 255, 0.78)',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  cursor: disabled ? 'not-allowed' : 'pointer',
+  padding: 0,
+  flexShrink: 0,
+  transition: 'all 0.15s ease',
+});
+
+export default function QuizEditorModal({
+  quiz,
+  isOpen,
+  busy = false,
+  subjects = [],
+  handledYearLevel,
+  onClose,
+  onSave,
+}: QuizEditorModalProps) {
   const { showToast } = useToastContext();
   const [draft, setDraft] = useState<QuizEditorValues | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -177,14 +241,22 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiDifficulty, setAiDifficulty] = useState<'easy' | 'medium' | 'challenging'>('medium');
   const [newQuestionType, setNewQuestionType] = useState<QuestionType>('multiple_choice');
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [confirmRemoveIdx, setConfirmRemoveIdx] = useState<number | null>(null);
+  const topAnchorRef = useRef<HTMLDivElement>(null);
+  const bottomAnchorRef = useRef<HTMLDivElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
+  const initialDraftJsonRef = useRef<string>('');
 
   useEffect(() => {
     if (!quiz) {
       setDraft(null);
+      setConfirmRemoveIdx(null);
+      initialDraftJsonRef.current = '';
       return;
     }
+    const serverValues = toEditorValues(quiz);
+    initialDraftJsonRef.current = JSON.stringify(toStorageDraftPayload(serverValues));
+
     const savedRaw = localStorage.getItem(`tcc_quiz_draft_${quiz.id}`);
     if (savedRaw) {
       try {
@@ -192,44 +264,73 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
         if (parsed && parsed.id === quiz.id && Array.isArray(parsed.questions)) {
           setDraft({
             ...parsed,
+            subject: formatCourseLabel(parsed.subject || quiz.subject),
+            reference_pdf_text: parsed.reference_pdf_text ?? serverValues.reference_pdf_text,
             questions: parsed.questions.map(normalizeQuestionForEditor),
           });
           setValidationError(null);
+          setConfirmRemoveIdx(null);
           return;
         }
       } catch {
         // Ignore invalid local draft
       }
     }
-    setDraft(toEditorValues(quiz));
+    setDraft(serverValues);
     setValidationError(null);
+    setConfirmRemoveIdx(null);
   }, [quiz, isOpen]);
 
   useEffect(() => {
-    if (quiz && draft && draft.id === quiz.id) {
-      localStorage.setItem(`tcc_quiz_draft_${quiz.id}`, JSON.stringify(draft));
-    }
+    if (!quiz || !draft || draft.id !== quiz.id) return;
+    const serialized = JSON.stringify(toStorageDraftPayload(draft));
+    if (serialized === initialDraftJsonRef.current) return;
+
+    const timer = window.setTimeout(() => {
+      try {
+        localStorage.setItem(`tcc_quiz_draft_${quiz.id}`, serialized);
+      } catch {
+        // Ignore QuotaExceededError or private-browsing storage restrictions
+      }
+    }, 300);
+
+    return () => window.clearTimeout(timer);
   }, [quiz, draft]);
 
   if (!quiz || !draft) return null;
 
-  const scrollToTop = () => {
-    scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+  const handleCancel = () => {
+    try {
+      localStorage.removeItem(`tcc_quiz_draft_${quiz.id}`);
+    } catch {
+      // Ignore storage errors
+    }
+    onClose();
   };
 
   const scrollToBottom = () => {
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTo({
-        top: scrollContainerRef.current.scrollHeight,
-        behavior: 'smooth',
-      });
-    }
+    bottomAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  };
+
+  const handleCourseSelect = (nextSubject: string) => {
+    const prevAutoTopic = extractSubjectName(draft.subject);
+    const nextAutoTopic = extractSubjectName(nextSubject);
+    const currentTopic = draft.topic.trim();
+    const shouldAutoPopulate = !currentTopic || currentTopic.toLowerCase() === prevAutoTopic.toLowerCase();
+
+    setDraft({
+      ...draft,
+      subject: nextSubject,
+      topic: shouldAutoPopulate && nextAutoTopic ? nextAutoTopic : draft.topic,
+    });
   };
 
   const updateQuestion = (questionIndex: number, update: Partial<QuizEditorValues['questions'][number]>) => {
     setDraft((current) => {
       if (!current) return current;
-      const questions = current.questions.map((question, index) => index === questionIndex ? { ...question, ...update } : question);
+      const questions = current.questions.map((question, index) =>
+        index === questionIndex ? { ...question, ...update } : question
+      );
       return { ...current, questions };
     });
   };
@@ -278,7 +379,6 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
             correct_answer: question.correct_answer || '',
           };
         }
-        // multiple_choice or multiple_answer
         const existingOpts =
           question.type === 'true_false' || question.type === 'identification' || question.type === 'essay'
             ? ['', '', '', '']
@@ -331,9 +431,8 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
   const toggleMultipleAnswerIndex = (questionIndex: number, optionIndex: number) => {
     const q = draft.questions[questionIndex];
     if (!q) return;
-    const currentIndices = Array.isArray(q.correct_indices) && q.correct_indices.length > 0
-      ? [...q.correct_indices]
-      : [q.correct_index || 0];
+    const currentIndices =
+      Array.isArray(q.correct_indices) && q.correct_indices.length > 0 ? [...q.correct_indices] : [q.correct_index || 0];
     const exists = currentIndices.includes(optionIndex);
     let nextIndices: number[];
     if (exists) {
@@ -350,9 +449,9 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
     });
   };
 
-  // Direct move to top (Question reordering)
   const moveQuestionToTop = (index: number) => {
     if (index === 0) return;
+    setConfirmRemoveIdx(null);
     setDraft((current) => {
       if (!current) return current;
       const questions = [...current.questions];
@@ -362,9 +461,9 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
     });
   };
 
-  // Direct move to bottom (Question reordering)
   const moveQuestionToBottom = (index: number) => {
     if (!draft || index === draft.questions.length - 1) return;
+    setConfirmRemoveIdx(null);
     setDraft((current) => {
       if (!current) return current;
       const questions = [...current.questions];
@@ -374,9 +473,9 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
     });
   };
 
-  // Move up one step
   const moveQuestionUp = (index: number) => {
     if (index <= 0) return;
+    setConfirmRemoveIdx(null);
     setDraft((current) => {
       if (!current) return current;
       const questions = [...current.questions];
@@ -387,9 +486,9 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
     });
   };
 
-  // Move down one step
   const moveQuestionDown = (index: number) => {
     if (!draft || index >= draft.questions.length - 1) return;
+    setConfirmRemoveIdx(null);
     setDraft((current) => {
       if (!current) return current;
       const questions = [...current.questions];
@@ -400,9 +499,28 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
     });
   };
 
-  // Shuffle questions order when there are 3 or more questions
+  const handleRemoveQuestion = (questionIndex: number) => {
+    if (draft.questions.length <= 1) return;
+    const target = draft.questions[questionIndex];
+    const hasContent =
+      Boolean(target.prompt.trim()) ||
+      target.options.some((opt) => Boolean(opt.trim()) && opt !== 'True' && opt !== 'False');
+
+    if (hasContent && confirmRemoveIdx !== questionIndex) {
+      setConfirmRemoveIdx(questionIndex);
+      return;
+    }
+
+    setConfirmRemoveIdx(null);
+    setDraft({
+      ...draft,
+      questions: draft.questions.filter((_, index) => index !== questionIndex),
+    });
+  };
+
   const shuffleQuestionsOrder = () => {
     if (!draft || draft.questions.length < 3) return;
+    setConfirmRemoveIdx(null);
     setDraft((current) => {
       if (!current || current.questions.length < 3) return current;
       const shuffled = [...current.questions];
@@ -414,9 +532,9 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
       }
       return { ...current, questions: shuffled };
     });
+    showToast('Question order shuffled.', 'info');
   };
 
-  // Randomize option positions (A, B, C, D) for all multiple-choice/multiple-answer questions while preserving the real answer
   const randomizeAnswerChoices = () => {
     if (!draft || draft.questions.length === 0) return;
     setDraft((current) => {
@@ -437,9 +555,7 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
             pairs[i] = pairs[j];
             pairs[j] = tmp;
           }
-          const newIndices = pairs
-            .map((p, idx) => (p.isCorrect ? idx : -1))
-            .filter((idx) => idx >= 0);
+          const newIndices = pairs.map((p, idx) => (p.isCorrect ? idx : -1)).filter((idx) => idx >= 0);
           return {
             ...q,
             options: pairs.map((p) => p.text),
@@ -472,7 +588,7 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
       });
       return { ...current, questions: updatedQuestions };
     });
-    const msg = 'Answer choices have been randomized across multiple-choice questions while preserving each true answer.';
+    const msg = 'Answer choices randomized across multiple-choice items.';
     setAiNotice(msg);
     showToast('Answer choices randomized.', 'info');
   };
@@ -483,12 +599,13 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
       if (!current) return current;
       if (safeCount === current.questions.length) return current;
       if (safeCount > current.questions.length) {
-        const additional = Array.from({ length: safeCount - current.questions.length }, () => emptyQuestion(newQuestionType));
+        const additional = Array.from({ length: safeCount - current.questions.length }, () =>
+          emptyQuestion(newQuestionType)
+        );
         return { ...current, questions: [...current.questions, ...additional] };
       }
       return { ...current, questions: current.questions.slice(0, safeCount) };
     });
-    showToast(`Question count set to ${safeCount}.`, 'info');
   };
 
   const handleSelectPdf = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -516,8 +633,7 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
           instructions: nextInstructions,
         };
       });
-      const msg = `PDF "${parsed.name}" attached for quiz instructions, AI question generation, and post-quiz study feedback.`;
-      setAiNotice(msg);
+      setAiNotice(`PDF "${parsed.name}" attached.`);
       showToast(`PDF "${parsed.name}" attached.`, 'success');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Could not read the selected PDF file.';
@@ -530,10 +646,10 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
 
   const handleGenerateQuestionsWithAi = async () => {
     if (!draft) return;
-    const cleanTopic = draft.topic.trim() || draft.title.trim();
+    const cleanTopic = draft.topic.trim() || extractSubjectName(draft.subject) || draft.title.trim();
     const cleanSubject = draft.subject.trim();
     if (!cleanTopic || !cleanSubject) {
-      const msg = 'Enter a Subject and Topic / Unit before generating questions with AI.';
+      const msg = 'Select a Course Code & Subject and Topic / Unit before generating questions.';
       setValidationError(msg);
       showToast(msg, 'warning');
       return;
@@ -582,10 +698,10 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
           };
         });
         const msg = draft.reference_pdf_name
-          ? `Generated ${res.questions.length} questions from PDF "${draft.reference_pdf_name}". Review and save when ready.`
-          : `Generated ${res.questions.length} questions based on topic "${cleanTopic}". Review and save when ready.`;
+          ? `Generated ${res.questions.length} questions from "${draft.reference_pdf_name}".`
+          : `Generated ${res.questions.length} questions for "${cleanTopic}".`;
         setAiNotice(msg);
-        showToast(`Generated ${res.questions.length} AI questions!`, 'success');
+        showToast(msg, 'success');
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Could not generate AI questions.';
@@ -598,18 +714,18 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
 
   const submit = () => {
     const rawTitle = draft.title.trim();
-    const rawTopic = draft.topic.trim();
-    const title = rawTitle || rawTopic;
-    const topic = rawTopic || rawTitle;
-    const subject = draft.subject.trim();
+    const subject = formatCourseLabel(draft.subject.trim());
+    const rawTopic = draft.topic.trim() || extractSubjectName(subject);
+    const title = rawTitle;
+    const topic = rawTopic || title || 'Course Unit';
     const instructions = draft.instructions.trim();
 
-    if (!title || !subject || !topic) {
-      setValidationError('Add a quiz title/topic and subject before saving the quiz.');
+    if (!subject || !topic) {
+      setValidationError('Please select a Course Code & Subject and enter a Topic / Unit before saving.');
       return;
     }
     if (draft.questions.length === 0) {
-      setValidationError('A quiz needs at least one question.');
+      setValidationError('A quiz requires at least one question.');
       return;
     }
 
@@ -617,12 +733,12 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
       const q = draft.questions[i];
       const qNum = i + 1;
       if (!q.prompt.trim()) {
-        setValidationError(`Question ${qNum}: Please enter a question prompt.`);
+        setValidationError(`Question ${qNum}: Please enter the question text.`);
         return;
       }
       if (q.type === 'multiple_choice' || q.type === 'multiple_answer') {
         if (q.options.length < 2 || q.options.some((opt) => !opt.trim())) {
-          setValidationError(`Question ${qNum} (${QUESTION_TYPE_LABELS[q.type]}): Fill in all answer choices before saving.`);
+          setValidationError(`Question ${qNum} (${QUESTION_TYPE_LABELS[q.type]}): Fill in all answer choices.`);
           return;
         }
         if (q.type === 'multiple_answer' && (!Array.isArray(q.correct_indices) || q.correct_indices.length === 0)) {
@@ -656,7 +772,7 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
             ...question,
             type: 'true_false' as QuestionType,
             prompt: question.prompt.trim(),
-            skill: question.skill?.trim() || 'General Knowledge',
+            skill: question.skill?.trim() || topic,
             points: Number.isInteger(question.points) && Number(question.points) > 0 ? Number(question.points) : 1,
             options: ['True', 'False'],
             correct_index: cIdx,
@@ -671,7 +787,7 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
             ...question,
             type: 'identification' as QuestionType,
             prompt: question.prompt.trim(),
-            skill: question.skill?.trim() || 'General Knowledge',
+            skill: question.skill?.trim() || topic,
             points: Number.isInteger(question.points) && Number(question.points) > 0 ? Number(question.points) : 1,
             options: [ans, altRaw || ans],
             correct_index: 0,
@@ -697,13 +813,15 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
         const safeCorrectIndex = Math.max(0, Math.min(cleanedOptions.length - 1, Number(question.correct_index) || 0));
         const safeIndices =
           qType === 'multiple_answer' && Array.isArray(question.correct_indices) && question.correct_indices.length > 0
-            ? Array.from(new Set(question.correct_indices.filter((idx) => idx >= 0 && idx < cleanedOptions.length))).sort((a, b) => a - b)
+            ? Array.from(new Set(question.correct_indices.filter((idx) => idx >= 0 && idx < cleanedOptions.length))).sort(
+                (a, b) => a - b
+              )
             : [safeCorrectIndex];
         return {
           ...question,
           type: qType,
           prompt: question.prompt.trim(),
-          skill: question.skill?.trim() || 'General Knowledge',
+          skill: question.skill?.trim() || topic,
           points: Number.isInteger(question.points) && Number(question.points) > 0 ? Number(question.points) : 1,
           options: cleanedOptions,
           correct_index: safeIndices[0] ?? safeCorrectIndex,
@@ -720,345 +838,452 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={`Edit Quiz: ${quiz.title}`}
-      footer={(
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: '0.75rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--neutral-300)', fontSize: '0.85rem', flexWrap: 'wrap' }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
-              <Award size={15} style={{ color: '#fbbf24' }} />
-              Total Points: <strong style={{ color: 'white' }}>{totalPoints} pts</strong> ({draft.questions.length} questions)
-            </span>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.75rem', color: '#a5d6a7', background: 'rgba(67, 160, 71, 0.15)', border: '1px solid rgba(67, 160, 71, 0.3)', padding: '0.15rem 0.55rem', borderRadius: '999px' }}>
-              <CheckCircle2 size={12} /> Local Draft Auto-Saved
-            </span>
-          </div>
-          <div style={{ display: 'flex', gap: '0.75rem' }}>
-            <Button variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
-            <Button variant="primary" onClick={submit} isLoading={busy}>Save Quiz Changes</Button>
-          </div>
-        </div>
-      )}
-    >
-      <div 
-        ref={scrollContainerRef}
-        className="no-scrollbar smooth-scroll"
-        style={{ 
-          maxHeight: '68vh', 
-          overflowY: 'auto', 
-          display: 'flex', 
-          flexDirection: 'column', 
-          gap: '1.25rem',
-          scrollbarWidth: 'none',
-          msOverflowStyle: 'none',
-        }}
-      >
-        <p style={{ color: 'var(--neutral-300)', fontSize: '0.9rem', margin: 0 }}>
-          Review the quiz draft, customize question types (Multiple Choice, Identification, True/False, Multiple Answer, Essay), set point values, and adjust sequencing before publishing to students.
-        </p>
-
-        {validationError && (
-          <div role="alert" style={{ border: '1px solid var(--error)', background: 'rgba(239, 83, 80, 0.14)', color: '#ffcdd2', borderRadius: 'var(--radius-md)', padding: '0.75rem 1rem' }}>
-            {validationError}
-          </div>
-        )}
-
-        {aiNotice && (
-          <div style={{ border: '1px solid rgba(67, 160, 71, 0.45)', background: 'rgba(67, 160, 71, 0.15)', color: '#c8e6c9', borderRadius: 'var(--radius-md)', padding: '0.7rem 1rem', fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <CheckCircle2 size={16} style={{ flexShrink: 0 }} />
-            <span>{aiNotice}</span>
-          </div>
-        )}
-
-        {/* Quiz Metadata · Organized & Aligned 2-Row Grid */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', background: 'rgba(255, 255, 255, 0.02)', padding: '1.1rem', borderRadius: 'var(--radius-lg, 12px)', border: '1px solid rgba(255, 255, 255, 0.07)' }}>
-          {/* Metadata Row 1: Quiz Title + Full Course Code & Subject Description */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem', alignItems: 'end' }}>
-            <label className="form-group" style={{ margin: 0 }}>
-              <span className="form-label" style={{ display: 'flex', alignItems: 'center', minHeight: '22px', marginBottom: '0.45rem' }}>
-                Quiz Title
-              </span>
-              <input
-                className="form-input"
-                value={draft.title}
-                placeholder="Enter quiz title..."
-                onChange={(event) => setDraft({ ...draft, title: event.target.value })}
-              />
-            </label>
-
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <span className="form-label" style={{ display: 'flex', alignItems: 'center', minHeight: '22px', marginBottom: '0.45rem' }}>
-                {handledYearLevel
-                  ? `Course Code & Subject Description (${handledYearLevel})`
-                  : 'Course Code & Subject Description'}
-              </span>
-              <Select
-                value={draft.subject}
-                onChange={(val) => setDraft({ ...draft, subject: val })}
-                style={{ margin: 0 }}
-                options={buildSubjectOptionsForYear(handledYearLevel, subjects || [])}
-              />
-            </div>
-          </div>
-
-          {/* Metadata Row 2: Topic / Unit + Quiz Type (Formative / Summative) + Time Limit (Minutes) */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', alignItems: 'end' }}>
-            <label className="form-group" style={{ margin: 0 }}>
-              <span className="form-label" style={{ display: 'flex', alignItems: 'center', minHeight: '22px', marginBottom: '0.45rem' }}>
-                Topic / Unit
-              </span>
-              <input
-                className="form-input"
-                value={draft.topic}
-                placeholder="e.g. Data Structures, Relational Databases"
-                onChange={(event) => setDraft({ ...draft, topic: event.target.value })}
-              />
-            </label>
-
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <span className="form-label" style={{ display: 'flex', alignItems: 'center', minHeight: '22px', marginBottom: '0.45rem' }}>
-                Quiz Type (Assessment Mode)
-              </span>
-              <Select
-                value={draft.quiz_type || 'formative'}
-                onChange={(val) => setDraft({ ...draft, quiz_type: (val === 'summative' ? 'summative' : 'formative') })}
-                style={{ margin: 0 }}
-                options={[
-                  { value: 'formative', label: 'Formative · Live Student Monitoring' },
-                  { value: 'summative', label: 'Summative · Final Submission Only' },
-                ]}
-              />
-            </div>
-
-            <label className="form-group" style={{ margin: 0 }}>
-              <span className="form-label" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', minHeight: '22px', marginBottom: '0.45rem' }}>
-                <Clock3 size={14} style={{ color: '#fbbf24' }} /> Time Limit (Minutes)
-              </span>
-              <input
-                type="number"
-                min={1}
-                max={300}
-                className="form-input"
-                value={draft.time_limit_minutes ?? 15}
-                onChange={(event) => setDraft({ ...draft, time_limit_minutes: Math.max(1, Math.min(300, Number(event.target.value) || 15)) })}
-              />
-            </label>
-          </div>
-        </div>
-
-        {/* Instructions for Students */}
-        <label className="form-group" style={{ margin: 0 }}>
-          <span className="form-label" style={{ marginBottom: '0.45rem' }}>Instructions for Students</span>
-          <textarea
-            className="form-input"
-            rows={2}
-            value={draft.instructions}
-            onChange={(event) => setDraft({ ...draft, instructions: event.target.value })}
-            style={{ minHeight: '68px', lineHeight: 1.5, resize: 'vertical' }}
-          />
-        </label>
-
-        {/* PDF Reference Upload & AI Question Generation Bar */}
+      title={`Edit Quiz • ${draft.title || quiz.title}`}
+      subtitle={formatCourseLabel(draft.subject)}
+      maxWidth="min(96vw, 960px)"
+      footer={
         <div
           style={{
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
+            width: '100%',
             flexWrap: 'wrap',
-            gap: '0.85rem',
-            padding: '0.9rem 1.1rem',
-            borderRadius: 'var(--radius-md)',
-            background: 'rgba(245, 158, 11, 0.06)',
-            border: '1px solid rgba(245, 158, 11, 0.25)',
+            gap: '0.75rem',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: '1 1 280px', minWidth: 0 }}>
-            <div style={{ background: 'rgba(245, 158, 11, 0.18)', color: '#fbbf24', padding: '0.5rem', borderRadius: 'var(--radius-md)', flexShrink: 0 }}>
-              <FileText size={19} />
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 700, color: 'white', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
-                <span>PDF Reference & AI Quiz Generator</span>
-                {draft.reference_pdf_name && (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.75rem', background: 'rgba(67, 160, 71, 0.2)', color: '#a5d6a7', border: '1px solid rgba(67, 160, 71, 0.4)', padding: '0.12rem 0.5rem', borderRadius: '999px' }}>
-                    <FileText size={11} /> {draft.reference_pdf_name}
-                    <button
-                      type="button"
-                      title="Remove attached PDF"
-                      onClick={() => setDraft({ ...draft, reference_pdf_name: null, reference_pdf_text: null, pdf_base64: null })}
-                      style={{ background: 'transparent', border: 'none', color: '#ffcdd2', cursor: 'pointer', padding: 0, display: 'inline-flex' }}
-                    >
-                      <X size={12} />
-                    </button>
-                  </span>
-                )}
-              </div>
-              <p style={{ margin: '0.15rem 0 0', fontSize: '0.78rem', color: 'var(--neutral-300)', lineHeight: 1.4 }}>
-                {draft.reference_pdf_name
-                  ? 'AI will read this PDF to generate questions and provide post-quiz study feedback.'
-                  : 'Upload a PDF handout for instructions & AI questions, or generate directly from the Topic / Unit.'}
-              </p>
-            </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.84rem' }}>
+            <span>
+              <strong style={{ color: '#f8fafc' }}>{draft.questions.length}</strong>{' '}
+              {draft.questions.length === 1 ? 'Question' : 'Questions'} •{' '}
+              <strong style={{ color: '#f8fafc' }}>{totalPoints}</strong> pts total
+            </span>
+            <span style={{ color: 'rgba(255, 255, 255, 0.3)' }}>•</span>
+            <span style={{ fontSize: '0.76rem', color: 'rgba(255, 255, 255, 0.5)' }}>Draft auto-saved</span>
           </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-            <input
-              ref={pdfInputRef}
-              type="file"
-              accept=".pdf,application/pdf"
-              onChange={handleSelectPdf}
-              style={{ display: 'none' }}
-            />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => pdfInputRef.current?.click()}
-              style={{ gap: '0.35rem' }}
-            >
-              <Upload size={14} /> {draft.reference_pdf_name ? 'Replace PDF' : 'Upload PDF'}
+          <div style={{ display: 'flex', gap: '0.65rem' }}>
+            <Button type="button" variant="outline" onClick={handleCancel} disabled={busy}>
+              Cancel
             </Button>
-
-            <select
-              aria-label="AI Question Difficulty"
-              value={aiDifficulty}
-              onChange={(e) => setAiDifficulty(e.target.value as 'easy' | 'medium' | 'challenging')}
-              className="form-select"
-              style={{ width: 'auto', height: '34px', padding: '0 2rem 0 0.7rem', fontSize: '0.78rem' }}
-            >
-              <option value="easy">Easy</option>
-              <option value="medium">Medium</option>
-              <option value="challenging">Challenging</option>
-            </select>
-
             <Button
               type="button"
               variant="accent"
-              size="sm"
-              disabled={aiGenerating || busy}
-              isLoading={aiGenerating}
-              onClick={handleGenerateQuestionsWithAi}
-              style={{ gap: '0.35rem' }}
+              onClick={submit}
+              isLoading={busy}
+              disabled={busy}
+              style={{ boxShadow: 'none' }}
             >
-              <Sparkles size={14} />
-              {aiGenerating
-                ? 'Generating...'
-                : draft.reference_pdf_name
-                  ? `Generate ${draft.questions.length} from PDF`
-                  : `Generate ${draft.questions.length} from Topic`}
+              Save Changes
             </Button>
           </div>
         </div>
+      }
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+        <div ref={topAnchorRef} style={{ display: 'none' }} />
 
-        {/* Settings Checkboxes Row · Equal Height & Aligned */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '0.85rem', alignItems: 'stretch' }}>
-          <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.7rem', color: 'var(--neutral-200)', fontSize: '0.88rem', cursor: 'pointer', background: draft.allow_review ? 'rgba(245, 158, 11, 0.1)' : 'rgba(255,255,255,0.03)', padding: '0.85rem 1rem', borderRadius: 'var(--radius-md)', border: `1px solid ${draft.allow_review ? 'rgba(245, 158, 11, 0.4)' : 'rgba(255,255,255,0.07)'}`, margin: 0 }}>
-            <input
-              type="checkbox"
-              checked={draft.allow_review}
-              onChange={(event) => setDraft({ ...draft, allow_review: event.target.checked })}
-              style={{ accentColor: 'var(--accent-gold, #f59e0b)', marginTop: '0.2rem', width: '16px', height: '16px', flexShrink: 0 }}
-            />
-            <span>
-              <strong style={{ color: 'white', display: 'block', marginBottom: '0.15rem' }}>Allow Answer Review After Submission</strong>
-              Students can review full answer keys and explanations once they submit.
+        {validationError && (
+          <div
+            role="alert"
+            style={{
+              border: '1px solid rgba(239, 154, 154, 0.4)',
+              background: 'rgba(211, 47, 47, 0.14)',
+              color: '#ffcdd2',
+              borderRadius: 'var(--radius-md)',
+              padding: '0.75rem 1rem',
+              fontSize: '0.86rem',
+            }}
+          >
+            {validationError}
+          </div>
+        )}
+
+        {aiNotice && (
+          <div
+            style={{
+              border: '1px solid rgba(129, 199, 132, 0.35)',
+              background: 'rgba(46, 125, 50, 0.14)',
+              color: '#c8e6c9',
+              borderRadius: 'var(--radius-md)',
+              padding: '0.7rem 1rem',
+              fontSize: '0.85rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '0.5rem',
+            }}
+          >
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem' }}>
+              <CheckCircle2 size={15} style={{ flexShrink: 0 }} />
+              {aiNotice}
             </span>
-          </label>
+            <button
+              type="button"
+              onClick={() => setAiNotice(null)}
+              style={{ background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0 }}
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
 
-          {draft.questions.length >= 3 && (
-            <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.7rem', color: 'var(--neutral-200)', fontSize: '0.88rem', cursor: 'pointer', background: draft.shuffle_questions ? 'rgba(245, 158, 11, 0.1)' : 'rgba(255,255,255,0.03)', padding: '0.85rem 1rem', borderRadius: 'var(--radius-md)', border: `1px solid ${draft.shuffle_questions ? 'rgba(245, 158, 11, 0.4)' : 'rgba(255,255,255,0.07)'}`, margin: 0 }}>
+        {/* 1. Basic Information */}
+        <section style={sectionCardStyle}>
+          <h3 style={sectionTitleStyle}>1. Basic Information</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '1rem', alignItems: 'start' }}>
+            <label className="form-group" style={{ margin: 0 }}>
+              <span className="form-label">Quiz Title</span>
               <input
-                type="checkbox"
-                checked={Boolean(draft.shuffle_questions)}
-                onChange={(event) => setDraft({ ...draft, shuffle_questions: event.target.checked })}
-                style={{ accentColor: 'var(--accent-gold, #f59e0b)', marginTop: '0.2rem', width: '16px', height: '16px', flexShrink: 0 }}
+                className="form-input"
+                value={draft.title}
+                placeholder="e.g. Quiz 1, Midterm Examination"
+                onChange={(event) => setDraft({ ...draft, title: event.target.value })}
               />
-              <span>
-                <strong style={{ color: 'white', display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.15rem' }}>
-                  <Shuffle size={14} style={{ color: '#fbbf24' }} /> Shuffle Questions
-                </strong>
-                Randomize question order for each student attempt ({draft.questions.length} questions).
-              </span>
             </label>
-          )}
+
+            <div>
+              <Select
+                label="Course Code & Subject"
+                value={draft.subject}
+                onChange={handleCourseSelect}
+                style={{ margin: 0 }}
+                options={buildSubjectOptionsForYear(handledYearLevel, subjects || [], draft.subject)}
+              />
+            </div>
+
+            <label className="form-group" style={{ margin: 0 }}>
+              <span className="form-label">Topic / Unit</span>
+              <input
+                className="form-input"
+                value={draft.topic}
+                placeholder="e.g. Introduction to Computing"
+                onChange={(event) => setDraft({ ...draft, topic: event.target.value })}
+              />
+            </label>
+          </div>
+        </section>
+
+        {/* 2. Quiz Settings & 3. Instructions for Students */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.25rem' }}>
+          {/* 2. Quiz Settings */}
+          <section style={sectionCardStyle}>
+            <h3 style={sectionTitleStyle}>2. Quiz Settings</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', alignItems: 'start' }}>
+              <Select
+                label="Quiz Type"
+                value={draft.quiz_type || 'formative'}
+                onChange={(val) => setDraft({ ...draft, quiz_type: val === 'summative' ? 'summative' : 'formative' })}
+                style={{ margin: 0 }}
+                options={[
+                  { value: 'formative', label: 'Formative • Live Monitoring' },
+                  { value: 'summative', label: 'Summative • Final Submission' },
+                ]}
+              />
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                <label className="form-group" style={{ margin: 0 }}>
+                  <span className="form-label">Time Limit (Minutes)</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={300}
+                    className="form-input"
+                    value={draft.time_limit_minutes ?? 15}
+                    onChange={(event) =>
+                      setDraft({
+                        ...draft,
+                        time_limit_minutes: Math.max(1, Math.min(300, Number(event.target.value) || 15)),
+                      })
+                    }
+                  />
+                </label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', flexWrap: 'wrap' }}>
+                  {[10, 15, 30, 45, 60].map((mins) => {
+                    const active = draft.time_limit_minutes === mins;
+                    return (
+                      <button
+                        key={mins}
+                        type="button"
+                        onClick={() => setDraft({ ...draft, time_limit_minutes: mins })}
+                        style={{
+                          height: '22px',
+                          padding: '0 0.5rem',
+                          fontSize: '0.72rem',
+                          fontWeight: 600,
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          border: active ? '1px solid rgba(245, 158, 11, 0.6)' : '1px solid rgba(255,255,255,0.1)',
+                          background: active ? 'rgba(245, 158, 11, 0.16)' : 'rgba(255,255,255,0.03)',
+                          color: active ? '#fbbf24' : 'rgba(255,255,255,0.65)',
+                        }}
+                      >
+                        {mins}m
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* 3. Instructions for Students */}
+          <section style={sectionCardStyle}>
+            <h3 style={sectionTitleStyle}>3. Instructions for Students</h3>
+            <label className="form-group" style={{ margin: 0, flex: 1 }}>
+              <textarea
+                className="form-input"
+                rows={3}
+                value={draft.instructions}
+                placeholder="Enter instructions for students taking this assessment..."
+                onChange={(event) => setDraft({ ...draft, instructions: event.target.value })}
+                style={{ minHeight: '78px', lineHeight: 1.5, resize: 'vertical' }}
+              />
+            </label>
+          </section>
         </div>
 
-        {/* Questions Header with Direct Move Toolbar */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', borderTop: '1px solid var(--glass-border)', paddingTop: '1.25rem' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-              <h3 style={{ color: 'white', margin: 0, fontSize: '1.15rem', fontWeight: 700 }}>Questions & Answer Key</h3>
-              <span style={{ fontSize: '0.8rem', background: 'rgba(124, 58, 237, 0.25)', color: '#c4b5fd', padding: '0.2rem 0.65rem', borderRadius: '999px', fontWeight: 600, border: '1px solid rgba(167, 139, 250, 0.3)' }}>
-                {draft.questions.length} questions • {totalPoints} total pts
+        {/* 4. AI Question Generation & 5. Quiz Options */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.25rem' }}>
+          {/* 4. AI Question Generation */}
+          <section style={sectionCardStyle}>
+            <h3 style={sectionTitleStyle}>4. AI Question Generation</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0, flex: '1 1 180px' }}>
+                <FileText size={16} style={{ color: 'rgba(255, 255, 255, 0.6)', flexShrink: 0 }} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: '0.86rem', fontWeight: 600, color: '#f8fafc', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {draft.reference_pdf_name ? draft.reference_pdf_name : 'Topic or PDF Source'}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.55)' }}>
+                    {draft.reference_pdf_name ? 'PDF attached for AI & study review' : `Generates ${draft.questions.length} items from topic or PDF`}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
+                <input
+                  ref={pdfInputRef}
+                  type="file"
+                  accept=".pdf,application/pdf"
+                  onChange={handleSelectPdf}
+                  style={{ display: 'none' }}
+                />
+                {draft.reference_pdf_name && (
+                  <button
+                    type="button"
+                    title="Remove attached PDF"
+                    onClick={() => {
+                      const cleanedInstructions = draft.instructions.replace(
+                        /^Refer to the attached PDF handout \([^)]+\) and choose/i,
+                        'Choose'
+                      );
+                      setDraft({
+                        ...draft,
+                        reference_pdf_name: null,
+                        reference_pdf_text: null,
+                        pdf_base64: null,
+                        instructions: cleanedInstructions,
+                      });
+                    }}
+                    style={iconActionBtnStyle(false, false)}
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => pdfInputRef.current?.click()}
+                >
+                  <Upload size={13} /> {draft.reference_pdf_name ? 'Replace PDF' : 'Upload PDF'}
+                </Button>
+
+                <select
+                  aria-label="AI Question Difficulty"
+                  value={aiDifficulty}
+                  onChange={(e) => setAiDifficulty(e.target.value as 'easy' | 'medium' | 'challenging')}
+                  className="form-select"
+                  style={{ width: 'auto', height: '32px', padding: '0 1.85rem 0 0.65rem', fontSize: '0.78rem' }}
+                >
+                  <option value="easy">Easy</option>
+                  <option value="medium">Medium</option>
+                  <option value="challenging">Challenging</option>
+                </select>
+
+                <Button
+                  type="button"
+                  variant="accent"
+                  size="sm"
+                  disabled={aiGenerating || busy}
+                  isLoading={aiGenerating}
+                  onClick={handleGenerateQuestionsWithAi}
+                  style={{ boxShadow: 'none' }}
+                >
+                  {!aiGenerating && <Sparkles size={13} />}
+                  {aiGenerating ? 'Generating...' : 'Generate Questions'}
+                </Button>
+              </div>
+            </div>
+          </section>
+
+          {/* 5. Quiz Options */}
+          <section style={sectionCardStyle}>
+            <h3 style={sectionTitleStyle}>5. Quiz Options</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.65rem',
+                  padding: '0.65rem 0.85rem',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  cursor: 'pointer',
+                  margin: 0,
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={draft.allow_review}
+                  onChange={(event) => setDraft({ ...draft, allow_review: event.target.checked })}
+                  style={{ accentColor: 'var(--accent-gold, #f59e0b)', width: '16px', height: '16px', flexShrink: 0 }}
+                />
+                <div>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#f8fafc' }}>Allow Answer Review</div>
+                  <div style={{ fontSize: '0.74rem', color: 'rgba(255, 255, 255, 0.55)' }}>
+                    Show answer key after submission
+                  </div>
+                </div>
+              </label>
+
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.65rem',
+                  padding: '0.65rem 0.85rem',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  cursor: draft.questions.length >= 3 ? 'pointer' : 'not-allowed',
+                  opacity: draft.questions.length >= 3 ? 1 : 0.55,
+                  margin: 0,
+                }}
+              >
+                <input
+                  type="checkbox"
+                  disabled={draft.questions.length < 3}
+                  checked={draft.questions.length >= 3 && Boolean(draft.shuffle_questions)}
+                  onChange={(event) => setDraft({ ...draft, shuffle_questions: event.target.checked })}
+                  style={{ accentColor: 'var(--accent-gold, #f59e0b)', width: '16px', height: '16px', flexShrink: 0 }}
+                />
+                <div>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#f8fafc' }}>Shuffle Questions</div>
+                  <div style={{ fontSize: '0.74rem', color: 'rgba(255, 255, 255, 0.55)' }}>
+                    Randomize order per student
+                  </div>
+                </div>
+              </label>
+            </div>
+          </section>
+        </div>
+
+        {/* 6. Questions & Answer Key */}
+        <section style={{ display: 'flex', flexDirection: 'column', gap: '1rem', paddingTop: '0.25rem' }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '0.75rem',
+              paddingBottom: '0.75rem',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+              <h3 style={{ color: '#f8fafc', margin: 0, fontSize: '1rem', fontWeight: 700 }}>
+                6. Questions &amp; Answer Key
+              </h3>
+              <span
+                style={{
+                  fontSize: '0.75rem',
+                  background: 'rgba(255, 255, 255, 0.06)',
+                  color: 'rgba(255, 255, 255, 0.75)',
+                  padding: '0.15rem 0.55rem',
+                  borderRadius: '999px',
+                  fontWeight: 600,
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                }}
+              >
+                {draft.questions.length} {draft.questions.length === 1 ? 'question' : 'questions'} • {totalPoints} pts
               </span>
             </div>
-            <p style={{ color: 'var(--neutral-400)', margin: '0.2rem 0 0', fontSize: '0.82rem' }}>
-              Choose question type (Multiple Choice, Identification, True/False, Multiple Answer, Essay), set points, and configure the answer key.
-            </p>
-          </div>
 
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', background: 'rgba(255,255,255,0.05)', padding: '0.28rem 0.6rem', borderRadius: 'var(--radius-md)', border: '1px solid rgba(255,255,255,0.1)' }}>
-              <span style={{ fontSize: '0.78rem', color: 'var(--neutral-300)', fontWeight: 600 }}>Question Count:</span>
-              <input
-                type="number"
-                min={1}
-                max={50}
-                aria-label="Total question count"
-                value={draft.questions.length}
-                onChange={(e) => {
-                  const parsed = parseInt(e.target.value, 10);
-                  if (!Number.isNaN(parsed)) {
-                    setQuestionCount(parsed);
-                  }
-                }}
+            <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <div
                 style={{
-                  width: '50px',
-                  height: '26px',
-                  background: 'rgba(16, 10, 28, 0.85)',
-                  border: '1px solid rgba(167, 139, 250, 0.35)',
-                  borderRadius: '4px',
-                  color: 'white',
-                  textAlign: 'center',
-                  fontWeight: 700,
-                  fontSize: '0.85rem',
-                  outline: 'none',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  background: 'rgba(255,255,255,0.03)',
+                  padding: '0 0.55rem',
+                  height: '32px',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid rgba(255,255,255,0.1)',
                 }}
-              />
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={randomizeAnswerChoices}
-              title="Randomize Option Positions (A–D) while keeping each question's real answer"
-              style={{ gap: '0.35rem', borderColor: 'rgba(76, 175, 80, 0.4)', color: '#a5d6a7' }}
-            >
-              <Shuffle size={14} /> Randomize Answers (A–D)
-            </Button>
-            {draft.questions.length >= 3 && (
+              >
+                <span style={{ fontSize: '0.76rem', color: 'rgba(255, 255, 255, 0.6)', fontWeight: 600 }}>Count:</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  aria-label="Total question count"
+                  value={draft.questions.length}
+                  onChange={(e) => {
+                    const parsed = parseInt(e.target.value, 10);
+                    if (!Number.isNaN(parsed)) {
+                      setQuestionCount(parsed);
+                    }
+                  }}
+                  style={{
+                    width: '42px',
+                    height: '22px',
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#f8fafc',
+                    textAlign: 'center',
+                    fontWeight: 700,
+                    fontSize: '0.82rem',
+                    outline: 'none',
+                  }}
+                />
+              </div>
+
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={shuffleQuestionsOrder}
-                title="Shuffle Question Order"
-                style={{ gap: '0.35rem', borderColor: 'rgba(251, 191, 36, 0.35)', color: '#fbbf24' }}
+                onClick={randomizeAnswerChoices}
+                title="Randomize answer choice positions (A, B, C, D) while keeping each correct answer"
               >
-                <Shuffle size={14} /> Shuffle Order
+                <Shuffle size={13} /> Randomize Choices
               </Button>
-            )}
-            <Button 
-              type="button" 
-              variant="outline" 
-              size="sm" 
-              onClick={scrollToBottom}
-              title="Direct Move to the Bottom"
-              style={{ gap: '0.35rem', borderColor: 'rgba(167, 139, 250, 0.3)', color: '#ddd6fe' }}
-            >
-              <ChevronsDown size={14} /> Move to Bottom
-            </Button>
 
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+              {draft.questions.length >= 3 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={shuffleQuestionsOrder}
+                  title="Shuffle question sequence"
+                >
+                  <Shuffle size={13} /> Shuffle Order
+                </Button>
+              )}
+
               <select
                 aria-label="New Question Type"
                 value={newQuestionType}
@@ -1072,357 +1297,369 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
                 <option value="multiple_answer">Multiple Answer</option>
                 <option value="essay">Essay</option>
               </select>
-              <Button 
-                type="button" 
-                variant="accent" 
-                size="sm" 
+
+              <Button
+                type="button"
+                variant="accent"
+                size="sm"
                 onClick={() => {
                   setDraft({ ...draft, questions: [...draft.questions, emptyQuestion(newQuestionType)] });
                   setTimeout(scrollToBottom, 50);
                 }}
+                style={{ boxShadow: 'none' }}
               >
-                <Plus size={15} /> Add Question
+                <Plus size={14} /> Add Question
               </Button>
             </div>
           </div>
-        </div>
 
-        {/* Questions List */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          {draft.questions.map((question, questionIndex) => {
-            const qType: QuestionType = question.type || 'multiple_choice';
-            return (
-              <section 
-                key={questionIndex} 
-                style={{ 
-                  padding: '1.25rem', 
-                  borderRadius: 'var(--radius-lg, 12px)', 
-                  border: '1px solid rgba(255, 255, 255, 0.08)', 
-                  background: 'rgba(255, 255, 255, 0.025)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '1rem',
-                }}
-              >
-                {/* Question Header & Action Toolbar */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', paddingBottom: '0.75rem', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
-                    <span style={{
-                      background: 'linear-gradient(135deg, var(--primary-600), var(--accent-purple))',
-                      color: 'white',
-                      fontWeight: 800,
-                      fontSize: '0.85rem',
-                      padding: '0.2rem 0.6rem',
-                      borderRadius: 'var(--radius-sm)',
-                    }}>
-                      Q{questionIndex + 1}
-                    </span>
-                    <strong style={{ color: 'white', fontSize: '1.05rem' }}>Question {questionIndex + 1}</strong>
+          {/* Individual Question Cards */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+            {draft.questions.map((question, questionIndex) => {
+              const qType: QuestionType = question.type || 'multiple_choice';
+              const isConfirmingRemove = confirmRemoveIdx === questionIndex;
 
-                    {/* Question Type Selector */}
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', background: 'rgba(139, 92, 246, 0.14)', border: '1px solid rgba(167, 139, 250, 0.35)', borderRadius: '8px', padding: '0.2rem 0.55rem' }}>
-                      <span style={{ fontSize: '0.74rem', color: '#c4b5fd', fontWeight: 700, textTransform: 'uppercase' }}>Type:</span>
+              return (
+                <div
+                  key={questionIndex}
+                  style={{
+                    padding: '1.1rem',
+                    borderRadius: 'var(--radius-lg, 10px)',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    background: 'rgba(255, 255, 255, 0.02)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.85rem',
+                  }}
+                >
+                  {/* Question Card Header */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: '0.65rem',
+                      paddingBottom: '0.65rem',
+                      borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+                      <span
+                        style={{
+                          background: 'rgba(245, 158, 11, 0.14)',
+                          border: '1px solid rgba(245, 158, 11, 0.35)',
+                          color: '#fbbf24',
+                          fontWeight: 700,
+                          fontSize: '0.78rem',
+                          padding: '0.2rem 0.55rem',
+                          borderRadius: '6px',
+                        }}
+                      >
+                        Q{questionIndex + 1}
+                      </span>
+
                       <select
                         aria-label={`Question ${questionIndex + 1} Type`}
                         value={qType}
                         onChange={(e) => changeQuestionType(questionIndex, e.target.value as QuestionType)}
+                        className="form-select"
                         style={{
-                          background: 'transparent',
-                          border: 'none',
-                          color: 'white',
-                          fontWeight: 700,
-                          fontSize: '0.82rem',
-                          cursor: 'pointer',
-                          outline: 'none',
+                          width: 'auto',
+                          height: '32px',
+                          padding: '0 1.85rem 0 0.65rem',
+                          fontSize: '0.8rem',
+                          fontWeight: 600,
                         }}
                       >
-                        <option value="multiple_choice" style={{ background: '#1a0b2e', color: 'white' }}>Multiple Choice</option>
-                        <option value="identification" style={{ background: '#1a0b2e', color: 'white' }}>Identification</option>
-                        <option value="true_false" style={{ background: '#1a0b2e', color: 'white' }}>True or False</option>
-                        <option value="multiple_answer" style={{ background: '#1a0b2e', color: 'white' }}>Multiple Answer</option>
-                        <option value="essay" style={{ background: '#1a0b2e', color: 'white' }}>Essay</option>
+                        <option value="multiple_choice">Multiple Choice</option>
+                        <option value="identification">Identification</option>
+                        <option value="true_false">True or False</option>
+                        <option value="multiple_answer">Multiple Answer</option>
+                        <option value="essay">Essay</option>
                       </select>
-                    </div>
-                  </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                    {/* Question Points Input */}
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', background: 'rgba(255,255,255,0.05)', padding: '0.25rem 0.5rem', borderRadius: 'var(--radius-md)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                      <Award size={14} style={{ color: '#fbbf24' }} />
-                      <span style={{ fontSize: '0.8rem', color: 'var(--neutral-300)', fontWeight: 600 }}>Points:</span>
-                      <input
-                        type="number"
-                        min={1}
-                        max={100}
-                        value={question.points ?? 1}
-                        onChange={(e) => updateQuestion(questionIndex, { points: Math.max(1, parseInt(e.target.value) || 1) })}
+                      <div
                         style={{
-                          width: '46px',
-                          height: '26px',
-                          background: 'rgba(16, 10, 28, 0.85)',
-                          border: '1px solid rgba(167, 139, 250, 0.35)',
-                          borderRadius: '4px',
-                          color: 'white',
-                          textAlign: 'center',
-                          fontWeight: 700,
-                          fontSize: '0.85rem',
-                          outline: 'none',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.35rem',
+                          background: 'rgba(255, 255, 255, 0.03)',
+                          padding: '0 0.55rem',
+                          height: '32px',
+                          borderRadius: '6px',
+                          border: '1px solid rgba(255, 255, 255, 0.1)',
                         }}
-                      />
-                      <span style={{ fontSize: '0.75rem', color: 'var(--neutral-400)' }}>pts</span>
+                      >
+                        <span style={{ fontSize: '0.76rem', color: 'rgba(255, 255, 255, 0.6)', fontWeight: 600 }}>
+                          Points:
+                        </span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={100}
+                          aria-label={`Question ${questionIndex + 1} Points`}
+                          value={question.points ?? 1}
+                          onChange={(e) =>
+                            updateQuestion(questionIndex, { points: Math.max(1, parseInt(e.target.value, 10) || 1) })
+                          }
+                          style={{
+                            width: '40px',
+                            height: '22px',
+                            background: 'transparent',
+                            border: 'none',
+                            color: '#f8fafc',
+                            textAlign: 'center',
+                            fontWeight: 700,
+                            fontSize: '0.82rem',
+                            outline: 'none',
+                          }}
+                        />
+                        <span style={{ fontSize: '0.73rem', color: 'rgba(255, 255, 255, 0.45)' }}>pts</span>
+                      </div>
                     </div>
 
-                    {/* Direct Move Controls */}
-                    <div style={{ display: 'inline-flex', gap: '2px', background: 'rgba(255,255,255,0.04)', padding: '2px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                      <Button
+                    {/* Question Secondary Actions (Compact Icon Buttons with Tooltips) */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                      <button
                         type="button"
-                        variant="outline"
-                        size="sm"
                         disabled={questionIndex === 0}
-                        title="Direct Move thru the Top"
+                        title="Move to Top"
+                        aria-label="Move to Top"
                         onClick={() => moveQuestionToTop(questionIndex)}
-                        style={{ padding: '0.25rem 0.45rem', fontSize: '0.75rem' }}
+                        style={iconActionBtnStyle(questionIndex === 0)}
                       >
-                        <ChevronsUp size={14} /> Top
-                      </Button>
-                      <Button
+                        <ChevronsUp size={14} />
+                      </button>
+                      <button
                         type="button"
-                        variant="outline"
-                        size="sm"
                         disabled={questionIndex === 0}
-                        title="Move up one step"
+                        title="Move Up"
+                        aria-label="Move Up"
                         onClick={() => moveQuestionUp(questionIndex)}
-                        style={{ padding: '0.25rem 0.4rem' }}
+                        style={iconActionBtnStyle(questionIndex === 0)}
                       >
-                        <ArrowUp size={13} />
-                      </Button>
-                      <Button
+                        <ArrowUp size={14} />
+                      </button>
+                      <button
                         type="button"
-                        variant="outline"
-                        size="sm"
                         disabled={questionIndex === draft.questions.length - 1}
-                        title="Move down one step"
+                        title="Move Down"
+                        aria-label="Move Down"
                         onClick={() => moveQuestionDown(questionIndex)}
-                        style={{ padding: '0.25rem 0.4rem' }}
+                        style={iconActionBtnStyle(questionIndex === draft.questions.length - 1)}
                       >
-                        <ArrowDown size={13} />
-                      </Button>
-                      <Button
+                        <ArrowDown size={14} />
+                      </button>
+                      <button
                         type="button"
-                        variant="outline"
-                        size="sm"
                         disabled={questionIndex === draft.questions.length - 1}
-                        title="Direct Move to the Bottom"
+                        title="Move to Bottom"
+                        aria-label="Move to Bottom"
                         onClick={() => moveQuestionToBottom(questionIndex)}
-                        style={{ padding: '0.25rem 0.45rem', fontSize: '0.75rem' }}
+                        style={iconActionBtnStyle(questionIndex === draft.questions.length - 1)}
                       >
-                        <ChevronsDown size={14} /> Bottom
-                      </Button>
-                    </div>
+                        <ChevronsDown size={14} />
+                      </button>
 
-                    {/* Remove Question */}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={draft.questions.length === 1}
-                      title={draft.questions.length === 1 ? 'A quiz needs at least one question' : 'Remove this question'}
-                      onClick={() => setDraft({ ...draft, questions: draft.questions.filter((_, index) => index !== questionIndex) })}
-                      style={{ color: '#ef5350', borderColor: 'rgba(239, 83, 80, 0.3)', padding: '0.25rem 0.55rem' }}
-                    >
-                      <Trash2 size={13} /> Remove
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Question Prompt */}
-                <label className="form-group" style={{ margin: 0 }}>
-                  <span className="form-label">Question Prompt</span>
-                  <textarea
-                    className="form-input"
-                    rows={3}
-                    value={question.prompt}
-                    onChange={(event) => updateQuestion(questionIndex, { prompt: event.target.value })}
-                    placeholder="Type or edit the question prompt here..."
-                    style={{
-                      minHeight: '84px',
-                      lineHeight: 1.55,
-                      resize: 'vertical',
-                      padding: '0.75rem 1rem',
-                    }}
-                  />
-                </label>
-
-                {/* Skill / Learning Competency */}
-                <label className="form-group" style={{ margin: 0 }}>
-                  <span className="form-label">Skill or Learning Competency (Optional)</span>
-                  <input 
-                    className="form-input" 
-                    value={question.skill || ''} 
-                    placeholder="e.g. Concept recall, Critical analysis, Terminology"
-                    onChange={(event) => updateQuestion(questionIndex, { skill: event.target.value })} 
-                  />
-                </label>
-
-                {/* Dynamic Answer Format Section based on Question Type */}
-                {qType === 'multiple_choice' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-                      <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--neutral-300)' }}>
-                        Multiple Choice Options (Select 1 correct answer):
-                      </span>
-                      {question.options.length < 6 && (
-                        <Button
+                      {isConfirmingRemove ? (
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', marginLeft: '0.2rem' }}>
+                          <Button
+                            type="button"
+                            variant="error"
+                            size="sm"
+                            onClick={() => handleRemoveQuestion(questionIndex)}
+                            style={{ height: '30px', padding: '0 0.6rem', fontSize: '0.74rem' }}
+                          >
+                            Confirm Remove
+                          </Button>
+                          <button
+                            type="button"
+                            title="Cancel remove"
+                            onClick={() => setConfirmRemoveIdx(null)}
+                            style={iconActionBtnStyle(false)}
+                          >
+                            <X size={13} />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
                           type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => addOptionChoice(questionIndex)}
-                          style={{ padding: '0.2rem 0.55rem', fontSize: '0.75rem' }}
+                          disabled={draft.questions.length === 1}
+                          title={draft.questions.length === 1 ? 'At least one question is required' : 'Remove Question'}
+                          aria-label="Remove Question"
+                          onClick={() => handleRemoveQuestion(questionIndex)}
+                          style={iconActionBtnStyle(draft.questions.length === 1, true)}
                         >
-                          <Plus size={12} /> Add Choice ({question.options.length}/6)
-                        </Button>
+                          <Trash2 size={14} />
+                        </button>
                       )}
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.85rem' }}>
-                      {question.options.map((option, optionIndex) => {
-                        const isCorrect = question.correct_index === optionIndex;
-                        return (
-                          <div 
-                            key={optionIndex} 
-                            onClick={() => updateQuestion(questionIndex, { correct_index: optionIndex, correct_indices: [optionIndex] })}
-                            style={{ 
-                              border: `1.5px solid ${isCorrect ? 'var(--success)' : 'rgba(255, 255, 255, 0.08)'}`, 
-                              background: isCorrect ? 'rgba(67, 160, 71, 0.12)' : 'rgba(255, 255, 255, 0.025)', 
-                              borderRadius: 'var(--radius-md)', 
-                              padding: '0.75rem',
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: '0.5rem',
-                              transition: 'all 0.18s ease',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.4rem' }}>
-                              <span style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.8rem', color: isCorrect ? '#a5d6a7' : 'var(--neutral-300)', fontWeight: 700 }}>
-                                <input
-                                  type="radio"
-                                  name={`correct-${questionIndex}`}
-                                  checked={isCorrect}
-                                  onChange={() => updateQuestion(questionIndex, { correct_index: optionIndex, correct_indices: [optionIndex] })}
-                                  style={{ accentColor: 'var(--success)', cursor: 'pointer', width: '15px', height: '15px' }}
-                                />
-                                Option {String.fromCharCode(65 + optionIndex)}
-                              </span>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                                {isCorrect ? (
-                                  <span style={{
-                                    fontSize: '0.75rem',
-                                    fontWeight: 600,
-                                    color: '#81c784',
-                                    background: 'rgba(67, 160, 71, 0.25)',
-                                    padding: '0.15rem 0.5rem',
-                                    borderRadius: '999px',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '0.25rem',
-                                  }}>
-                                    <CheckCircle2 size={12} /> Correct Answer
-                                  </span>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      updateQuestion(questionIndex, { correct_index: optionIndex, correct_indices: [optionIndex] });
-                                    }}
-                                    style={{
-                                      background: 'transparent',
-                                      border: 'none',
-                                      color: 'var(--neutral-400)',
-                                      fontSize: '0.72rem',
-                                      cursor: 'pointer',
-                                      padding: '0.1rem 0.35rem',
-                                      borderRadius: '4px',
-                                    }}
-                                  >
-                                    Set as Correct
-                                  </button>
-                                )}
-                                {question.options.length > 2 && (
-                                  <button
-                                    type="button"
-                                    title="Remove this choice"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      removeOptionChoice(questionIndex, optionIndex);
-                                    }}
-                                    style={{
-                                      background: 'transparent',
-                                      border: 'none',
-                                      color: '#ef5350',
-                                      cursor: 'pointer',
-                                      padding: '0.1rem 0.25rem',
-                                      display: 'inline-flex',
-                                    }}
-                                  >
-                                    <X size={13} />
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                            <input 
-                              className="form-input" 
-                              value={option} 
-                              onClick={(e) => e.stopPropagation()}
-                              onChange={(event) => updateOption(questionIndex, optionIndex, event.target.value)} 
-                              placeholder={`Enter option ${String.fromCharCode(65 + optionIndex)} text...`} 
-                              aria-label={`Question ${questionIndex + 1}, option ${String.fromCharCode(65 + optionIndex)}`} 
-                              style={{
-                                height: '42px',
-                                fontSize: '0.9rem',
-                                background: 'rgba(20, 12, 35, 0.65)',
-                                borderColor: isCorrect ? 'rgba(76, 175, 80, 0.4)' : 'rgba(255,255,255,0.08)',
-                              }}
-                            />
-                          </div>
-                        );
-                      })}
-                    </div>
                   </div>
-                )}
 
-                {qType === 'true_false' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
-                    <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--neutral-300)' }}>
-                      True or False (Select the correct answer):
-                    </span>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.85rem' }}>
-                      {['True', 'False'].map((tfLabel, tfIndex) => {
-                        const isCorrect = question.correct_index === tfIndex;
-                        return (
-                          <div
-                            key={tfLabel}
-                            onClick={() =>
-                              updateQuestion(questionIndex, {
-                                options: ['True', 'False'],
-                                correct_index: tfIndex,
-                                correct_indices: [tfIndex],
-                                correct_answer: tfLabel,
-                              })
-                            }
-                            style={{
-                              border: `1.5px solid ${isCorrect ? 'var(--success)' : 'rgba(255, 255, 255, 0.1)'}`,
-                              background: isCorrect ? 'rgba(67, 160, 71, 0.15)' : 'rgba(255, 255, 255, 0.03)',
-                              borderRadius: 'var(--radius-md)',
-                              padding: '0.9rem 1rem',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              cursor: 'pointer',
-                              transition: 'all 0.18s ease',
-                            }}
+                  {/* Question Text & Optional Competency */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.65rem' }}>
+                    <label className="form-group" style={{ margin: 0 }}>
+                      <span className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.3rem' }}>
+                        Question Text
+                      </span>
+                      <textarea
+                        className="form-input"
+                        rows={2}
+                        value={question.prompt}
+                        onChange={(event) => updateQuestion(questionIndex, { prompt: event.target.value })}
+                        placeholder="Enter the question text..."
+                        style={{
+                          minHeight: '66px',
+                          lineHeight: 1.5,
+                          resize: 'vertical',
+                          padding: '0.65rem 0.85rem',
+                        }}
+                      />
+                    </label>
+
+                    <label className="form-group" style={{ margin: 0 }}>
+                      <span className="form-label" style={{ fontSize: '0.76rem', color: 'rgba(255, 255, 255, 0.55)', marginBottom: '0.25rem' }}>
+                        Competency / Subtopic (Optional)
+                      </span>
+                      <input
+                        className="form-input"
+                        value={question.skill || ''}
+                        placeholder="e.g. CPU Architecture, Normalization, OOP Principles"
+                        onChange={(event) => updateQuestion(questionIndex, { skill: event.target.value })}
+                        style={{ height: '38px', fontSize: '0.85rem' }}
+                      />
+                    </label>
+                  </div>
+
+                  {/* Answer Choices by Question Type */}
+                  {qType === 'multiple_choice' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'rgba(255, 255, 255, 0.6)' }}>
+                          Answer Choices • Select one correct option
+                        </span>
+                        {question.options.length < 6 && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => addOptionChoice(questionIndex)}
+                            style={{ height: '26px', padding: '0 0.55rem', fontSize: '0.73rem' }}
                           >
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '1rem', fontWeight: 700, color: isCorrect ? '#c8e6c9' : 'white' }}>
+                            <Plus size={12} /> Add Choice ({question.options.length}/6)
+                          </Button>
+                        )}
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '0.6rem' }}>
+                        {question.options.map((option, optionIndex) => {
+                          const isCorrect = question.correct_index === optionIndex;
+                          const letter = String.fromCharCode(65 + optionIndex);
+                          return (
+                            <div
+                              key={optionIndex}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.5rem',
+                                padding: '0.45rem 0.65rem',
+                                borderRadius: 'var(--radius-md)',
+                                border: isCorrect
+                                  ? '1px solid rgba(129, 199, 132, 0.5)'
+                                  : '1px solid rgba(255, 255, 255, 0.08)',
+                                background: isCorrect ? 'rgba(46, 125, 50, 0.12)' : 'rgba(255, 255, 255, 0.02)',
+                              }}
+                            >
+                              <input
+                                type="radio"
+                                name={`correct-${questionIndex}`}
+                                checked={isCorrect}
+                                title={`Mark Option ${letter} as correct`}
+                                onChange={() =>
+                                  updateQuestion(questionIndex, {
+                                    correct_index: optionIndex,
+                                    correct_indices: [optionIndex],
+                                  })
+                                }
+                                style={{ accentColor: 'var(--success)', cursor: 'pointer', width: '15px', height: '15px', flexShrink: 0 }}
+                              />
+                              <span
+                                style={{
+                                  fontSize: '0.78rem',
+                                  fontWeight: 700,
+                                  color: isCorrect ? '#a5d6a7' : 'rgba(255, 255, 255, 0.6)',
+                                  minWidth: '18px',
+                                }}
+                              >
+                                {letter}.
+                              </span>
+                              <input
+                                className="form-input"
+                                value={option}
+                                onChange={(event) => updateOption(questionIndex, optionIndex, event.target.value)}
+                                placeholder={`Option ${letter}`}
+                                aria-label={`Question ${questionIndex + 1}, option ${letter}`}
+                                style={{
+                                  height: '34px',
+                                  fontSize: '0.86rem',
+                                  padding: '0 0.65rem',
+                                  flex: 1,
+                                  background: 'rgba(18, 4, 7, 0.7)',
+                                }}
+                              />
+                              {question.options.length > 2 && (
+                                <button
+                                  type="button"
+                                  title="Remove choice"
+                                  onClick={() => removeOptionChoice(questionIndex, optionIndex)}
+                                  style={{
+                                    background: 'transparent',
+                                    border: 'none',
+                                    color: 'rgba(255, 255, 255, 0.45)',
+                                    cursor: 'pointer',
+                                    padding: '0.15rem',
+                                    display: 'inline-flex',
+                                  }}
+                                >
+                                  <X size={13} />
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {qType === 'true_false' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                      <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'rgba(255, 255, 255, 0.6)' }}>
+                        Correct Answer
+                      </span>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(120px, 200px))', gap: '0.6rem' }}>
+                        {['True', 'False'].map((tfLabel, tfIndex) => {
+                          const isCorrect = question.correct_index === tfIndex;
+                          return (
+                            <label
+                              key={tfLabel}
+                              style={{
+                                border: isCorrect
+                                  ? '1px solid rgba(129, 199, 132, 0.5)'
+                                  : '1px solid rgba(255, 255, 255, 0.08)',
+                                background: isCorrect ? 'rgba(46, 125, 50, 0.14)' : 'rgba(255, 255, 255, 0.02)',
+                                borderRadius: 'var(--radius-md)',
+                                padding: '0.55rem 0.85rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.55rem',
+                                cursor: 'pointer',
+                                fontWeight: 600,
+                                fontSize: '0.88rem',
+                                color: isCorrect ? '#c8e6c9' : '#f8fafc',
+                                margin: 0,
+                              }}
+                            >
                               <input
                                 type="radio"
                                 name={`tf-${questionIndex}`}
@@ -1435,238 +1672,206 @@ export default function QuizEditorModal({ quiz, isOpen, busy = false, subjects =
                                     correct_answer: tfLabel,
                                   })
                                 }
-                                style={{ accentColor: 'var(--success)', width: '16px', height: '16px', cursor: 'pointer' }}
+                                style={{ accentColor: 'var(--success)', width: '15px', height: '15px', cursor: 'pointer' }}
                               />
                               {tfLabel}
-                            </span>
-                            {isCorrect && (
-                              <span style={{
-                                fontSize: '0.75rem',
-                                fontWeight: 700,
-                                color: '#81c784',
-                                background: 'rgba(67, 160, 71, 0.25)',
-                                padding: '0.18rem 0.55rem',
-                                borderRadius: '999px',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '0.25rem',
-                              }}>
-                                <CheckCircle2 size={12} /> Correct Answer
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })}
+                            </label>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
-                {qType === 'identification' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', background: 'rgba(67, 160, 71, 0.07)', border: '1px solid rgba(76, 175, 80, 0.3)', borderRadius: 'var(--radius-md)', padding: '0.95rem 1.05rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-                      <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#a5d6a7', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <CheckCircle2 size={14} /> Identification · Expected Correct Answer
-                      </span>
-                      <span style={{ fontSize: '0.74rem', color: 'var(--neutral-300)' }}>
-                        Case-insensitive matching • Separate acceptable synonyms with commas
-                      </span>
+                  {qType === 'identification' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem' }}>
+                        <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'rgba(255, 255, 255, 0.6)' }}>
+                          Expected Correct Answer
+                        </span>
+                        <span style={{ fontSize: '0.73rem', color: 'rgba(255, 255, 255, 0.45)' }}>
+                          Case-insensitive • Separate acceptable synonyms with commas
+                        </span>
+                      </div>
+                      <input
+                        className="form-input"
+                        value={question.correct_answer ?? question.options[0] ?? ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          updateQuestion(questionIndex, {
+                            correct_answer: val,
+                            options: [val, question.options[1] || ''],
+                          });
+                        }}
+                        placeholder="e.g. Central Processing Unit, CPU"
+                        aria-label={`Question ${questionIndex + 1} identification answer`}
+                        style={{ height: '38px', fontSize: '0.88rem' }}
+                      />
                     </div>
-                    <input
-                      className="form-input"
-                      value={question.correct_answer ?? question.options[0] ?? ''}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        updateQuestion(questionIndex, {
-                          correct_answer: val,
-                          options: [val, question.options[1] || ''],
-                        });
-                      }}
-                      placeholder="e.g. Central Processing Unit, CPU"
-                      aria-label={`Question ${questionIndex + 1} identification answer`}
-                      style={{
-                        background: 'rgba(20, 12, 35, 0.75)',
-                        borderColor: 'rgba(76, 175, 80, 0.45)',
-                        fontSize: '0.95rem',
-                      }}
-                    />
-                  </div>
-                )}
+                  )}
 
-                {qType === 'multiple_answer' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-                      <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--neutral-300)' }}>
-                        Multiple Answer Choices (Check ALL correct answers · {(question.correct_indices || [question.correct_index]).length} selected):
-                      </span>
-                      {question.options.length < 6 && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => addOptionChoice(questionIndex)}
-                          style={{ padding: '0.2rem 0.55rem', fontSize: '0.75rem' }}
-                        >
-                          <Plus size={12} /> Add Choice ({question.options.length}/6)
-                        </Button>
-                      )}
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.85rem' }}>
-                      {question.options.map((option, optionIndex) => {
-                        const checkedIndices = Array.isArray(question.correct_indices) && question.correct_indices.length > 0
-                          ? question.correct_indices
-                          : [question.correct_index || 0];
-                        const isCorrect = checkedIndices.includes(optionIndex);
-                        return (
-                          <div
-                            key={optionIndex}
-                            onClick={() => toggleMultipleAnswerIndex(questionIndex, optionIndex)}
-                            style={{
-                              border: `1.5px solid ${isCorrect ? 'var(--success)' : 'rgba(255, 255, 255, 0.08)'}`,
-                              background: isCorrect ? 'rgba(67, 160, 71, 0.12)' : 'rgba(255, 255, 255, 0.025)',
-                              borderRadius: 'var(--radius-md)',
-                              padding: '0.75rem',
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: '0.5rem',
-                              transition: 'all 0.18s ease',
-                              cursor: 'pointer',
-                            }}
+                  {qType === 'multiple_answer' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'rgba(255, 255, 255, 0.6)' }}>
+                          Answer Choices • Check all correct options ({(question.correct_indices || [question.correct_index]).length} selected)
+                        </span>
+                        {question.options.length < 6 && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => addOptionChoice(questionIndex)}
+                            style={{ height: '26px', padding: '0 0.55rem', fontSize: '0.73rem' }}
                           >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.4rem' }}>
-                              <span style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.8rem', color: isCorrect ? '#a5d6a7' : 'var(--neutral-300)', fontWeight: 700 }}>
-                                <input
-                                  type="checkbox"
-                                  checked={isCorrect}
-                                  onChange={() => toggleMultipleAnswerIndex(questionIndex, optionIndex)}
-                                  onClick={(e) => e.stopPropagation()}
-                                  style={{ accentColor: 'var(--success)', cursor: 'pointer', width: '15px', height: '15px' }}
-                                />
-                                Choice {String.fromCharCode(65 + optionIndex)}
-                              </span>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                                {isCorrect ? (
-                                  <span style={{
-                                    fontSize: '0.74rem',
-                                    fontWeight: 600,
-                                    color: '#81c784',
-                                    background: 'rgba(67, 160, 71, 0.25)',
-                                    padding: '0.15rem 0.5rem',
-                                    borderRadius: '999px',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '0.25rem',
-                                  }}>
-                                    <CheckCircle2 size={12} /> Correct Choice
-                                  </span>
-                                ) : (
-                                  <span style={{ fontSize: '0.72rem', color: 'var(--neutral-400)' }}>
-                                    Click to mark correct
-                                  </span>
-                                )}
-                                {question.options.length > 2 && (
-                                  <button
-                                    type="button"
-                                    title="Remove this choice"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      removeOptionChoice(questionIndex, optionIndex);
-                                    }}
-                                    style={{
-                                      background: 'transparent',
-                                      border: 'none',
-                                      color: '#ef5350',
-                                      cursor: 'pointer',
-                                      padding: '0.1rem 0.25rem',
-                                      display: 'inline-flex',
-                                    }}
-                                  >
-                                    <X size={13} />
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                            <input
-                              className="form-input"
-                              value={option}
-                              onClick={(e) => e.stopPropagation()}
-                              onChange={(event) => updateOption(questionIndex, optionIndex, event.target.value)}
-                              placeholder={`Enter choice ${String.fromCharCode(65 + optionIndex)} text...`}
-                              aria-label={`Question ${questionIndex + 1}, choice ${String.fromCharCode(65 + optionIndex)}`}
+                            <Plus size={12} /> Add Choice ({question.options.length}/6)
+                          </Button>
+                        )}
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '0.6rem' }}>
+                        {question.options.map((option, optionIndex) => {
+                          const checkedIndices =
+                            Array.isArray(question.correct_indices) && question.correct_indices.length > 0
+                              ? question.correct_indices
+                              : [question.correct_index || 0];
+                          const isCorrect = checkedIndices.includes(optionIndex);
+                          const letter = String.fromCharCode(65 + optionIndex);
+                          return (
+                            <div
+                              key={optionIndex}
                               style={{
-                                height: '42px',
-                                fontSize: '0.9rem',
-                                background: 'rgba(20, 12, 35, 0.65)',
-                                borderColor: isCorrect ? 'rgba(76, 175, 80, 0.4)' : 'rgba(255,255,255,0.08)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.5rem',
+                                padding: '0.45rem 0.65rem',
+                                borderRadius: 'var(--radius-md)',
+                                border: isCorrect
+                                  ? '1px solid rgba(129, 199, 132, 0.5)'
+                                  : '1px solid rgba(255, 255, 255, 0.08)',
+                                background: isCorrect ? 'rgba(46, 125, 50, 0.12)' : 'rgba(255, 255, 255, 0.02)',
                               }}
-                            />
-                          </div>
-                        );
-                      })}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isCorrect}
+                                title={`Toggle Option ${letter} as correct`}
+                                onChange={() => toggleMultipleAnswerIndex(questionIndex, optionIndex)}
+                                style={{ accentColor: 'var(--success)', cursor: 'pointer', width: '15px', height: '15px', flexShrink: 0 }}
+                              />
+                              <span
+                                style={{
+                                  fontSize: '0.78rem',
+                                  fontWeight: 700,
+                                  color: isCorrect ? '#a5d6a7' : 'rgba(255, 255, 255, 0.6)',
+                                  minWidth: '18px',
+                                }}
+                              >
+                                {letter}.
+                              </span>
+                              <input
+                                className="form-input"
+                                value={option}
+                                onChange={(event) => updateOption(questionIndex, optionIndex, event.target.value)}
+                                placeholder={`Choice ${letter}`}
+                                aria-label={`Question ${questionIndex + 1}, choice ${letter}`}
+                                style={{
+                                  height: '34px',
+                                  fontSize: '0.86rem',
+                                  padding: '0 0.65rem',
+                                  flex: 1,
+                                  background: 'rgba(18, 4, 7, 0.7)',
+                                }}
+                              />
+                              {question.options.length > 2 && (
+                                <button
+                                  type="button"
+                                  title="Remove choice"
+                                  onClick={() => removeOptionChoice(questionIndex, optionIndex)}
+                                  style={{
+                                    background: 'transparent',
+                                    border: 'none',
+                                    color: 'rgba(255, 255, 255, 0.45)',
+                                    cursor: 'pointer',
+                                    padding: '0.15rem',
+                                    display: 'inline-flex',
+                                  }}
+                                >
+                                  <X size={13} />
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
-                {qType === 'essay' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', background: 'rgba(139, 92, 246, 0.08)', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: 'var(--radius-md)', padding: '0.95rem 1.05rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-                      <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#ddd6fe' }}>
-                        Essay Response · Model Answer / Expected Keywords (Optional)
-                      </span>
-                      <span style={{ fontSize: '0.74rem', color: 'var(--neutral-300)' }}>
-                        Students will write an open-ended paragraph response
-                      </span>
+                  {qType === 'essay' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem' }}>
+                        <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'rgba(255, 255, 255, 0.6)' }}>
+                          Model Answer / Grading Notes (Optional)
+                        </span>
+                        <span style={{ fontSize: '0.73rem', color: 'rgba(255, 255, 255, 0.45)' }}>
+                          Open-ended paragraph response
+                        </span>
+                      </div>
+                      <textarea
+                        className="form-input"
+                        rows={2}
+                        value={question.correct_answer ?? ''}
+                        onChange={(e) =>
+                          updateQuestion(questionIndex, {
+                            correct_answer: e.target.value,
+                            options: [e.target.value, 'Essay'],
+                          })
+                        }
+                        placeholder="Optional: Enter reference key points or grading criteria..."
+                        style={{ minHeight: '60px', fontSize: '0.86rem', lineHeight: 1.5, resize: 'vertical' }}
+                      />
                     </div>
-                    <textarea
-                      className="form-input"
-                      rows={2}
-                      value={question.correct_answer ?? ''}
-                      onChange={(e) =>
-                        updateQuestion(questionIndex, {
-                          correct_answer: e.target.value,
-                          options: [e.target.value, 'Essay'],
-                        })
-                      }
-                      placeholder="Optional: Enter a sample model answer, grading rubric, or key concepts to look for..."
-                      style={{
-                        minHeight: '68px',
-                        background: 'rgba(20, 12, 35, 0.7)',
-                        borderColor: 'rgba(167, 139, 250, 0.35)',
-                        fontSize: '0.88rem',
-                        lineHeight: 1.5,
-                        resize: 'vertical',
-                      }}
-                    />
-                  </div>
-                )}
-              </section>
-            );
-          })}
-        </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
 
-        {/* Bottom Action Footer with Direct Move thru the Top */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.06)', flexWrap: 'wrap', gap: '0.5rem' }}>
-          <Button 
-            type="button" 
-            variant="outline" 
-            size="sm" 
-            onClick={() => {
-              setDraft({ ...draft, questions: [...draft.questions, emptyQuestion(newQuestionType)] });
-              setTimeout(scrollToBottom, 50);
+          {/* Bottom Add Question Bar */}
+          <div
+            ref={bottomAnchorRef}
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              paddingTop: '0.5rem',
+              flexWrap: 'wrap',
+              gap: '0.5rem',
             }}
           >
-            <Plus size={15} /> Add Another {QUESTION_TYPE_LABELS[newQuestionType]} Question
-          </Button>
-          <Button 
-            type="button" 
-            variant="outline" 
-            size="sm" 
-            onClick={scrollToTop}
-            title="Direct Move thru the Top"
-            style={{ gap: '0.35rem', borderColor: 'rgba(167, 139, 250, 0.3)', color: '#ddd6fe' }}
-          >
-            <ChevronsUp size={14} /> Move to Top
-          </Button>
-        </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setDraft({ ...draft, questions: [...draft.questions, emptyQuestion(newQuestionType)] });
+                setTimeout(scrollToBottom, 50);
+              }}
+            >
+              <Plus size={14} /> Add {QUESTION_TYPE_LABELS[newQuestionType]} Question
+            </Button>
+
+            {draft.questions.length > 3 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => topAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+              >
+                <ChevronsUp size={14} /> Back to Top
+              </Button>
+            )}
+          </div>
+        </section>
       </div>
     </Modal>
   );

@@ -43,10 +43,12 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('role:teacher,principal,dean,developer');
     Route::get('/teacher/students', [UserController::class, 'teacherStudents'])
         ->middleware('role:teacher,principal,dean,secretary,developer');
-    Route::post('/teacher/quizzes', [QuizController::class, 'store']);
+    Route::post('/teacher/quizzes', [QuizController::class, 'store'])->middleware('throttle:30,1');
     Route::post('/teacher/quizzes/generate', [QuizController::class, 'generate'])->middleware('throttle:5,1');
+    Route::post('/teacher/quizzes/{quiz}/duplicate', [QuizController::class, 'duplicate'])->middleware('throttle:30,1');
     Route::put('/teacher/quizzes/{quiz}', [QuizController::class, 'update']);
     Route::patch('/teacher/quizzes/{quiz}', [QuizController::class, 'update']);
+    Route::delete('/teacher/quizzes/{quiz}', [QuizController::class, 'destroy']);
     Route::patch('/teacher/quizzes/{quiz}/publish', [QuizController::class, 'publish']);
     Route::get('/teacher/quizzes/{quiz}/submissions', [QuizController::class, 'submissions']);
     Route::get('/teacher/quizzes/{quiz}/live', [QuizController::class, 'liveMonitor']);

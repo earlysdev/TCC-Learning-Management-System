@@ -87,19 +87,19 @@ export default function PublishQuizModal({ quiz, isOpen, students, sections, han
   ) && timeLimitMinutes >= 1 && timeLimitMinutes <= 300;
 
   const toggleSection = (id: string | number) => {
-    setSectionIds((current) => {
-      const next = current.includes(id) ? current.filter((selected) => selected !== id) : [...current, id];
-      showToast(`Selected ${next.length} block${next.length === 1 ? '' : 's'}.`, 'info');
-      return next;
-    });
+    const next = sectionIds.includes(id)
+      ? sectionIds.filter((selected) => selected !== id)
+      : [...sectionIds, id];
+    setSectionIds(next);
+    showToast(`Selected ${next.length} block${next.length === 1 ? '' : 's'}.`, 'info');
   };
 
   const toggleStudent = (id: number) => {
-    setStudentIds((current) => {
-      const next = current.includes(id) ? current.filter((selected) => selected !== id) : [...current, id];
-      showToast(`Selected ${next.length} student${next.length === 1 ? '' : 's'}.`, 'info');
-      return next;
-    });
+    const next = studentIds.includes(id)
+      ? studentIds.filter((selected) => selected !== id)
+      : [...studentIds, id];
+    setStudentIds(next);
+    showToast(`Selected ${next.length} student${next.length === 1 ? '' : 's'}.`, 'info');
   };
 
   const audienceSummary = audienceType === 'all'
@@ -112,12 +112,14 @@ export default function PublishQuizModal({ quiz, isOpen, students, sections, han
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={`Publish: ${quiz.title}`}
+      title={`Publish Quiz: ${quiz.title}`}
+      subtitle="Configure target audience, assessment mode, timer, and review options."
+      maxWidth="680px"
       footer={(
         <>
           <Button variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
           <Button
-            variant="success"
+            variant="accent"
             disabled={!canPublish || busy}
             isLoading={busy}
             onClick={() => onPublish({
@@ -135,15 +137,12 @@ export default function PublishQuizModal({ quiz, isOpen, students, sections, han
         </>
       )}
     >
-      <div style={{ maxHeight: '68vh', overflowY: 'auto', paddingRight: '0.35rem', display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
-        <p style={{ margin: 0, color: 'var(--neutral-300)', fontSize: '0.9rem' }}>
-          Choose the target student audience, assessment mode (Formative or Summative), countdown timer, and answer review settings.
-        </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
 
         {/* Quiz Type Selector (Formative vs Summative) */}
         <div>
-          <strong style={{ display: 'block', color: 'white', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
-            Quiz Type (Assessment Mode)
+          <strong style={{ display: 'block', color: 'white', fontSize: '0.88rem', marginBottom: '0.5rem' }}>
+            Quiz Type
           </strong>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
             <button
@@ -153,16 +152,16 @@ export default function PublishQuizModal({ quiz, isOpen, students, sections, han
                 textAlign: 'left',
                 color: 'white',
                 cursor: 'pointer',
-                border: `1px solid ${quizType === 'formative' ? 'var(--success)' : 'var(--glass-border)'}`,
-                background: quizType === 'formative' ? 'rgba(67,160,71,0.18)' : 'rgba(255,255,255,0.035)',
-                borderRadius: 'var(--radius-md)',
+                border: `1px solid ${quizType === 'formative' ? 'rgba(245, 158, 11, 0.45)' : 'rgba(255, 255, 255, 0.08)'}`,
+                background: quizType === 'formative' ? 'rgba(245, 158, 11, 0.12)' : 'rgba(255,255,255,0.02)',
+                borderRadius: '10px',
                 padding: '0.8rem 0.9rem',
               }}
             >
-              <strong style={{ display: 'block', fontSize: '0.9rem', color: quizType === 'formative' ? '#a5d6a7' : 'white' }}>
-                Formative · Live Student View
+              <strong style={{ display: 'block', fontSize: '0.88rem', color: quizType === 'formative' ? '#fbbf24' : 'white' }}>
+                Formative • Live Student View
               </strong>
-              <span style={{ display: 'block', color: 'var(--neutral-300)', fontSize: '0.78rem', lineHeight: 1.4, marginTop: '0.25rem' }}>
+              <span style={{ display: 'block', color: 'var(--neutral-400)', fontSize: '0.78rem', lineHeight: 1.4, marginTop: '0.25rem' }}>
                 Watch a live real-time view of students currently taking the quiz.
               </span>
             </button>
@@ -174,16 +173,16 @@ export default function PublishQuizModal({ quiz, isOpen, students, sections, han
                 textAlign: 'left',
                 color: 'white',
                 cursor: 'pointer',
-                border: `1px solid ${quizType === 'summative' ? '#fbbf24' : 'var(--glass-border)'}`,
-                background: quizType === 'summative' ? 'rgba(245,158,11,0.16)' : 'rgba(255,255,255,0.035)',
-                borderRadius: 'var(--radius-md)',
+                border: `1px solid ${quizType === 'summative' ? 'rgba(245, 158, 11, 0.45)' : 'rgba(255, 255, 255, 0.08)'}`,
+                background: quizType === 'summative' ? 'rgba(245, 158, 11, 0.12)' : 'rgba(255,255,255,0.02)',
+                borderRadius: '10px',
                 padding: '0.8rem 0.9rem',
               }}
             >
-              <strong style={{ display: 'block', fontSize: '0.9rem', color: quizType === 'summative' ? '#fbbf24' : 'white' }}>
-                Summative · Wait Until Submitted
+              <strong style={{ display: 'block', fontSize: '0.88rem', color: quizType === 'summative' ? '#fbbf24' : 'white' }}>
+                Summative • Wait Until Submitted
               </strong>
-              <span style={{ display: 'block', color: 'var(--neutral-300)', fontSize: '0.78rem', lineHeight: 1.4, marginTop: '0.25rem' }}>
+              <span style={{ display: 'block', color: 'var(--neutral-400)', fontSize: '0.78rem', lineHeight: 1.4, marginTop: '0.25rem' }}>
                 Formal exam mode: results appear only after students finish and submit.
               </span>
             </button>
@@ -200,29 +199,37 @@ export default function PublishQuizModal({ quiz, isOpen, students, sections, han
                 type="button"
                 key={choice.type}
                 onClick={() => setAudienceType(choice.type)}
-                style={{ textAlign: 'left', color: 'white', cursor: 'pointer', border: `1px solid ${selected ? 'var(--primary-400)' : 'var(--glass-border)'}`, background: selected ? 'rgba(63,81,181,0.22)' : 'rgba(255,255,255,0.035)', borderRadius: 'var(--radius-md)', padding: '0.85rem' }}
+                style={{
+                  textAlign: 'left',
+                  color: 'white',
+                  cursor: 'pointer',
+                  border: `1px solid ${selected ? 'rgba(245, 158, 11, 0.45)' : 'rgba(255, 255, 255, 0.08)'}`,
+                  background: selected ? 'rgba(245, 158, 11, 0.12)' : 'rgba(255,255,255,0.02)',
+                  borderRadius: '10px',
+                  padding: '0.85rem',
+                }}
               >
-                <Icon size={19} style={{ color: selected ? 'var(--primary-300)' : 'var(--neutral-400)', marginBottom: '0.45rem' }} />
-                <strong style={{ display: 'block', fontSize: '0.9rem' }}>{choice.label}</strong>
-                <span style={{ display: 'block', color: 'var(--neutral-300)', fontSize: '0.78rem', lineHeight: 1.4, marginTop: '0.25rem' }}>{choice.detail}</span>
+                <Icon size={18} style={{ color: selected ? '#fbbf24' : 'var(--neutral-400)', marginBottom: '0.45rem' }} />
+                <strong style={{ display: 'block', fontSize: '0.88rem', color: selected ? '#fbbf24' : 'white' }}>{choice.label}</strong>
+                <span style={{ display: 'block', color: 'var(--neutral-400)', fontSize: '0.78rem', lineHeight: 1.4, marginTop: '0.25rem' }}>{choice.detail}</span>
               </button>
             );
           })}
         </div>
 
         {audienceType === 'section' && (
-          <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: '1rem' }}>
-            <h3 style={{ color: 'white', fontSize: '1rem', margin: 0 }}>Select blocks</h3>
+          <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '1rem' }}>
+            <h3 style={{ color: 'white', fontSize: '0.92rem', margin: 0 }}>Select blocks</h3>
             {sections.length === 0 ? (
-              <p style={{ color: 'var(--neutral-300)', fontSize: '0.88rem' }}>No blocks are available in the current roster. Add student block details first.</p>
+              <p style={{ color: 'var(--neutral-400)', fontSize: '0.85rem' }}>No blocks are available in the current roster. Add student block details first.</p>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.6rem', marginTop: '0.75rem' }}>
                 {sections.map((section) => {
                   const selected = sectionIds.includes(section.id);
                   return (
-                    <label key={String(section.id)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.6rem', border: `1px solid ${selected ? 'var(--success)' : 'var(--glass-border)'}`, background: selected ? 'rgba(67,160,71,0.12)' : 'rgba(255,255,255,0.025)', padding: '0.65rem', borderRadius: 'var(--radius-sm)' }}>
-                      <input type="checkbox" checked={selected} onChange={() => toggleSection(section.id)} style={{ accentColor: 'var(--success)' }} />
-                      <span style={{ color: 'white', fontSize: '0.88rem', flex: 1 }}>{section.label}</span>
+                    <label key={String(section.id)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.6rem', border: `1px solid ${selected ? 'rgba(245, 158, 11, 0.45)' : 'rgba(255, 255, 255, 0.08)'}`, background: selected ? 'rgba(245, 158, 11, 0.1)' : 'rgba(255,255,255,0.02)', padding: '0.65rem', borderRadius: '8px' }}>
+                      <input type="checkbox" checked={selected} onChange={() => toggleSection(section.id)} style={{ accentColor: '#f59e0b' }} />
+                      <span style={{ color: 'white', fontSize: '0.86rem', flex: 1 }}>{section.label}</span>
                       {section.studentCount !== undefined && <span style={{ color: 'var(--neutral-400)', fontSize: '0.75rem' }}>{section.studentCount}</span>}
                     </label>
                   );
@@ -233,25 +240,25 @@ export default function PublishQuizModal({ quiz, isOpen, students, sections, han
         )}
 
         {audienceType === 'individual' && (
-          <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: '1rem' }}>
+          <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '1rem' }}>
             <label className="form-group">
               <span className="form-label">Find a student</span>
               <input className="form-input" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, ID, or block" />
             </label>
             {students.length === 0 ? (
-              <p style={{ color: 'var(--neutral-300)', fontSize: '0.88rem' }}>No students are available in the current roster.</p>
+              <p style={{ color: 'var(--neutral-400)', fontSize: '0.85rem' }}>No students are available in the current roster.</p>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', maxHeight: '220px', overflowY: 'auto' }}>
                 {matchingStudents.map((student) => {
                   const selected = studentIds.includes(student.id);
                   return (
-                    <label key={student.id} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.65rem', border: `1px solid ${selected ? 'var(--success)' : 'var(--glass-border)'}`, background: selected ? 'rgba(67,160,71,0.12)' : 'rgba(255,255,255,0.025)', padding: '0.65rem 0.75rem', borderRadius: 'var(--radius-sm)' }}>
-                      <input type="checkbox" checked={selected} onChange={() => toggleStudent(student.id)} style={{ accentColor: 'var(--success)' }} />
+                    <label key={student.id} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.65rem', border: `1px solid ${selected ? 'rgba(245, 158, 11, 0.45)' : 'rgba(255, 255, 255, 0.08)'}`, background: selected ? 'rgba(245, 158, 11, 0.1)' : 'rgba(255,255,255,0.02)', padding: '0.65rem 0.75rem', borderRadius: '8px' }}>
+                      <input type="checkbox" checked={selected} onChange={() => toggleStudent(student.id)} style={{ accentColor: '#f59e0b' }} />
                       <span style={{ flex: 1 }}>
-                        <strong style={{ display: 'block', color: 'white', fontSize: '0.88rem' }}>{student.name}</strong>
-                        <span style={{ display: 'block', color: 'var(--neutral-400)', fontSize: '0.75rem' }}>{[student.section, student.lrn].filter(Boolean).join(' · ') || student.email}</span>
+                        <strong style={{ display: 'block', color: 'white', fontSize: '0.86rem' }}>{student.name}</strong>
+                        <span style={{ display: 'block', color: 'var(--neutral-400)', fontSize: '0.75rem' }}>{[student.section, student.lrn].filter(Boolean).join(' • ') || student.email}</span>
                       </span>
-                      {selected && <Check size={16} style={{ color: 'var(--success)' }} />}
+                      {selected && <Check size={16} style={{ color: '#fbbf24' }} />}
                     </label>
                   );
                 })}

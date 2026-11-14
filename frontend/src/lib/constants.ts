@@ -203,35 +203,66 @@ export const BSIT_SUBJECTS: CurriculumSubjectItem[] = [
   { code: 'IT 132', name: 'Capstone Project 2', yearLevel: '4th Year', semester: '1st Semester', lec: 3, lab: 0, units: 3, prerequisite: 'IT125' },
 ];
 
+export function formatCourseLabel(rawSubject?: string | null): string {
+  if (!rawSubject) return '';
+  const withoutBracket = rawSubject.replace(/^\[[^\]]+\]\s*/, '').trim();
+  const match = withoutBracket.match(/^([A-Za-z][A-Za-z0-9\s/]{1,18}?)\s*(?:•|—|–|-)\s+(.+)$/);
+  if (match) {
+    return `${match[1].trim()} • ${match[2].trim()}`;
+  }
+  return withoutBracket;
+}
+
+export function extractSubjectName(rawSubject?: string | null): string {
+  if (!rawSubject) return '';
+  const formatted = formatCourseLabel(rawSubject);
+  const parts = formatted.split(' • ');
+  return parts.length > 1 ? parts.slice(1).join(' • ').trim() : formatted.trim();
+}
+
 export const BSIT_SUBJECT_OPTIONS = BSIT_SUBJECTS.map((s) => ({
-  value: `${s.code} - ${s.name}`,
-  label: `[${s.yearLevel} • ${s.semester}] ${s.code} — ${s.name}`,
+  value: `${s.code} • ${s.name}`,
+  label: `${s.code} • ${s.name}`,
   yearLevel: s.yearLevel,
   semester: s.semester,
 }));
 
 export function buildSubjectOptionsForYear(
   handledYearLevel?: string | null,
-  customSubjects: Array<{ code?: string; name: string; grade?: string }> = []
+  customSubjects: Array<{ code?: string; name: string; grade?: string }> = [],
+  currentSubject?: string | null
 ) {
   const base = handledYearLevel
     ? BSIT_SUBJECT_OPTIONS.filter((o) => o.yearLevel === handledYearLevel)
     : [...BSIT_SUBJECT_OPTIONS];
-  const seen = new Set(base.map((o) => o.value.toLowerCase()));
+  const seen = new Set(base.map((o) => formatCourseLabel(o.value).toLowerCase()));
   customSubjects.forEach((s) => {
     if (/^prac/i.test(s.code || '') || /practicum/i.test(s.name || '')) return;
     if (handledYearLevel && s.grade && s.grade !== handledYearLevel) return;
-    const val = s.code && !s.name.startsWith(s.code) ? `${s.code} - ${s.name}` : s.name;
-    if (!seen.has(val.toLowerCase())) {
-      seen.add(val.toLowerCase());
+    const rawVal = s.code && !s.name.startsWith(s.code) ? `${s.code} • ${s.name}` : s.name;
+    const formatted = formatCourseLabel(rawVal);
+    if (!seen.has(formatted.toLowerCase())) {
+      seen.add(formatted.toLowerCase());
       base.push({
-        value: val,
-        label: `[${s.grade || handledYearLevel || 'BSIT'}] ${s.code ? `${s.code} — ${s.name}` : s.name}`,
+        value: formatted,
+        label: formatted,
         yearLevel: (s.grade || handledYearLevel || '1st Year') as any,
         semester: '1st Semester',
       });
     }
   });
+  if (currentSubject) {
+    const formattedCurrent = formatCourseLabel(currentSubject);
+    if (formattedCurrent && !seen.has(formattedCurrent.toLowerCase())) {
+      seen.add(formattedCurrent.toLowerCase());
+      base.unshift({
+        value: formattedCurrent,
+        label: formattedCurrent,
+        yearLevel: (handledYearLevel || '1st Year') as any,
+        semester: '1st Semester',
+      });
+    }
+  }
   return base;
 }
 

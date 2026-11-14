@@ -124,8 +124,8 @@ class QuizController extends Controller
             'generate_with_ai' => ['sometimes', 'boolean'],
             'difficulty' => ['sometimes', 'in:easy,medium,challenging'],
             'pdf_name' => ['sometimes', 'nullable', 'string', 'max:255'],
-            'pdf_text' => ['sometimes', 'nullable', 'string'],
-            'pdf_base64' => ['sometimes', 'nullable', 'string'],
+            'pdf_text' => ['sometimes', 'nullable', 'string', 'max:500000'],
+            'pdf_base64' => ['sometimes', 'nullable', 'string', 'max:12000000'],
         ]);
 
         $cleanTopic = trim($input['topic']);
@@ -137,7 +137,7 @@ class QuizController extends Controller
 
         $generatedByAi = false;
         if (!empty($input['questions'])) {
-            $questions = $input['questions'];
+            $questions = $this->normalizeQuizQuestions($input['questions']);
         } elseif ($useAi) {
             $generated = $this->ai->generateQuiz(
                 trim($input['subject']),
@@ -160,39 +160,44 @@ class QuizController extends Controller
             ], range(1, $questionCount));
         }
 
-        $title = !empty(trim($input['title'] ?? ''))
-            ? trim($input['title'])
-            : $cleanTopic;
-
         $defaultInstructions = $hasPdf && !empty($pdf['name'])
             ? "Refer to the attached PDF handout ({$pdf['name']}) and choose the best answer for each question. Alt-tabbing, taking screenshots, or opening developer tools is strictly prohibited and monitored."
             : 'Choose the best answer for each question. Alt-tabbing, taking screenshots, or opening developer tools is strictly prohibited and monitored.';
 
-        $createAttributes = [
-            'teacher_id' => $request->user()->id,
-            'department' => $request->user()->departmentCode(),
-            'title' => $title,
-            'subject' => trim($input['subject']),
-            'topic' => $cleanTopic,
-            'instructions' => !empty(trim((string) ($input['instructions'] ?? ''))) ? trim((string) $input['instructions']) : $defaultInstructions,
-            'questions' => $questions,
-            'allow_review' => (bool) ($input['allow_review'] ?? true),
-            'generated_by_ai' => $generatedByAi,
-            'target_type' => $input['target_type'] ?? 'all',
-            'target_sections' => $input['target_sections'] ?? null,
-            'time_limit_minutes' => $input['time_limit_minutes'] ?? 15,
-        ];
+        $quiz = DB::transaction(function () use ($request, $input, $cleanTopic, $questions, $generatedByAi, $pdf, $defaultInstructions): Quiz {
+            $title = $this->resolveSequentialQuizTitle(
+                (int) $request->user()->id,
+                trim($input['subject']),
+                $input['title'] ?? null,
+                false
+            );
 
-        if ($this->ensurePdfColumns()) {
-            $createAttributes['quiz_type'] = $input['quiz_type'] ?? 'formative';
-            $createAttributes['reference_pdf_name'] = $pdf['name'];
-            $createAttributes['reference_pdf_text'] = $pdf['text'];
-            if (!empty($pdf['base64']) && strlen($pdf['base64']) <= 12_000_000) {
-                $createAttributes['reference_pdf_data'] = $pdf['base64'];
+            $createAttributes = [
+                'teacher_id' => $request->user()->id,
+                'department' => $this->resolveTargetDepartment($request),
+                'title' => $title,
+                'subject' => trim($input['subject']),
+                'topic' => $cleanTopic,
+                'instructions' => !empty(trim((string) ($input['instructions'] ?? ''))) ? trim((string) $input['instructions']) : $defaultInstructions,
+                'questions' => $questions,
+                'allow_review' => (bool) ($input['allow_review'] ?? true),
+                'generated_by_ai' => $generatedByAi,
+                'target_type' => $input['target_type'] ?? 'all',
+                'target_sections' => $input['target_sections'] ?? null,
+                'time_limit_minutes' => $input['time_limit_minutes'] ?? 15,
+            ];
+
+            if ($this->ensurePdfColumns()) {
+                $createAttributes['quiz_type'] = $input['quiz_type'] ?? 'formative';
+                $createAttributes['reference_pdf_name'] = $pdf['name'];
+                $createAttributes['reference_pdf_text'] = $pdf['text'];
+                if (!empty($pdf['base64']) && strlen($pdf['base64']) <= 12_000_000) {
+                    $createAttributes['reference_pdf_data'] = $pdf['base64'];
+                }
             }
-        }
 
-        $quiz = Quiz::create($createAttributes);
+            return Quiz::create($createAttributes);
+        });
 
         \App\Models\ActivityLog::create([
             'user_id' => $request->user()->id,
@@ -222,14 +227,11 @@ class QuizController extends Controller
             'target_type' => ['sometimes', 'in:all,section,individual'],
             'target_sections' => ['sometimes', 'nullable', 'array'],
             'pdf_name' => ['sometimes', 'nullable', 'string', 'max:255'],
-            'pdf_text' => ['sometimes', 'nullable', 'string'],
-            'pdf_base64' => ['sometimes', 'nullable', 'string'],
+            'pdf_text' => ['sometimes', 'nullable', 'string', 'max:500000'],
+            'pdf_base64' => ['sometimes', 'nullable', 'string', 'max:12000000'],
             'preview_only' => ['sometimes', 'boolean'],
         ]);
         $cleanTopic = trim($input['topic']);
-        $cleanTitle = !empty(trim($input['title'] ?? ''))
-            ? trim($input['title'])
-            : $cleanTopic;
         $difficulty = (string) ($input['difficulty'] ?? 'medium');
         $pdf = $this->extractPdfInput($request, $input);
 
@@ -258,33 +260,136 @@ class QuizController extends Controller
             ? "Refer to the attached PDF handout ({$pdf['name']}) and choose the best answer for each question. Alt-tabbing, taking screenshots, or opening developer tools is strictly prohibited and monitored."
             : 'Choose the best answer for each question. Alt-tabbing, taking screenshots, or opening developer tools is strictly prohibited and monitored.';
 
-        $createAttributes = [
-            'teacher_id' => $request->user()->id,
-            'department' => $this->resolveTargetDepartment($request),
-            'title' => $cleanTitle,
-            'subject' => trim($input['subject']),
-            'topic' => $cleanTopic,
-            'instructions' => !empty(trim((string) ($input['instructions'] ?? ''))) ? trim((string) $input['instructions']) : $defaultInstructions,
-            'questions' => $generated['questions'],
-            'allow_review' => (bool) ($input['allow_review'] ?? true),
-            'generated_by_ai' => true,
-            'target_type' => $input['target_type'] ?? 'all',
-            'target_sections' => $input['target_sections'] ?? null,
-            'time_limit_minutes' => $input['time_limit_minutes'] ?? 15,
-        ];
+        $quiz = DB::transaction(function () use ($request, $input, $cleanTopic, $generated, $pdf, $defaultInstructions): Quiz {
+            $cleanTitle = $this->resolveSequentialQuizTitle(
+                (int) $request->user()->id,
+                trim($input['subject']),
+                $input['title'] ?? null,
+                false
+            );
 
-        if ($this->ensurePdfColumns()) {
-            $createAttributes['quiz_type'] = $input['quiz_type'] ?? 'formative';
-            $createAttributes['reference_pdf_name'] = $pdf['name'];
-            $createAttributes['reference_pdf_text'] = $pdf['text'];
-            if (!empty($pdf['base64']) && strlen($pdf['base64']) <= 12_000_000) {
-                $createAttributes['reference_pdf_data'] = $pdf['base64'];
+            $createAttributes = [
+                'teacher_id' => $request->user()->id,
+                'department' => $this->resolveTargetDepartment($request),
+                'title' => $cleanTitle,
+                'subject' => trim($input['subject']),
+                'topic' => $cleanTopic,
+                'instructions' => !empty(trim((string) ($input['instructions'] ?? ''))) ? trim((string) $input['instructions']) : $defaultInstructions,
+                'questions' => $generated['questions'],
+                'allow_review' => (bool) ($input['allow_review'] ?? true),
+                'generated_by_ai' => true,
+                'target_type' => $input['target_type'] ?? 'all',
+                'target_sections' => $input['target_sections'] ?? null,
+                'time_limit_minutes' => $input['time_limit_minutes'] ?? 15,
+            ];
+
+            if ($this->ensurePdfColumns()) {
+                $createAttributes['quiz_type'] = $input['quiz_type'] ?? 'formative';
+                $createAttributes['reference_pdf_name'] = $pdf['name'];
+                $createAttributes['reference_pdf_text'] = $pdf['text'];
+                if (!empty($pdf['base64']) && strlen($pdf['base64']) <= 12_000_000) {
+                    $createAttributes['reference_pdf_data'] = $pdf['base64'];
+                }
             }
-        }
 
-        $quiz = Quiz::create($createAttributes);
+            return Quiz::create($createAttributes);
+        });
 
         return response()->json(['quiz' => $this->teacherQuizPayload($quiz), 'generation_source' => $generated['source']], 201);
+    }
+
+    public function duplicate(Request $request, Quiz $quiz): JsonResponse
+    {
+        $this->requireRole($request, 'teacher');
+        abort_unless($quiz->teacher_id === $request->user()->id, 403, 'Unauthorized to duplicate this quiz.');
+
+        $this->ensurePdfColumns();
+
+        $duplicatedQuiz = DB::transaction(function () use ($request, $quiz): Quiz {
+            $newTitle = $this->resolveSequentialQuizTitle(
+                (int) $request->user()->id,
+                (string) $quiz->subject,
+                (string) $quiz->title,
+                true
+            );
+
+            // Deep-copy questions array so original and duplicate never share mutable references
+            $rawQuestions = is_array($quiz->questions)
+                ? json_decode(json_encode($quiz->questions), true)
+                : [];
+            $copiedQuestions = is_array($rawQuestions) && count($rawQuestions) > 0
+                ? $this->normalizeQuizQuestions($rawQuestions)
+                : [];
+
+            $attributes = [
+                'teacher_id' => $request->user()->id,
+                'department' => $quiz->department ?: $request->user()->departmentCode(),
+                'title' => $newTitle,
+                'subject' => $quiz->subject,
+                'topic' => $quiz->topic,
+                'instructions' => $quiz->instructions,
+                'questions' => $copiedQuestions,
+                'is_published' => false,
+                'allow_review' => (bool) $quiz->allow_review,
+                'generated_by_ai' => (bool) $quiz->generated_by_ai,
+                'target_type' => $quiz->target_type ?? 'all',
+                'target_sections' => is_array($quiz->target_sections) ? array_values($quiz->target_sections) : null,
+                'target_student_ids' => is_array($quiz->target_student_ids) ? array_values($quiz->target_student_ids) : null,
+                'time_limit_minutes' => $quiz->time_limit_minutes ?? 15,
+                'shuffle_questions' => (bool) ($quiz->shuffle_questions ?? false),
+            ];
+
+            if ($this->ensurePdfColumns()) {
+                $attributes['quiz_type'] = ($quiz->quiz_type ?? 'formative') === 'summative' ? 'summative' : 'formative';
+                $attributes['reference_pdf_name'] = $quiz->reference_pdf_name;
+                $attributes['reference_pdf_text'] = $quiz->reference_pdf_text;
+                $attributes['reference_pdf_data'] = $quiz->reference_pdf_data;
+            }
+
+            return Quiz::create($attributes);
+        });
+
+        \App\Models\ActivityLog::create([
+            'user_id' => $request->user()->id,
+            'action' => 'duplicate_quiz',
+            'description' => "Duplicated quiz \"{$quiz->title}\" as \"{$duplicatedQuiz->title}\" ({$duplicatedQuiz->subject})",
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
+
+        return response()->json([
+            'message' => "Quiz duplicated as \"{$duplicatedQuiz->title}\".",
+            'quiz' => $this->teacherQuizPayload($duplicatedQuiz->fresh()->loadCount('attempts')),
+        ], 201);
+    }
+
+    public function destroy(Request $request, Quiz $quiz): JsonResponse
+    {
+        $this->requireRole($request, 'teacher');
+        abort_unless($quiz->teacher_id === $request->user()->id, 403, 'Unauthorized to delete this quiz.');
+
+        $deletedTitle = $quiz->title;
+        $deletedSubject = $quiz->subject;
+
+        DB::transaction(function () use ($quiz): void {
+            QuizAttempt::where('quiz_id', $quiz->id)->delete();
+            if (Schema::hasTable('quiz_live_sessions')) {
+                DB::table('quiz_live_sessions')->where('quiz_id', $quiz->id)->delete();
+            }
+            $quiz->delete();
+        });
+
+        \App\Models\ActivityLog::create([
+            'user_id' => $request->user()->id,
+            'action' => 'delete_quiz',
+            'description' => "Deleted quiz \"{$deletedTitle}\" ({$deletedSubject})",
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
+
+        return response()->json([
+            'message' => "Quiz \"{$deletedTitle}\" deleted.",
+        ]);
     }
 
     public function update(Request $request, Quiz $quiz): JsonResponse
@@ -293,7 +398,7 @@ class QuizController extends Controller
         abort_unless($quiz->teacher_id === $request->user()->id, 403, 'Unauthorized to edit this quiz.');
 
         $input = $request->validate([
-            'title' => ['sometimes', 'string', 'max:200'],
+            'title' => ['sometimes', 'nullable', 'string', 'max:200'],
             'subject' => ['sometimes', 'string', 'max:100'],
             'topic' => ['sometimes', 'string', 'max:120'],
             'quiz_type' => ['sometimes', 'in:formative,summative'],
@@ -305,10 +410,10 @@ class QuizController extends Controller
             'target_sections' => ['sometimes', 'nullable', 'array'],
             'target_student_ids' => ['sometimes', 'nullable', 'array'],
             'reference_pdf_name' => ['sometimes', 'nullable', 'string', 'max:255'],
-            'reference_pdf_text' => ['sometimes', 'nullable', 'string'],
+            'reference_pdf_text' => ['sometimes', 'nullable', 'string', 'max:500000'],
             'pdf_name' => ['sometimes', 'nullable', 'string', 'max:255'],
-            'pdf_text' => ['sometimes', 'nullable', 'string'],
-            'pdf_base64' => ['sometimes', 'nullable', 'string'],
+            'pdf_text' => ['sometimes', 'nullable', 'string', 'max:500000'],
+            'pdf_base64' => ['sometimes', 'nullable', 'string', 'max:12000000'],
             'questions' => ['sometimes', 'array', 'min:1'],
             'questions.*.type' => ['sometimes', 'nullable', 'string', 'in:multiple_choice,identification,true_false,multiple_answer,essay'],
             'questions.*.prompt' => ['required_with:questions', 'string'],
@@ -329,20 +434,42 @@ class QuizController extends Controller
         unset($input['pdf_name'], $input['pdf_text'], $input['pdf_base64']);
 
         if ($this->ensurePdfColumns()) {
-            if ($pdf['name'] !== null || array_key_exists('reference_pdf_name', $input)) {
-                $input['reference_pdf_name'] = $pdf['name'] ?? $input['reference_pdf_name'] ?? null;
-            }
-            if ($pdf['text'] !== null || array_key_exists('reference_pdf_text', $input)) {
-                $input['reference_pdf_text'] = $pdf['text'] ?? $input['reference_pdf_text'] ?? null;
-            }
-            if (!empty($pdf['base64']) && strlen($pdf['base64']) <= 12_000_000) {
-                $input['reference_pdf_data'] = $pdf['base64'];
+            $explicitlyRemovedPdf = array_key_exists('reference_pdf_name', $input)
+                && $input['reference_pdf_name'] === null
+                && $pdf['name'] === null;
+
+            if ($explicitlyRemovedPdf) {
+                $input['reference_pdf_name'] = null;
+                $input['reference_pdf_text'] = null;
+                $input['reference_pdf_data'] = null;
+            } else {
+                if ($pdf['name'] !== null || array_key_exists('reference_pdf_name', $input)) {
+                    $input['reference_pdf_name'] = $pdf['name'] ?? $input['reference_pdf_name'] ?? null;
+                }
+                if ($pdf['text'] !== null || array_key_exists('reference_pdf_text', $input)) {
+                    $input['reference_pdf_text'] = $pdf['text'] ?? $input['reference_pdf_text'] ?? null;
+                }
+                if (!empty($pdf['base64']) && strlen($pdf['base64']) <= 12_000_000) {
+                    $input['reference_pdf_data'] = $pdf['base64'];
+                }
             }
         } else {
             unset($input['reference_pdf_name'], $input['reference_pdf_text'], $input['quiz_type']);
         }
 
-        $quiz->update($input);
+        DB::transaction(function () use ($request, $quiz, &$input): void {
+            if (array_key_exists('title', $input)) {
+                $input['title'] = $this->resolveSequentialQuizTitle(
+                    (int) $request->user()->id,
+                    (string) ($input['subject'] ?? $quiz->subject),
+                    $input['title'] ?? null,
+                    false,
+                    (int) $quiz->id
+                );
+            }
+
+            $quiz->update($input);
+        });
 
         return response()->json([
             'message' => 'Quiz updated successfully.',
@@ -1452,7 +1579,7 @@ class QuizController extends Controller
                     $text = $text ? ($text."\n".$extracted) : $extracted;
                 }
             }
-        } elseif ($base64 !== null) {
+        } elseif ($base64 !== null && strlen($base64) <= 12_000_000) {
             $binary = @base64_decode($base64, true);
             if (is_string($binary) && $binary !== '') {
                 $extracted = $this->ai->extractTextFromPdfBinary($binary);
@@ -1486,7 +1613,7 @@ class QuizController extends Controller
             $questions = is_array($quiz->questions) ? $quiz->questions : [];
             $dirty = false;
 
-            if (empty($quiz->reference_pdf_name) && !empty($quiz->instructions)) {
+            if (empty($quiz->reference_pdf_name) && (!empty($quiz->reference_pdf_data) || !empty($quiz->reference_pdf_text)) && !empty($quiz->instructions)) {
                 if (preg_match('/attached PDF handout \(([^)]+\.pdf)\)/i', (string) $quiz->instructions, $m)) {
                     $quiz->reference_pdf_name = trim($m[1]);
                     $dirty = true;
@@ -1515,7 +1642,7 @@ class QuizController extends Controller
                 );
                 $quiz->questions = $generated['questions'];
                 $dirty = true;
-            } elseif ($this->ai->hasAllAnswersStuckOnFirstOption($questions)) {
+            } elseif ($quiz->generated_by_ai && $this->ai->hasAllAnswersStuckOnFirstOption($questions)) {
                 $quiz->questions = $this->ai->randomizeOptionsPreservingCorrectAnswer($questions);
                 $dirty = true;
             }
@@ -1855,5 +1982,102 @@ class QuizController extends Controller
             'average' => round((float) ($quiz->attempts_avg_percentage ?? 0), 1),
             'questions' => $quiz->questions ?? [],
         ];
+    }
+
+    /**
+     * Normalize a course/subject label so variations in separators (-, •, —)
+     * or legacy year-level prefixes resolve to the same course bucket.
+     */
+    private function normalizeCourseKey(string $subject): string
+    {
+        $clean = preg_replace('/^\[[^\]]+\]\s*/u', '', trim($subject)) ?? trim($subject);
+        $clean = preg_replace('/^([A-Za-z][A-Za-z0-9\s\/]{1,18}?)\s*(?:•|—|–|-)\s+(.+)$/u', '$1 • $2', $clean) ?? $clean;
+        $clean = preg_replace('/\s+/u', ' ', $clean) ?? $clean;
+
+        return mb_strtolower(trim($clean), 'UTF-8');
+    }
+
+    /**
+     * Resolve the next available sequential quiz title within the same course for a teacher.
+     *
+     * - When $rawTitle is blank/null, generates "Quiz 1", "Quiz 2", "Quiz 3", etc.
+     * - When duplicating or when a title collision exists in the same course,
+     *   identifies the base name (e.g. "Quiz" from "Quiz 1", or "Midterm Examination" from "Midterm Examination")
+     *   and assigns the lowest available sequential number (handling deleted quiz numbers properly).
+     */
+    private function resolveSequentialQuizTitle(
+        int $teacherId,
+        string $subject,
+        ?string $rawTitle,
+        bool $isDuplication = false,
+        ?int $excludeQuizId = null
+    ): string {
+        $courseKey = $this->normalizeCourseKey($subject);
+
+        $query = Quiz::query()->where('teacher_id', $teacherId);
+        if ($excludeQuizId !== null) {
+            $query->where('id', '!=', $excludeQuizId);
+        }
+
+        $courseQuizzes = $query
+            ->lockForUpdate()
+            ->get(['id', 'title', 'subject'])
+            ->filter(fn (Quiz $q) => $this->normalizeCourseKey((string) $q->subject) === $courseKey);
+
+        $takenLower = [];
+        foreach ($courseQuizzes as $q) {
+            $t = mb_strtolower(trim((string) $q->title), 'UTF-8');
+            if ($t !== '') {
+                $takenLower[$t] = true;
+            }
+        }
+
+        $trimmed = trim((string) ($rawTitle ?? ''));
+        if ($trimmed === '') {
+            $base = 'Quiz';
+            $alwaysNumbered = true;
+        } else {
+            // Strip any legacy "(Copy)" or "(Copy N)" suffix before extracting sequential number
+            $cleaned = preg_replace('/\s*\((?:copy(?:\s+\d+)?)\)\s*$/iu', '', $trimmed) ?? $trimmed;
+            $cleaned = trim($cleaned);
+
+            if (preg_match('/^(.*?\S)\s+(\d+)$/u', $cleaned, $matches)) {
+                $base = trim($matches[1]);
+                $alwaysNumbered = true;
+            } else {
+                $base = $cleaned !== '' ? $cleaned : 'Quiz';
+                $alwaysNumbered = (strcasecmp($base, 'Quiz') === 0);
+            }
+        }
+
+        // If creating a quiz with a specific title (e.g. "Quiz 3" or "Midterm Examination") and not duplicating,
+        // preserve the exact title if it is not yet used in this course.
+        if (! $isDuplication && $trimmed !== '') {
+            $exactLower = mb_strtolower($trimmed, 'UTF-8');
+            if (! isset($takenLower[$exactLower])) {
+                return $trimmed;
+            }
+        }
+
+        // Find the next available sequential number (1, 2, 3, ...) in this course and naming group
+        for ($n = 1; $n <= 9999; $n++) {
+            $numberedCandidate = "{$base} {$n}";
+            $numberedLower = mb_strtolower($numberedCandidate, 'UTF-8');
+            $baseLower = mb_strtolower($base, 'UTF-8');
+
+            if ($n === 1) {
+                $isSlotOneTaken = isset($takenLower[$numberedLower]) || isset($takenLower[$baseLower]);
+                if (! $isSlotOneTaken) {
+                    return $alwaysNumbered ? $numberedCandidate : $base;
+                }
+                continue;
+            }
+
+            if (! isset($takenLower[$numberedLower])) {
+                return $numberedCandidate;
+            }
+        }
+
+        return "{$base} " . (count($takenLower) + 1);
     }
 }
