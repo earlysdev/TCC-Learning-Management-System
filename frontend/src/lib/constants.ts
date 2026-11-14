@@ -45,7 +45,7 @@ export const COLLEGE_DEPARTMENTS: DepartmentInfo[] = [
   { code: 'CBA', name: 'College of Business Administration', shortName: 'Business Administration' },
   { code: 'CHM', name: 'College of Hospitality Management', shortName: 'Hospitality Management' },
   { code: 'COM', name: 'College of Midwifery', shortName: 'Midwifery' },
-  { code: 'CLIS', name: 'College of Library Information Science', shortName: 'Library Information Science' },
+  { code: 'BLIS', name: 'College of Library Information Science', shortName: 'Library Information Science' },
 ];
 
 export function getDepartmentName(code?: string | null): string {

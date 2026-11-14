@@ -16,12 +16,7 @@ class LmsOtpService
     /**
      * Exact seeded institutional demo accounts (excluding real @tcc.edu.ph user accounts).
      */
-    private const SEEDED_DEMO_EMAILS = [
-        'student@tcc.edu.ph',
-        'teacher@tcc.edu.ph',
-        'secretary@tcc.edu.ph',
-        'dean@tcc.edu.ph',
-    ];
+    private const SEEDED_DEMO_EMAILS = [];
 
     /**
      * Check whether required OTP verification table is present.

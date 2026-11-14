@@ -21,17 +21,6 @@ use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
-    private const LEGACY_ALIASES = [
-        'student.demo@lnhs.test' => 'student@tcc.edu.ph',
-        'teacher.demo@lnhs.test' => 'teacher@tcc.edu.ph',
-        'secretary.demo@lnhs.test' => 'secretary@tcc.edu.ph',
-        'principal.demo@lnhs.test' => 'dean@tcc.edu.ph',
-        'student.demo@tcc.test' => 'student@tcc.edu.ph',
-        'teacher.demo@tcc.test' => 'teacher@tcc.edu.ph',
-        'secretary.demo@tcc.test' => 'secretary@tcc.edu.ph',
-        'dean.demo@tcc.test' => 'dean@tcc.edu.ph',
-    ];
-
     public function __construct(
         private readonly LmsDeviceService $deviceService,
         private readonly LmsOtpService $otpService
@@ -47,8 +36,7 @@ class AuthController extends Controller
             'device_name' => ['sometimes', 'nullable', 'string', 'max:120'],
         ]);
 
-        $rawIdentifier = trim($credentials['identifier']);
-        $normalizedIdentifier = self::LEGACY_ALIASES[strtolower($rawIdentifier)] ?? $rawIdentifier;
+        $normalizedIdentifier = trim($credentials['identifier']);
         $user = $this->resolveUserByIdentifier($normalizedIdentifier);
 
         if (! $user || ! Hash::check($credentials['password'], $user->password)) {

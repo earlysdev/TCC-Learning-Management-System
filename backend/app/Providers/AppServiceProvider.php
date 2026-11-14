@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Services\LmsAccountCleanupService;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -23,21 +24,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        LmsAccountCleanupService::ensureProvisioned();
+
         RateLimiter::for('login', function (Request $request) {
             $raw = strtolower(trim((string) $request->input('identifier')));
-            $aliases = [
-                'student.demo@lnhs.test' => 'student@tcc.edu.ph',
-                'teacher.demo@lnhs.test' => 'teacher@tcc.edu.ph',
-                'secretary.demo@lnhs.test' => 'secretary@tcc.edu.ph',
-                'principal.demo@lnhs.test' => 'dean@tcc.edu.ph',
-                'student.demo@tcc.test' => 'student@tcc.edu.ph',
-                'teacher.demo@tcc.test' => 'teacher@tcc.edu.ph',
-                'secretary.demo@tcc.test' => 'secretary@tcc.edu.ph',
-                'dean.demo@tcc.test' => 'dean@tcc.edu.ph',
-            ];
-            $normalized = $aliases[$raw] ?? $raw;
 
-            return Limit::perMinute(5)->by($normalized.'|'.$request->ip());
+            return Limit::perMinute(5)->by($raw.'|'.$request->ip());
         });
 
         ResetPassword::createUrlUsing(function ($user, string $token): string {

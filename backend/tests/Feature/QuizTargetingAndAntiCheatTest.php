@@ -95,7 +95,8 @@ class QuizTargetingAndAntiCheatTest extends TestCase
     public function test_student_targeting_access_and_proctoring_submission(): void
     {
         $teacher = User::where('role', 'teacher')->first();
-        $studentBlock1A = User::where('lrn', '20273710')->first(); // 1st Year, Block - 1A
+        $teacher->update(['grade' => '1st Year']);
+        $studentBlock1A = User::where('role', 'student')->where('section', 'Block - 1A')->first(); // 1st Year, Block - 1A
         $studentBlock2B = User::factory()->create([
             'name' => 'Second Year Student',
             'email' => 'student2b@tcc.edu.ph',
@@ -319,6 +320,7 @@ class QuizTargetingAndAntiCheatTest extends TestCase
     public function test_teacher_can_upload_pdf_for_ai_question_generation_and_post_quiz_study_feedback(): void
     {
         $teacher = User::where('role', 'teacher')->first() ?? User::factory()->create(['role' => 'teacher']);
+        $teacher->update(['grade' => null]);
         $student = User::where('role', 'student')->first() ?? User::factory()->create(['role' => 'student']);
 
         $response = $this->actingAs($teacher)->postJson('/api/teacher/quizzes', [

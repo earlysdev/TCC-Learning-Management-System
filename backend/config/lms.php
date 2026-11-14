@@ -66,7 +66,7 @@ return [
         'CBA' => 'College of Business Administration',
         'CHM' => 'College of Hospitality Management',
         'COM' => 'College of Midwifery',
-        'CLIS' => 'College of Library Information Science',
+        'BLIS' => 'College of Library Information Science',
     ],
 
 ];

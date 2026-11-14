@@ -108,7 +108,7 @@ const academicColleges: AcademicCollege[] = [
     ]
   },
   {
-    code: 'CLIS',
+    code: 'BLIS',
     name: 'College of Library Information Science',
     icon: Library,
     degrees: [
@@ -500,7 +500,7 @@ export default function LandingPage() {
               <h4>Institutional Accreditation</h4>
               <p>Member: Association of Local Colleges and Universities · Commission on Accreditation (ALCUCOA)</p>
               <p>Baluarte, Tagoloan, Misamis Oriental, Philippines</p>
-              <p>College Programs: CIT · CED · CAS · CCJPS · CBA · CHM · COM · CLIS</p>
+              <p>College Programs: CIT · CED · CAS · CCJPS · CBA · CHM · COM · BLIS</p>
             </div>
 
             <div className="footer-section">
