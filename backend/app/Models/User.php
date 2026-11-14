@@ -42,11 +42,7 @@ class User extends Authenticatable
         static::saving(function (self $user): void {
             $user->department = $user->departmentCode();
 
-            $needsDeanScopeSync = $user->isDeanRole()
-                ? (! $user->exists || $user->isDirty(['role', 'department']))
-                : ($user->exists && $user->isDirty('role'));
-
-            if ($needsDeanScopeSync && Schema::hasColumn('users', 'dean_department')) {
+            if (Schema::hasColumn('users', 'dean_department')) {
                 $user->dean_department = $user->isDeanRole() ? $user->department : null;
             }
         });

@@ -111,12 +111,14 @@ class LmsMailService
 
         $currentDefault = strtolower(trim((string) config('mail.default', 'log')));
         $smtpHost = trim((string) config('mail.mailers.smtp.host', ''));
+        $smtpPort = (int) config('mail.mailers.smtp.port', 0);
         $smtpUser = trim((string) config('mail.mailers.smtp.username', ''));
-        $smtpPass = (string) config('mail.mailers.smtp.password', '');
+        $smtpPass = str_replace(' ', '', (string) config('mail.mailers.smtp.password', ''));
 
         // If .env or runtime config already provided an explicit live external SMTP host & credentials, respect it.
         $hasLiveEnvSmtp = $currentDefault === 'smtp'
             && $smtpHost !== ''
+            && $smtpPort > 0
             && $smtpUser !== ''
             && $smtpPass !== ''
             && ! in_array(strtolower($smtpHost), self::LOCAL_RELAY_HOSTS, true);

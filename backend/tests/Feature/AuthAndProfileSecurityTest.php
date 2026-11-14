@@ -261,4 +261,53 @@ class AuthAndProfileSecurityTest extends TestCase
             'code' => '123456',
         ])->assertStatus(403);
     }
+
+    public function test_cleanup_and_provision_handles_existing_dean_department_collisions_and_enables_login(): void
+    {
+        Mail::fake();
+
+        // Simulate pre-existing production state where tcclms4@gmail.com held CIT Dean
+        // and sanolanchristianearl@gmail.com was previously a Teacher
+        User::factory()->create([
+            'email' => 'tcclms4@gmail.com',
+            'name' => 'Old CIT Dean',
+            'role' => 'dean',
+            'department' => 'CIT',
+            'password' => 'OldPass!123',
+        ]);
+
+        User::factory()->create([
+            'email' => 'sanolanchristianearl@gmail.com',
+            'name' => 'Christian Earl Sanolan',
+            'role' => 'teacher',
+            'department' => 'CIT',
+            'password' => 'OldTeacherPass!123',
+        ]);
+
+        User::factory()->create([
+            'email' => 'extra.dean@gmail.com',
+            'name' => 'Extra Dean',
+            'role' => 'dean',
+            'department' => 'CED',
+            'password' => 'OldExtraPass!123',
+        ]);
+
+        $result = \App\Services\LmsAccountCleanupService::executeCleanupAndProvision(false);
+        $this->assertGreaterThanOrEqual(7, count($result['provisioned_users']));
+
+        $citDean = User::where('email', 'sanolanchristianearl@gmail.com')->firstOrFail();
+        $this->assertSame('dean', $citDean->role);
+        $this->assertSame('CIT', $citDean->department);
+        $this->assertTrue(Hash::check('TccDean!2026#CIT', $citDean->password));
+
+        $cedDean = User::where('email', 'tcclms4@gmail.com')->firstOrFail();
+        $this->assertSame('dean', $cedDean->role);
+        $this->assertSame('CED', $cedDean->department);
+        $this->assertTrue(Hash::check('TccDean!2026#CED', $cedDean->password));
+
+        $citSec = User::where('email', 'vinsmokeearl@gmail.com')->firstOrFail();
+        $this->assertSame('secretary', $citSec->role);
+        $this->assertSame('CIT', $citSec->department);
+        $this->assertTrue(Hash::check('TccSec!2026#CIT', $citSec->password));
+    }
 }

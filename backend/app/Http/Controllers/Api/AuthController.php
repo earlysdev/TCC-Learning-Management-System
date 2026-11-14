@@ -92,43 +92,49 @@ class AuthController extends Controller
 
         if ($requiresOtp) {
             if (! Schema::hasTable('verification_codes')) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Device verification is temporarily unavailable. Please contact support.',
-                ], 503);
-            }
-
-            try {
-                if ($deviceHash !== null) {
-                    $this->deviceService->logUnrecognizedDevice($user, $request, $deviceHash);
+                if ($this->isStrictDeviceOtpRequired()) {
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => 'Device verification is temporarily unavailable. Please contact support.',
+                    ], 503);
                 }
+            } else {
+                try {
+                    if ($deviceHash !== null) {
+                        $this->deviceService->logUnrecognizedDevice($user, $request, $deviceHash);
+                    }
 
-                $otp = $this->otpService->issue(
-                    $user,
-                    VerificationCode::PURPOSE_LOGIN_DEVICE,
-                    [
-                        'remember' => $remember,
-                        'device_hash' => $deviceHash,
-                        'device_name' => $credentials['device_name'] ?? $meta['device_name'],
-                    ],
-                    $meta
-                );
-            } catch (\Throwable $e) {
-                Log::error('Failed to issue login device OTP: ' . $e->getMessage());
+                    $otp = $this->otpService->issue(
+                        $user,
+                        VerificationCode::PURPOSE_LOGIN_DEVICE,
+                        [
+                            'remember' => $remember,
+                            'device_hash' => $deviceHash,
+                            'device_name' => $credentials['device_name'] ?? $meta['device_name'],
+                        ],
+                        $meta
+                    );
 
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Could not dispatch your device verification code. Please try again shortly.',
-                ], 503);
+                    return response()->json($this->withOptionalDebugCode([
+                        'requires_otp' => true,
+                        'challenge' => $otp['challenge'],
+                        'email_hint' => $otp['email_hint'],
+                        'device_name' => $meta['device_name'],
+                        'message' => 'Unrecognized device detected. A 6-digit verification code has been dispatched to your registered institutional email.',
+                    ], $otp['debug_code'] ?? null));
+                } catch (\Throwable $e) {
+                    Log::error('Failed to issue login device OTP: ' . $e->getMessage());
+
+                    if ($this->isStrictDeviceOtpRequired()) {
+                        return response()->json([
+                            'status' => 'error',
+                            'message' => 'Could not dispatch your device verification code. Please try again shortly.',
+                        ], 503);
+                    }
+                    // When LMS_DEVICE_OTP=auto, gracefully fall back to trusting the device and signing in
+                    // if the cloud host firewalls outbound SMTP.
+                }
             }
-
-            return response()->json($this->withOptionalDebugCode([
-                'requires_otp' => true,
-                'challenge' => $otp['challenge'],
-                'email_hint' => $otp['email_hint'],
-                'device_name' => $meta['device_name'],
-                'message' => 'Unrecognized device detected. A 6-digit verification code has been dispatched to your registered institutional email.',
-            ], $otp['debug_code'] ?? null));
         }
 
         if ($deviceHash !== null) {
@@ -632,6 +638,13 @@ class AuthController extends Controller
             ->whereRaw('LOWER(email) = ?', [$normalized])
             ->orWhere('lrn', trim($identifier))
             ->first();
+    }
+
+    private function isStrictDeviceOtpRequired(): bool
+    {
+        $otpSetting = config('lms.device_otp', 'auto');
+
+        return $otpSetting === 'true' || $otpSetting === true;
     }
 
     private function shouldRequireDeviceOtp(): bool

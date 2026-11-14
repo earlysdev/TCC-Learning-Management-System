@@ -44,11 +44,11 @@ return [
                 default => ((int) env('MAIL_PORT', 587) === 465 ? 'smtps' : 'smtp'),
             },
             'url' => env('MAIL_URL'),
-            'host' => env('MAIL_HOST', 'smtp.gmail.com'),
-            'port' => (int) env('MAIL_PORT', 587),
-            'username' => env('MAIL_USERNAME', 'tcclms4@gmail.com'),
-            'password' => env('MAIL_PASSWORD', 'qhxsarnndiyayuku'),
-            'timeout' => (int) env('MAIL_TIMEOUT', 15),
+            'host' => env('MAIL_HOST') ?: 'smtp.gmail.com',
+            'port' => (int) (env('MAIL_PORT') ?: 587),
+            'username' => env('MAIL_USERNAME') ?: 'tcclms4@gmail.com',
+            'password' => env('MAIL_PASSWORD') ?: 'qhxsarnndiyayuku',
+            'timeout' => (int) (env('MAIL_TIMEOUT') ?: 8),
             'local_domain' => env('MAIL_EHLO_DOMAIN', parse_url((string) env('APP_URL', 'http://localhost'), PHP_URL_HOST)),
         ],
 
@@ -114,8 +114,8 @@ return [
     */
 
     'from' => [
-        'address' => env('MAIL_FROM_ADDRESS', 'tcclms4@gmail.com'),
-        'name' => env('MAIL_FROM_NAME', env('APP_NAME', 'Tagoloan Community College LMS')),
+        'address' => env('MAIL_FROM_ADDRESS') ?: 'tcclms4@gmail.com',
+        'name' => env('MAIL_FROM_NAME') ?: env('APP_NAME', 'Tagoloan Community College LMS'),
     ],
 
 ];
